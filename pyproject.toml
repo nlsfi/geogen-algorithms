@@ -24,7 +24,7 @@ lint.external = ["SC200"]
 lint.unfixable = [
     "F401", # Unused imports
 ]
-
+extend-exclude = ["setup.py"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -55,6 +55,7 @@ geopandas = "gpd"
 
 ".github/*" = [
     "D",       # pydocstyle
+    "CPY",       # Missing copyright notice at top of file
     "INP001",     # implicit-namespace-package
 ]
 

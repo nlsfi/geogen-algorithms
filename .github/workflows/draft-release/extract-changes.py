@@ -21,9 +21,9 @@ if len(results) == 0:
     error_msg = "No changes found"
     raise ValueError(error_msg)
 
-if results[0] == "":
+if not results[0]:
     results = results[1:]
-if results[-1] == "":
+if not results[-1]:
     results = results[:-1]
 
 sys.stdout.write("\n".join(results) + "\n")
