@@ -29,3 +29,12 @@ flake8-spellcheck==0.28.0
 
 # repo itself
 -e file:.
+
+shapely==2.0.6
+geopandas==1.0.1
+matplotlib==3.9.2
+networkx==3.4.2
+pygeoops==0.4.0
+simplification==0.7.13
+shapelysmooth==0.2.1
+scikit-learn==1.6.1
