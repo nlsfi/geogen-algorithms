@@ -22,3 +22,8 @@ def boulders_in_water_10k_sourcedata_path() -> Path:
 @pytest.fixture
 def boulders_in_water_no_land_sourcedata_path() -> Path:
     return _testdata_path() / "boulders_in_water_no_land.gpkg"
+
+
+@pytest.fixture
+def lakes_to_shoreline_sourcedata_path() -> Path:
+    return _testdata_path() / "lakes_to_shoreline.gpkg"
