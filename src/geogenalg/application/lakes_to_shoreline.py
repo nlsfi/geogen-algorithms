@@ -50,4 +50,4 @@ def extract_shoreline_from_generalized_lakes(
     gdf["geometry"] = gdf.geometry.remove_repeated_points()
     gdf["geometry"] = gdf.geometry.line_merge()
 
-    return gdf.explode()  # pyright: ignore[reportCallIssue]
+    return gdf.explode()
