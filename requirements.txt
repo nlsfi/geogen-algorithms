@@ -76,6 +76,7 @@ numpy==2.2.6
     #   shapely
     #   simplification
     #   topojson
+    #   types-shapely
 packaging==25.0
     # via
     #   geopandas
@@ -166,6 +167,8 @@ topojson==1.9
     # via pygeoops
 types-pytz==2025.2.0.20250516
     # via pandas-stubs
+types-shapely==2.1.0.20250512
+    # via -r requirements.in
 typing-extensions==4.13.2
     # via mypy
 tzdata==2025.2
