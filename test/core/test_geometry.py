@@ -1,3 +1,10 @@
+#  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
+#
+#  This file is part of geogen-algorithms.
+#
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this source tree.
+
 import pytest
 import shapely
 from geopandas import gpd
@@ -39,10 +46,10 @@ def test_elongation():
 
 def test_extract_interior_rings():
     polygon_with_holes = shapely.from_wkt(
-        "POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0), "
-        "(2 3, 3 3, 3 2, 2 2, 2 3), "
-        "(4 5, 5 5, 5 4, 4 4, 4 5), "
-        "(7 8, 8 8, 8 7, 7 7, 7 8))"
+        """POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0),
+        (2 3, 3 3, 3 2, 2 2, 2 3),
+        (4 5, 5 5, 5 4, 4 4, 4 5),
+        (7 8, 8 8, 8 7, 7 7, 7 8))"""
     )
 
     gdf = gpd.GeoDataFrame(

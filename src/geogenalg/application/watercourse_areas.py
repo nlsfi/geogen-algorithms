@@ -1,8 +1,15 @@
-from __future__ import annotations
+#  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
+#
+#  This file is part of geogen-algorithms.
+#
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this source tree.
 
+
+import geopandas as gpd
+import pandas as pd
 import shapely.ops
 import shapelysmooth
-from geopandas import gpd, pd
 from pygeoops import centerline, remove_inner_rings, simplify  # noqa: SC200
 from shapely import (
     LineString,
@@ -29,25 +36,29 @@ from ..core.geometry import (  # noqa: TID252
 )
 
 
-def generalize_watercourse_areas(
+def generalize_watercourse_areas(  # noqa: C901, PLR0913, PLR0915
     areas: gpd.GeoDataFrame,
     *,
-    max_width=30,
-    width_check_precision=5,
-    minimum_line_length=200,
-    minimum_polygon_area=10000,
-    min_island_area=2500,
-    min_island_elongation=3.349,
-    min_island_width=185,
-    exaggerate_island_by=3,
+    max_width: float = 30,
+    width_check_precision: float = 5,
+    minimum_line_length: float = 200,
+    minimum_polygon_area: float = 10000,
+    min_island_area: float = 2500,
+    min_island_elongation: float = 3.349,
+    min_island_width: float = 185,
+    exaggerate_island_by: float = 3,
 ) -> dict[str, gpd.GeoSeries]:
-    """Generalizes polygonal watercourse areas so that thin portions of the watercourse
+    """Generalize polygonal watercourse areas.
+
+    Generalizes polygonal watercourse areas so that thin portions of the watercourse
     will be transformed into linestrings while wider areas will remain as polygons
     and simplified. Small islands will be removed, thin and long islands will be
     exaggerated.
 
-    Returns a dictionary containing a GeoDataFrame for both the new generated line
-    features and the remaining modified polygon features.
+    Returns:
+        A dictionary containing a GeoDataFrame for both the new generated line
+        features and the remaining modified polygon features.
+
     """
     # the basic steps of this algorithm are to
     # 1) create the center lines out of the watercourse areas

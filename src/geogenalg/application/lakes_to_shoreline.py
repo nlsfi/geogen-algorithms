@@ -1,4 +1,9 @@
-from __future__ import annotations
+#  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
+#
+#  This file is part of geogen-algorithms.
+#
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this source tree.
 
 from itertools import combinations
 
@@ -9,10 +14,14 @@ def extract_shoreline_from_generalized_lakes(
     original_shoreline: gpd.GeoDataFrame,
     lakes: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    """Extracts the boundaries from the lakes and calculates their
+    """Extract shorelines from lake geometries.
+
+    Extracts the boundaries from the lakes and calculates their
     shoreline type from the original shoreline.
 
-    Returns a GeoDataFrame of the generalized shoreline.
+    Returns:
+        A GeoDataFrame of the generalized shoreline.
+
     """
     gdf = gpd.GeoDataFrame(
         {"lake_id": lakes.index}, geometry=lakes.boundary, crs=lakes.crs
@@ -24,17 +33,17 @@ def extract_shoreline_from_generalized_lakes(
         crs=original_shoreline.crs,
     )
 
-    # NOTE: The buffering uses a round cap style instead of a flat one because with a flat one
-    # you get small gaps between the buffered sections leading to null values and extra vertices
-    # in the proceeding identity operation, which are more complex to address. By buffering over
-    # the end points you can make the buffered sections have overlapping sections which can then be
-    # removed, ensuring topological correctness.
+    # NOTE: The buffering uses a round cap style instead of a flat one because with a
+    # flat one you get small gaps between the buffered sections leading to null values
+    # and extra vertices in the proceeding identity operation, which are more complex to
+    # address. By buffering over the end points you can make the buffered sections have
+    # overlapping sections which can then be removed, ensuring topological correctness.
 
-    # NOTE: As a downside, this method can cause the start and end points of a section with a
-    # different category to its surroundings to shift by about the distance which is used for
-    # the buffer operation. However the mismatch is hardly noticeable on the scale this algorithm
-    # is intended for (1: 50 000) so with the additional complexity arising from the flat cap
-    # style this seemed like the better option.
+    # NOTE: As a downside, this method can cause the start and end points of a section
+    # with a different category to its surroundings to shift by about the distance which
+    # is used for the buffer operation. However the mismatch is hardly noticeable on the
+    # scale this algorithm is intended for (1: 50 000) so with the additional complexity
+    # arising from the flat cap style this seemed like the better option.
 
     buffered_geom = buffered_shoreline.geometry
     for point_1_idx, point_2_idx in combinations(buffered_geom.index, 2):
