@@ -36,10 +36,10 @@ def extract_shoreline_from_generalized_lakes(
     # is intended for (1: 50 000) so with the additional complexity arising from the flat cap
     # style this seemed like the better option.
 
-    bufgeom = buffered_shoreline.geometry
-    for i_p1, i_p2 in combinations(bufgeom.index, 2):
-        if bufgeom.loc[i_p1].intersects(bufgeom.loc[i_p2]):
-            bufgeom.loc[i_p2] -= bufgeom.loc[i_p1]
+    buffered_geom = buffered_shoreline.geometry
+    for point_1_idx, point_2_idx in combinations(buffered_geom.index, 2):
+        if buffered_geom.loc[point_1_idx].intersects(buffered_geom.loc[point_2_idx]):
+            buffered_geom.loc[point_2_idx] -= buffered_geom.loc[point_1_idx]
 
     gdf = (
         gpd.overlay(gdf, buffered_shoreline, how="identity")

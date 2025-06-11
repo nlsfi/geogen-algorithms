@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import geopandas as gpd
 from pandas import Series, concat
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN  # noqa: SC200
 
 
 def generalize_boulders_in_water(
@@ -22,7 +22,7 @@ def generalize_boulders_in_water(
     dataset, otherwise the features will not be turned into clusters.
     """
 
-    def aggregate_biw_type(ls: Series) -> int:
+    def aggregate_boulder_in_water_type(ls: Series) -> int:
         if len(set(ls)) == 1:
             return int(ls.values[0])
 
@@ -32,12 +32,12 @@ def generalize_boulders_in_water(
         return ls.tolist()
 
     cid = "cid"
-    biw_type = "boulder_in_water_type_id"
+    boulder_in_water_type = "boulder_in_water_type_id"
     type_column = "boulder_cluster_in_water_type_id"
 
     # cluster points
     coords = point_gdf.get_coordinates().to_numpy()
-    cluster_labels = DBSCAN(eps=cluster_distance, min_samples=2).fit(coords).labels_
+    cluster_labels = DBSCAN(eps=cluster_distance, min_samples=2).fit(coords).labels_  # noqa: SC200
     labels = Series(cluster_labels).rename(cid)
 
     gdf = gpd.GeoDataFrame(concat([point_gdf, labels], axis=1))
@@ -46,8 +46,8 @@ def generalize_boulders_in_water(
 
     clusters: gpd.GeoDataFrame = gdf.dissolve(
         cid,
-        aggfunc={
-            biw_type: aggregate_biw_type,
+        aggfunc={  # noqa: SC200
+            boulder_in_water_type: aggregate_boulder_in_water_type,
             "fid": aggregate_fid,
         },
         as_index=False,
@@ -55,7 +55,7 @@ def generalize_boulders_in_water(
 
     clusters = clusters[clusters[cid] != -1]
     clusters.geometry = clusters.geometry.centroid
-    clusters = clusters.rename(columns={biw_type: type_column})
+    clusters = clusters.rename(columns={boulder_in_water_type: type_column})
     clusters = clusters[clusters.geometry.within(mask_gdf.unary_union)]
 
     clustered_fids = [fid for fids in clusters["fid"].tolist() for fid in fids]

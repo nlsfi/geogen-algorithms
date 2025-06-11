@@ -46,8 +46,10 @@ def rectangle_dimensions(rect: Polygon) -> Dimensions:
     If input polygon is invalid or not a rectangle, raises an error.
     """
     required_coords = 5
-    if count_coordinates(rect) != required_coords or not math.isclose(
-        rect.area, rect.oriented_envelope.area, rel_tol=1e-06
+    if count_coordinates(rect) != required_coords or not math.isclose(  # noqa: SC200
+        rect.area,
+        rect.oriented_envelope.area,
+        rel_tol=1e-06,  # noqa: SC200
     ):
         msg = f"Not a rectangle: {rect}"
         raise GeometryOperationError(msg)
@@ -58,11 +60,11 @@ def rectangle_dimensions(rect: Polygon) -> Dimensions:
 
     x, y = rect.exterior.coords.xy
 
-    point1 = Point(x[0], y[0])
-    point2 = Point(x[1], y[1])
-    point3 = Point(x[2], y[2])
+    point_1 = Point(x[0], y[0])
+    point_2 = Point(x[1], y[1])
+    point_3 = Point(x[2], y[2])
 
-    lengths = (point1.distance(point2), point2.distance(point3))
+    lengths = (point_1.distance(point_2), point_2.distance(point_3))
 
     return Dimensions(min(lengths), max(lengths))
 
@@ -82,8 +84,8 @@ def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     Returns a new geodataframe containing the interior rings.
     """
     if not all(
-        geomtype in {"Polygon", "MultiPolygon"}
-        for geomtype in areas.geometry.geom_type.values
+        geom_type in {"Polygon", "MultiPolygon"}
+        for geom_type in areas.geometry.geom_type.values
     ):
         msg = "Cannot extract interior rings from a geodataframe with non-polygon geometries"
         raise GeometryTypeError(msg)
@@ -113,7 +115,7 @@ def lines_to_segments(lines: gpd.GeoSeries) -> gpd.GeoSeries:
     """Returns a GeoSeries of line geometries containing all line segments
     from the input GeoSeries.
     """
-    if not all(geomtype == "LineString" for geomtype in lines.geom_type.values):
+    if not all(geom_type == "LineString" for geom_type in lines.geom_type.values):
         msg = "All geometries must be LineStrings."
         raise GeometryTypeError(msg)
 
@@ -143,7 +145,7 @@ def scale_line_to_length(
     if scaling_factor == 1:
         return LineString(geom)
 
-    return affinity.scale(geom, xfact=scaling_factor, yfact=scaling_factor)
+    return affinity.scale(geom, xfact=scaling_factor, yfact=scaling_factor)  # noqa: SC200
 
 
 def move_to_point(geom: BaseGeometry, point: Point) -> BaseGeometry:
@@ -153,7 +155,7 @@ def move_to_point(geom: BaseGeometry, point: Point) -> BaseGeometry:
     dx = point.x - geom.centroid.x
     dy = point.y - geom.centroid.y
 
-    return affinity.translate(geom, xoff=dx, yoff=dy)
+    return affinity.translate(geom, xoff=dx, yoff=dy)  # noqa: SC200
 
 
 def extend_line_to_nearest(
@@ -180,20 +182,20 @@ def extend_line_to_nearest(
         start = Point(line.coords[0])
         end = Point(line.coords[-1])
 
-        new_segment1 = shortest_line(start, extend_to)
-        new_segment2 = shortest_line(end, extend_to)
+        new_segment_1 = shortest_line(start, extend_to)
+        new_segment_2 = shortest_line(end, extend_to)
 
         # TODO: clean this up maybe
 
         if tolerance > 0:
             combined = MultiLineString([line])
-            if new_segment1.length < tolerance:
-                combined = union(combined, new_segment1)
+            if new_segment_1.length < tolerance:
+                combined = union(combined, new_segment_1)
 
-            if new_segment2.length < tolerance:
-                combined = union(combined, new_segment2)
+            if new_segment_2.length < tolerance:
+                combined = union(combined, new_segment_2)
         else:
-            combined = union(union(line, new_segment1), new_segment2)
+            combined = union(union(line, new_segment_1), new_segment_2)
 
     if not isinstance(combined, MultiLineString):
         msg = f"Union result was not a MultiLineString {combined.wkt}"
@@ -227,23 +229,23 @@ def point_on_line(line: LineString, distance: float) -> Point:
     from_start: bool = distance < 0
 
     if from_start:
-        x0 = line.coords[0][0]
-        y0 = line.coords[0][1]
+        start_x = line.coords[0][0]
+        start_y = line.coords[0][1]
 
-        x1 = line.coords[1][0]
-        y1 = line.coords[1][1]
+        end_x = line.coords[1][0]
+        end_y = line.coords[1][1]
     else:
-        x0 = line.coords[1][0]
-        y0 = line.coords[1][1]
+        start_x = line.coords[1][0]
+        start_y = line.coords[1][1]
 
-        x1 = line.coords[0][0]
-        y1 = line.coords[0][1]
+        end_x = line.coords[0][0]
+        end_y = line.coords[0][1]
 
     t = abs(distance) / line.length
     t *= -1
 
-    px = ((1 - t) * x0) + (t * x1)
-    py = ((1 - t) * y0) + (t * y1)
+    px = ((1 - t) * start_x) + (t * end_x)
+    py = ((1 - t) * start_y) + (t * end_y)
 
     return Point(px, py)
 
@@ -262,22 +264,22 @@ def extend_line_by(
         msg = "Extension distance must be above zero."
         raise ValueError(msg)
 
-    first_seg = LineString((line.coords[0], line.coords[1]))
-    last_seg = LineString((line.coords[-2], line.coords[-1]))
+    first_segment = LineString((line.coords[0], line.coords[1]))
+    last_segment = LineString((line.coords[-2], line.coords[-1]))
 
     if extend_from == LineExtendFrom.END:
-        point = point_on_line(last_seg, extend_by)
+        point = point_on_line(last_segment, extend_by)
 
         return extend_line_to_nearest(line, point, extend_from)
 
     if extend_from == LineExtendFrom.START:
-        point = point_on_line(first_seg, -extend_by)
+        point = point_on_line(first_segment, -extend_by)
 
         return extend_line_to_nearest(line, point, extend_from)
 
-    point1 = point_on_line(first_seg, -extend_by)
-    point2 = point_on_line(last_seg, extend_by)
+    point_1 = point_on_line(first_segment, -extend_by)
+    point_2 = point_on_line(last_segment, extend_by)
 
-    mpoint = MultiPoint((point1, point2))
+    multi_point = MultiPoint((point_1, point_2))
 
-    return extend_line_to_nearest(line, mpoint, extend_from)
+    return extend_line_to_nearest(line, multi_point, extend_from)

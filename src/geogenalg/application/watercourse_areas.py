@@ -3,7 +3,7 @@ from __future__ import annotations
 import shapely.ops
 import shapelysmooth
 from geopandas import gpd, pd
-from pygeoops import centerline, remove_inner_rings, simplify
+from pygeoops import centerline, remove_inner_rings, simplify  # noqa: SC200
 from shapely import (
     LineString,
     Point,
@@ -12,7 +12,8 @@ from shapely import (
     force_2d,
     symmetric_difference,
 )
-from yleistys_qgis_plugin.yleistys.core.exceptions import GeometryOperationError
+
+from geogenalg.core.exceptions import GeometryOperationError
 
 # TODO: don't use relative imports when moving this to a library
 from ..core.geometry import (  # noqa: TID252
@@ -49,8 +50,8 @@ def generalize_watercourse_areas(
     features and the remaining modified polygon features.
     """
     # the basic steps of this algorithm are to
-    # 1) create the centerlines out of the watercourse areas
-    # 2) divide those centerlines into small segments
+    # 1) create the center lines out of the watercourse areas
+    # 2) divide those center lines into small segments
     # 3) check the width of the watercourse area at the centroid of each segment
     # 4) if the width at each segment is short enough keep those segments around
     # 5) recombine segments into linestrings
@@ -58,8 +59,8 @@ def generalize_watercourse_areas(
     # 7) create polygons out of the segments which follow the widths at each segment
     # 8) use the polygons to remove those portions out of the original watercourse areas
     # 9) filter out small remaining areas
-    # 10) recalculate centerlines for the areas determined to be turned into lines
-    # 11) extend centerlines to the remaining areas
+    # 10) recalculate center lines for the areas determined to be turned into lines
+    # 11) extend center lines to the remaining areas
     # 12) post-processing (simplify & smooth)
 
     # let's not modify original gdf
@@ -69,7 +70,7 @@ def generalize_watercourse_areas(
         try:
             width = rectangle_dimensions(island.oriented_envelope).width
             if elongation(island) >= min_island_elongation and width < min_island_width:
-                return island.buffer(distance=exaggerate_island_by, quadsegs=2)
+                return island.buffer(distance=exaggerate_island_by, quadsegs=2)  # noqa: SC200
         except GeometryOperationError:
             pass
 
@@ -77,7 +78,7 @@ def generalize_watercourse_areas(
 
     # dissolve and explode to combine any touching areas so that
     # a) islands which reside at the border of two split areas will be extracted
-    # b) centerlines will be correctly formed
+    # b) center lines will be correctly formed
     watercourses = watercourses.dissolve().explode(ignore_index=True)
 
     watercourses.geometry = watercourses.geometry.apply(
@@ -136,11 +137,11 @@ def generalize_watercourse_areas(
     def perpendicular_segment(
         original: LineString, centroid: Point, length: float | None = None
     ) -> LineString:
-        seg = move_to_point(original, centroid)
-        seg = affinity.rotate(seg, angle=90)
+        segment = move_to_point(original, centroid)
+        segment = affinity.rotate(segment, angle=90)
 
         return scale_line_to_length(
-            seg, length if length is not None else original.length
+            segment, length if length is not None else original.length
         )
 
     def width_ruler(segment: LineString) -> LineString:
@@ -152,38 +153,41 @@ def generalize_watercourse_areas(
         )
 
     def watercourse_width_ruler(segment: LineString) -> LineString:
-        seg = perpendicular_segment(segment, segment.centroid, max_width)
-        return snap_to_watercourse(seg)
+        segment = perpendicular_segment(segment, segment.centroid, max_width)
+        return snap_to_watercourse(segment)
 
     def create_polygon_remover(line: LineString) -> Polygon:
         segmentized = line.segmentize(1)
         segments = explode_line(segmentized)
 
-        bufs = [
+        buffers = [
             watercourse_width_ruler(segment).buffer(segment.length * 2)
             for segment in segments[2:-2]
         ]
 
-        return shapely.ops.unary_union(bufs)
+        return shapely.ops.unary_union(buffers)
 
-    centerlines = watercourses.copy()
+    center_lines = watercourses.copy()
 
-    centerlines.geometry = (
-        # centerlines are still polygons here, segmentize to add vertices.
-        # this results in a less jagged centerline
-        centerlines.geometry.segmentize(1)
+    center_lines.geometry = (
+        # center lines are still polygons here, segmentize to add vertices.
+        # this results in a less jagged center line
+        center_lines.geometry.segmentize(1)
         .apply(
-            lambda geom: centerline(
-                geom, densify_distance=-1, min_branch_length=30, simplifytolerance=0
+            lambda geom: centerline(  # noqa: SC200
+                geom,
+                densify_distance=-1,
+                min_branch_length=30,
+                simplifytolerance=0,  # noqa: SC200
             )
         )
         .apply(lambda geom: simplify(geometry=geom, tolerance=10, algorithm="vw"))
-        # now centerlines are actual lines, segmentize again to allow more
+        # now center lines are actual lines, segmentize again to allow more
         # precise checking of watercourse width
         .segmentize(width_check_precision)
     )
 
-    segments = lines_to_segments(centerlines.geometry.explode(ignore_index=True))
+    segments = lines_to_segments(center_lines.geometry.explode(ignore_index=True))
 
     under_designated_width = gpd.GeoSeries(
         shapely.ops.linemerge(
@@ -204,36 +208,36 @@ def generalize_watercourse_areas(
         .geometry
     )
     remaining_areas = remaining_areas.loc[
-        remaining_areas.intersects(centerlines.unary_union)
+        remaining_areas.intersects(center_lines.unary_union)
     ]
     remaining_areas = remaining_areas.loc[remaining_areas.area >= minimum_polygon_area]
 
-    # create centerlines before simplifying areas for a better result
-    remaining_centerlines = (
+    # create center lines before simplifying areas for a better result
+    remaining_center_lines = (
         gpd.GeoSeries(
             data=symmetric_difference(watercourses_union, remaining_areas.unary_union),
             crs=remaining_areas.crs,
         )
         .segmentize(1)
         .apply(
-            lambda geom: centerline(
+            lambda geom: centerline(  # noqa: SC200
                 geom,
                 densify_distance=-1,
                 min_branch_length=30,
-                simplifytolerance=0,
+                simplifytolerance=0,  # noqa: SC200
             )
         )
         .explode(ignore_index=True)
     )
 
-    # simplify areas first so centerlines snap to the simplified version
+    # simplify areas first so center lines snap to the simplified version
     remaining_areas = remaining_areas.apply(
         lambda geom: simplify(geometry=geom, tolerance=2)
     ).apply(
-        lambda geom: shapely.make_valid(shapelysmooth.taubin_smooth(force_2d(geom)))
+        lambda geom: shapely.make_valid(shapelysmooth.taubin_smooth(force_2d(geom)))  # noqa: SC200
     )
 
-    remaining_centerlines = remaining_centerlines.apply(
+    remaining_center_lines = remaining_center_lines.apply(
         lambda geom: extend_line_to_nearest(
             line=geom,
             extend_to=remaining_areas.geometry.unary_union.boundary,
@@ -244,5 +248,5 @@ def generalize_watercourse_areas(
 
     return {
         "areas": remaining_areas,
-        "lines": remaining_centerlines,
+        "lines": remaining_center_lines,
     }

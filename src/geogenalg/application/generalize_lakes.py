@@ -178,9 +178,9 @@ class GeneralizeLakes(QgsProcessingAlgorithm):
             feedback = QgsProcessingFeedback()
 
         def check_feature_count_difference(
-            layer1: QgsVectorLayer, layer2: QgsVectorLayer, *, warn_if_different: bool
+            layer_1: QgsVectorLayer, layer_2: QgsVectorLayer, *, warn_if_different: bool
         ) -> None:
-            difference = layer1.featureCount() - layer2.featureCount()
+            difference = layer_1.featureCount() - layer_2.featureCount()
 
             log = (
                 feedback.pushWarning
@@ -189,7 +189,7 @@ class GeneralizeLakes(QgsProcessingAlgorithm):
             )
 
             log(
-                f"Difference in feature count is: {difference} ({layer1.featureCount()}/{layer2.featureCount()})"
+                f"Difference in feature count is: {difference} ({layer_1.featureCount()}/{layer_2.featureCount()})"
             )
 
         input_layer: QgsVectorLayer = self.parameterAsVectorLayer(
@@ -299,8 +299,10 @@ class GeneralizeLakes(QgsProcessingAlgorithm):
         feedback.setProgressText("Eliminating features")
 
         # Delete small lakes
-        elim_expression = QgsExpression(f"$area >= {min_lake_area}")
-        no_small_lakes = copied_layer.materialize(QgsFeatureRequest(elim_expression))
+        eliminate_expression = QgsExpression(f"$area >= {min_lake_area}")
+        no_small_lakes = copied_layer.materialize(
+            QgsFeatureRequest(eliminate_expression)
+        )
 
         # Delete small islands
         eliminated_layer = get_subalgorithm_result_layer(

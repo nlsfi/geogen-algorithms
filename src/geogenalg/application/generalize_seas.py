@@ -210,7 +210,7 @@ class GeneralizeSeas(QgsProcessingAlgorithm):
 
         # There's multiple stages where the multipart to single part algorithm
         # is required, save for convenience and clarity
-        def _multiparttosingleparts(layer: QgsVectorLayer) -> QgsVectorLayer:
+        def _multiparttosingleparts(layer: QgsVectorLayer) -> QgsVectorLayer:# noqa: SC200
             params = {
                 "INPUT": layer,
                 "OUTPUT": "TEMPORARY_OUTPUT",
@@ -227,9 +227,9 @@ class GeneralizeSeas(QgsProcessingAlgorithm):
         # the borders significantly.
         # For now handle this issue by extracting the relevant features
         # and combine them with the result at the end.
-        expr = QgsExpression("territorial_waters_category_id > 1")
+        expression = QgsExpression("territorial_waters_category_id > 1")
         categories_dissolved = _dissolve(
-            input_layer.materialize(QgsFeatureRequest(expr))
+            input_layer.materialize(QgsFeatureRequest(expression))
         )
         territorial_exterior_ring = get_subalgorithm_result_layer(
             "native:deleteholes",
