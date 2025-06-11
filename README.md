@@ -8,7 +8,7 @@ See [development readme](./DEVELOPMENT.md).
 
 ## License & copyright
 
-Licensed under GNU GPL v3.0.
+Licensed under MIT License.
 
 Copyright (C) 2025 [National Land Survey of Finland].
 

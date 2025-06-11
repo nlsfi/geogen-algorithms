@@ -1,8 +1,14 @@
-from __future__ import annotations
+#  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
+#
+#  This file is part of geogen-algorithms.
+#
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this source tree.
+
 
 import math
 from enum import Enum
-from typing import TYPE_CHECKING, NamedTuple
+from typing import NamedTuple
 
 import shapely.ops
 from geopandas import gpd
@@ -18,6 +24,7 @@ from shapely import (
     shortest_line,
     union,
 )
+from shapely.geometry.base import BaseGeometry
 
 from ..core.exceptions import (  # noqa: TID252
     GeometryOperationError,
@@ -25,25 +32,28 @@ from ..core.exceptions import (  # noqa: TID252
     InvalidGeometryError,
 )
 
-if TYPE_CHECKING:
-    from shapely.geometry.base import BaseGeometry
 
-
-class LineExtendFrom(Enum):
+class LineExtendFrom(Enum):  # noqa: D101
     END = -1
     START = 0
     BOTH = 1
 
 
-class Dimensions(NamedTuple):
+class Dimensions(NamedTuple):  # noqa: D101
     width: float
     height: float
 
 
 def rectangle_dimensions(rect: Polygon) -> Dimensions:
-    """Returns the width and height of a rectangular polygon.
+    """Calculate the dimensions of a rectangular polygon.
 
-    If input polygon is invalid or not a rectangle, raises an error.
+    Returns:
+        The width and height of a rectangular polygon.
+
+    Raises:
+        GeometryOperationError: If input polygon is invalid.
+        InvalidGeometryError: If input polygon is not a rectangle.
+
     """
     required_coords = 5
     if count_coordinates(rect) != required_coords or not math.isclose(  # noqa: SC200
@@ -70,24 +80,41 @@ def rectangle_dimensions(rect: Polygon) -> Dimensions:
 
 
 def elongation(polygon: Polygon) -> float:
-    """Returns the elongation of a polygon which is the ratio of the height
-    (longest side) to the width (shorter side) of its minimum bounding oriented
-    envelope.
+    """Calculate the elongation of a polygon.
+
+    Returns:
+        The ratio of the height (longest side) to the width (shorter side)
+        of its minimum bounding oriented envelope.
+
+    Raises:
+        TypeError: if created envelope is not of type polygon.
+
     """
-    dim = rectangle_dimensions(polygon.oriented_envelope)
-    return dim.height / dim.width
+    envelope: BaseGeometry = polygon.oriented_envelope
+    if not isinstance(envelope, Polygon):
+        msg = "Envelope is not a Polygon"
+        raise TypeError(msg)
+
+    dimensions = rectangle_dimensions(envelope)
+    return dimensions.height / dimensions.width
 
 
 def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Extracts the interior rings of a polygon geodataframe.
+    """Extract the interior rings of a polygon geodataframe.
 
-    Returns a new geodataframe containing the interior rings.
+    Returns:
+        A new geodataframe containing the interior rings.
+
+    Raises:
+        GeometryTypeError: If geometries are not polygons or multipolygons.
+
     """
     if not all(
         geom_type in {"Polygon", "MultiPolygon"}
-        for geom_type in areas.geometry.geom_type.values
+        for geom_type in areas.geometry.geom_type.to_numpy()
     ):
-        msg = "Cannot extract interior rings from a geodataframe with non-polygon geometries"
+        msg = """Cannot extract interior rings from
+        a geodataframe with non-polygon geometries"""
         raise GeometryTypeError(msg)
 
     interiors = areas
@@ -103,8 +130,11 @@ def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 def explode_line(line: LineString) -> list[LineString]:
-    """Explodes a line geometry and returns all its segments as a list
-    of LineStrings.
+    """Explode a line geometry to all its segments.
+
+    Returns:
+      All segments of a line geometry.
+
     """
     return [
         LineString((a, b)) for a, b in zip(line.coords, line.coords[1:], strict=False)
@@ -112,10 +142,18 @@ def explode_line(line: LineString) -> list[LineString]:
 
 
 def lines_to_segments(lines: gpd.GeoSeries) -> gpd.GeoSeries:
-    """Returns a GeoSeries of line geometries containing all line segments
-    from the input GeoSeries.
+    """Convert lines to segments.
+
+    Returns:
+        A GeoSeries of line geometries containing all line segments
+        from the input GeoSeries.
+
+    Raises:
+        GeometryTypeError: if param `lines` contains other geometry
+        types than lines.
+
     """
-    if not all(geom_type == "LineString" for geom_type in lines.geom_type.values):
+    if not all(geom_type == "LineString" for geom_type in lines.geom_type.to_numpy()):
         msg = "All geometries must be LineStrings."
         raise GeometryTypeError(msg)
 
@@ -129,8 +167,16 @@ def scale_line_to_length(
     geom: LineString,
     length: float,
 ) -> LineString:
-    """Returns a version of the input geometry which has been scaled to the
-    given length.
+    """Scale line to given length.
+
+    Returns:
+        A version of the input geometry which has been scaled to the
+        given length.
+
+    Raises:
+        ValueError: If param `geom` has no length.
+        ValueError: If param `length` is less than or equal to 0.
+
     """
     if geom.length <= 0:
         msg = "Geometry has no length"
@@ -149,8 +195,12 @@ def scale_line_to_length(
 
 
 def move_to_point(geom: BaseGeometry, point: Point) -> BaseGeometry:
-    """Returns a version of the input geometry which has been moved to the
-    given point position.
+    """Move geometry to given point position.
+
+    Returns:
+        A version of the input geometry which has been moved to the
+        given point position.
+
     """
     dx = point.x - geom.centroid.x
     dy = point.y - geom.centroid.y
@@ -164,9 +214,17 @@ def extend_line_to_nearest(
     extend_from: LineExtendFrom,
     tolerance: float = 0,
 ) -> LineString:
-    """Returns a version of the input line which has been extended to the
-    nearest point of another geometry. The extension can be done from
-    the end or start of the line, or alternatively both ends.
+    """Extend line to nearest point.
+
+    Returns:
+        A version of the input line which has been extended to the
+        nearest point of another geometry. The extension can be done from
+        the end or start of the line, or alternatively both ends.
+
+    Raises:
+        GeometryOperationError: If invalid result got from line union or merge
+        operations.
+
     """
     # TODO: test tolerance
 
@@ -211,9 +269,16 @@ def extend_line_to_nearest(
 
 
 def point_on_line(line: LineString, distance: float) -> Point:
-    """Returns a point which is the given distance away and collinear to either
-    the first or last segment of the input line. If distance is > 0 the point
-    is calculated from the last segment and if < 0 the first segment.
+    """Get point along line.
+
+    Returns:
+        A point which is the given distance away and collinear to either
+        the first or last segment of the input line. If distance is > 0 the point
+        is calculated from the last segment and if < 0 the first segment.
+
+    Raises:
+        ValueError: If line does not have exactly 2 vertices.
+
     """
     # TODO: doesn't have a test
 
@@ -255,8 +320,15 @@ def extend_line_by(
     extend_by: float,
     extend_from: LineExtendFrom,
 ) -> LineString:
-    """Returns a version of the input line which has been extended by the given distance
-    either from its start or end segment, or both.
+    """Extend line by given distance.
+
+    Returns:
+        Version of the input line which has been extended by the given distance
+        either from its start or end segment, or both.
+
+    Raises:
+        ValueError: if extend_from is less or equal than 0
+
     """
     # TODO: doesn't have a test
 
