@@ -13,6 +13,7 @@ coverage[toml]==7.2.7
 #stubs
 pyqt5-stubs==5.15.6.0
 pandas-stubs==2.2.3.241126
+types-shapely==2.1.0.20250512
 
 # lock here since 1.4.1 has no binaries
 atomicwrites==1.4.0
