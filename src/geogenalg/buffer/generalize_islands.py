@@ -194,11 +194,11 @@ class GeneralizeIslands(QgsProcessingAlgorithm):
 
             geom = feature.geometry()
 
-            _, _, _, ombb_width, ombb_height = geom.orientedMinimumBoundingBox()
-            elongation: float = ombb_height / ombb_width
+            _, _, _, bbox_width, bbox_height = geom.orientedMinimumBoundingBox()
+            elongation: float = bbox_height / bbox_width
 
             # check whether the island should be exaggerated
-            if elongation >= min_elongation and ombb_width < min_width:
+            if elongation >= min_elongation and bbox_width < min_width:
                 geom = geom.buffer(distance=exaggerate_by, segments=2)
 
             vertex_count: int = geom.constGet().nCoordinates()

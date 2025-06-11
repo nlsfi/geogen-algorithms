@@ -20,7 +20,7 @@ from qgis.core import (
     QgsWkbTypes,
 )
 from qgis.PyQt.QtCore import QCoreApplication
-from yleistys_qgis_plugin.core.utils import (
+from geogenalg.core.utils import (
     extract_interior_rings,
 )
 
@@ -141,9 +141,9 @@ class ExtractInteriorRings(QgsProcessingAlgorithm):
                 # ring and add those as rings to handle recursive islands
                 rect: QgsRectangle = interior_ring.boundingBox()
 
-                req = QgsFeatureRequest().setFilterRect(rect)
+                request = QgsFeatureRequest().setFilterRect(rect)
 
-                for feat in source.getFeatures(req):
+                for feat in source.getFeatures(request):
                     geom = feat.geometry()
                     if geom.within(interior_ring):
                         rings: list[list[QgsPointXY]]

@@ -2,6 +2,7 @@ import pytest
 import shapely
 from geopandas import gpd
 from shapely.geometry import Point
+
 from geogenalg.core.exceptions import (
     GeometryOperationError,
     GeometryTypeError,
