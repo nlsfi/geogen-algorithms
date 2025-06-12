@@ -7,7 +7,15 @@ exclude = [
     "src/geogenalg/application/generalize_seas.py",
     "src/geogenalg/buffer/exaggerate_thin_parts.py",
     "src/geogenalg/buffer/generalize_islands.py",
-    "src/geogenalg/core/extract_interior_rings.py"
+    "src/geogenalg/core/extract_interior_rings.py",
+    "src/geogenalg/application/remove_short_watercourses.py",
+    "src/geogenalg/application/remove_dense_watercourses.py",
+    "src/geogenalg/application/generalize_watercourses_50k.py",
+    "src/geogenalg/application/detect_with_uoma_overlap.py",
+    "src/geogenalg/application/detect_watercourse_areas_border.py",
+    "src/geogenalg/core/watercourse_structure_detection.py",
+    "src/geogenalg/application/railroads.py",
+    "src/geogenalg/application/generalize_roads_50k.py",
 ]
 
 lint.ignore = [
@@ -79,10 +87,18 @@ per-file-ignores = ["test/*:SC200"]
 # TODO: remove exclude section when qgis dependencies removed/function refactored
 exclude = """
     src/geogenalg/application/generalize_lakes.py
-    src/geogenalg/application/generalize_seas.py,
-    src/geogenalg/buffer/exaggerate_thin_parts.py,
-    src/geogenalg/buffer/generalize_islands.py,
+    src/geogenalg/application/generalize_seas.py
+    src/geogenalg/buffer/exaggerate_thin_parts.py
+    src/geogenalg/buffer/generalize_islands.py
     src/geogenalg/core/extract_interior_rings.py
+    src/geogenalg/application/remove_short_watercourses.py
+    src/geogenalg/application/remove_dense_watercourses.py
+    src/geogenalg/application/generalize_watercourses_50k.py
+    src/geogenalg/application/detect_with_uoma_overlap.py
+    src/geogenalg/application/detect_watercourse_areas_border.py
+    src/geogenalg/core/watercourse_structure_detection.py
+    # railroads is not qgis dependent, but has lots of ambiguous variable names etc
+    src/geogenalg/application/railroads.py
 """
 
 [tool.mypy]

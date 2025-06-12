@@ -21,7 +21,9 @@ def calculate_sinuosity(geom: QgsGeometry) -> float:
     return line_length / straight_distance
 
 
-def check_line_connectivity(geom: QgsGeometry, layer: QgsVectorLayer, radius: float) -> bool:
+def check_line_connectivity(
+    geom: QgsGeometry, layer: QgsVectorLayer, radius: float
+) -> bool:
     line_nodes = geom.asPolyline()
     first_node = QgsPointXY(line_nodes[0])
     end_node = QgsPointXY(line_nodes[-1])
@@ -30,8 +32,12 @@ def check_line_connectivity(geom: QgsGeometry, layer: QgsVectorLayer, radius: fl
 
     first_node_buffer = first_point_geom.buffer(radius, 5)
     end_node_buffer = end_point_geom.buffer(radius, 5)
-    first_node_buffer_geometry_engine = QgsGeometry.createGeometryEngine(first_node_buffer.constGet())
-    end_node_buffer_geometry_engine = QgsGeometry.createGeometryEngine(end_node_buffer.constGet())
+    first_node_buffer_geometry_engine = QgsGeometry.createGeometryEngine(
+        first_node_buffer.constGet()
+    )
+    end_node_buffer_geometry_engine = QgsGeometry.createGeometryEngine(
+        end_node_buffer.constGet()
+    )
 
     first_node_buffer_geometry_engine.prepareGeometry()
     end_node_buffer_geometry_engine.prepareGeometry()
