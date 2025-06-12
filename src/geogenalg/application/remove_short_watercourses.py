@@ -26,8 +26,9 @@ from qgis.PyQt.QtCore import (
     QCoreApplication,
     QVariant,
 )
-
-from yleistys_qgis_plugin.core.watercourse_structure_detection import check_line_connectivity
+from yleistys_qgis_plugin.core.watercourse_structure_detection import (
+    check_line_connectivity,
+)
 
 
 class RemoveShortWatercourses(QgsProcessingAlgorithm):
@@ -51,6 +52,7 @@ class RemoveShortWatercourses(QgsProcessingAlgorithm):
     BUFFER_RADIUS: Float number.
         The radius for the buffers that are constructed on
         each end vertex.
+
     """
 
     # Constants used to refer to parameters and outputs. They will be
@@ -74,17 +76,14 @@ class RemoveShortWatercourses(QgsProcessingAlgorithm):
                                     connected only by one end"""
 
     def tr(self, string) -> str:
-        """
-        Returns a translatable string with the self.tr() function.
-        """
+        """Returns a translatable string with the self.tr() function."""
         return QCoreApplication.translate("Processing", string)
 
-    def createInstance(self):  # noqa N802
+    def createInstance(self):  # noqa: N802
         return RemoveShortWatercourses()
 
     def name(self) -> str:
-        """
-        Returns the algorithm name, used for identifying the algorithm. This
+        """Returns the algorithm name, used for identifying the algorithm. This
         string should be fixed for the algorithm, and must not be localised.
         The name should be unique within each provider. Names should contain
         lowercase alphanumeric characters only and no spaces or other
@@ -92,16 +91,14 @@ class RemoveShortWatercourses(QgsProcessingAlgorithm):
         """
         return self._name
 
-    def displayName(self) -> str:  # noqa N802
-        """
-        Returns the translated algorithm name, which should be used for any
+    def displayName(self) -> str:  # noqa: N802
+        """Returns the translated algorithm name, which should be used for any
         user-visible display of the algorithm name.
         """
         return self.tr(self._display_name)
 
-    def groupId(self) -> str:  # noqa N802
-        """
-        Returns the unique ID of the group this algorithm belongs to. This
+    def groupId(self) -> str:  # noqa: N802
+        """Returns the unique ID of the group this algorithm belongs to. This
         string should be fixed for the algorithm, and must not be localised.
         The group id should be unique within each provider. Group id should
         contain lowercase alphanumeric characters only and no spaces or other
@@ -110,26 +107,22 @@ class RemoveShortWatercourses(QgsProcessingAlgorithm):
         return self._group_id
 
     def group(self) -> str:
-        """
-        Returns the name of the group this algorithm belongs to. This string
+        """Returns the name of the group this algorithm belongs to. This string
         should be localised.
         """
         return self.tr(self._group)
 
-    def shortHelpString(self) -> str:  # noqa N802
-        """
-        Returns a localised short helper string for the algorithm. This string
+    def shortHelpString(self) -> str:  # noqa: N802
+        """Returns a localised short helper string for the algorithm. This string
         should provide a basic description about what the algorithm does and
         the parameters and outputs associated with it..
         """
         return self.tr(self._short_help_string)
 
-    def initAlgorithm(self, configuration=None):  # noqa N802
-        """
-        Here we define the inputs and output of the algorithm, along
+    def initAlgorithm(self, configuration=None) -> None:  # noqa: N802
+        """Here we define the inputs and output of the algorithm, along
         with some other properties.
         """
-
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.INPUT,
@@ -156,26 +149,33 @@ class RemoveShortWatercourses(QgsProcessingAlgorithm):
             )
         )
 
-        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr("ShortWatercoursesRemoved")))
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(
+                self.OUTPUT, self.tr("ShortWatercoursesRemoved")
+            )
+        )
 
-    def processAlgorithm(  # noqa N802
+    def processAlgorithm(  # noqa: N802
         self,
         parameters: dict[str, Any],
         context: QgsProcessingContext,
         feedback: QgsProcessingFeedback,
     ) -> dict:
-        """
-        Here is where the processing itself takes place.
-        """
-
+        """Here is where the processing itself takes place."""
         # Initialize feedback if it is None
         if feedback is None:
             feedback = QgsProcessingFeedback()
 
-        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(parameters, self.INPUT, context)
-        threshold_length: float = self.parameterAsDouble(parameters, self.MIN_LENGTH, context)
+        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(
+            parameters, self.INPUT, context
+        )
+        threshold_length: float = self.parameterAsDouble(
+            parameters, self.MIN_LENGTH, context
+        )
 
-        buffer_radius: float = self.parameterAsDouble(parameters, self.BUFFER_RADIUS, context)
+        buffer_radius: float = self.parameterAsDouble(
+            parameters, self.BUFFER_RADIUS, context
+        )
 
         # copy layer since we might have to delete some features and we don't
         # want to affect the actual data source
@@ -199,7 +199,9 @@ class RemoveShortWatercourses(QgsProcessingAlgorithm):
         feedback.setProgress(0)
         feedback.setProgressText("Check the length & connectivity of lines")
 
-        total = 100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        total = (
+            100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        )
 
         for current, feature in enumerate(copied_layer.getFeatures()):
             if feedback.isCanceled():
@@ -216,7 +218,9 @@ class RemoveShortWatercourses(QgsProcessingAlgorithm):
             else:
                 feature["too_short"] = False
 
-            feature["connected"] = check_line_connectivity(feature.geometry(), copied_layer, buffer_radius)
+            feature["connected"] = check_line_connectivity(
+                feature.geometry(), copied_layer, buffer_radius
+            )
 
             if feature["too_short"] and not feature["connected"]:
                 feature["remove"] = True

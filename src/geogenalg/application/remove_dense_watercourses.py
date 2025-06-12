@@ -27,7 +27,6 @@ from qgis.core import (
 from qgis.PyQt.QtCore import (
     QCoreApplication,
 )
-
 from yleistys_qgis_plugin.core.utils import get_subalgorithm_result_layer
 
 
@@ -54,17 +53,14 @@ class RemoveDenseWatercourses(QgsProcessingAlgorithm):
         self._short_help_string = ""
 
     def tr(self, string) -> str:
-        """
-        Returns a translatable string with the self.tr() function.
-        """
+        """Returns a translatable string with the self.tr() function."""
         return QCoreApplication.translate("Processing", string)
 
-    def createInstance(self):  # noqa N802
+    def createInstance(self):  # noqa: N802
         return RemoveDenseWatercourses()
 
     def name(self) -> str:
-        """
-        Returns the algorithm name, used for identifying the algorithm. This
+        """Returns the algorithm name, used for identifying the algorithm. This
         string should be fixed for the algorithm, and must not be localised.
         The name should be unique within each provider. Names should contain
         lowercase alphanumeric characters only and no spaces or other
@@ -72,16 +68,14 @@ class RemoveDenseWatercourses(QgsProcessingAlgorithm):
         """
         return self._name
 
-    def displayName(self) -> str:  # noqa N802
-        """
-        Returns the translated algorithm name, which should be used for any
+    def displayName(self) -> str:  # noqa: N802
+        """Returns the translated algorithm name, which should be used for any
         user-visible display of the algorithm name.
         """
         return self.tr(self._display_name)
 
-    def groupId(self) -> str:  # noqa N802
-        """
-        Returns the unique ID of the group this algorithm belongs to. This
+    def groupId(self) -> str:  # noqa: N802
+        """Returns the unique ID of the group this algorithm belongs to. This
         string should be fixed for the algorithm, and must not be localised.
         The group id should be unique within each provider. Group id should
         contain lowercase alphanumeric characters only and no spaces or other
@@ -90,26 +84,22 @@ class RemoveDenseWatercourses(QgsProcessingAlgorithm):
         return self._group_id
 
     def group(self) -> str:
-        """
-        Returns the name of the group this algorithm belongs to. This string
+        """Returns the name of the group this algorithm belongs to. This string
         should be localised.
         """
         return self.tr(self._group)
 
-    def shortHelpString(self) -> str:  # noqa N802
-        """
-        Returns a localised short helper string for the algorithm. This string
+    def shortHelpString(self) -> str:  # noqa: N802
+        """Returns a localised short helper string for the algorithm. This string
         should provide a basic description about what the algorithm does and the
         parameters and outputs associated with it..
         """
         return self.tr(self._short_help_string)
 
-    def initAlgorithm(self, configuration=None):  # noqa N802
-        """
-        Here we define the inputs and output of the algorithm, along
+    def initAlgorithm(self, configuration=None) -> None:  # noqa: N802
+        """Here we define the inputs and output of the algorithm, along
         with some other properties.
         """
-
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.INPUT,
@@ -121,7 +111,9 @@ class RemoveDenseWatercourses(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.DISTANCE_THRESHOLD,
-                self.tr("Maximum distance for clustering parallel lines (in CRS units)"),
+                self.tr(
+                    "Maximum distance for clustering parallel lines (in CRS units)"
+                ),
                 defaultValue=50,
             )
         )
@@ -137,32 +129,41 @@ class RemoveDenseWatercourses(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterBoolean(
                 self.STROKES,
-                self.tr("Form river strokes from input geometries first? (Option not implemented yet)"),
+                self.tr(
+                    "Form river strokes from input geometries first? (Option not implemented yet)"
+                ),
                 defaultValue=False,
             )
         )
 
-        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr("RemoveDenseWatercoursesOutput")))
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(
+                self.OUTPUT, self.tr("RemoveDenseWatercoursesOutput")
+            )
+        )
 
-    def processAlgorithm(  # noqa N802
+    def processAlgorithm(  # noqa: N802
         self,
         parameters: dict[str, Any],
         context: QgsProcessingContext,
         feedback: QgsProcessingFeedback,
     ) -> dict:
-        """
-        Here is where the processing itself takes place.
-        """
-
+        """Here is where the processing itself takes place."""
         # Initialize feedback if it is None
         if feedback is None:
             feedback = QgsProcessingFeedback()
 
-        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(parameters, self.INPUT, context)
+        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(
+            parameters, self.INPUT, context
+        )
 
-        distance_threshold: float = self.parameterAsDouble(parameters, self.DISTANCE_THRESHOLD, context)
+        distance_threshold: float = self.parameterAsDouble(
+            parameters, self.DISTANCE_THRESHOLD, context
+        )
 
-        density_ratio: float = self.parameterAsDouble(parameters, self.LINE_DENSITY_RATIO, context)
+        density_ratio: float = self.parameterAsDouble(
+            parameters, self.LINE_DENSITY_RATIO, context
+        )
 
         form_strokes: bool = self.parameterAsBool(parameters, self.STROKES, context)
         # copy layer since we might have to delete some features and we don't
@@ -261,7 +262,9 @@ class RemoveDenseWatercourses(QgsProcessingAlgorithm):
         # processed_qgis_layer = joined_layer
         processed_qgis_layer = remove_dense_lines
 
-        total = 100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        total = (
+            100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        )
 
         for current, feature in enumerate(processed_qgis_layer.getFeatures()):
             if feedback.isCanceled():

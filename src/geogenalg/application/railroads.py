@@ -3,7 +3,6 @@ from __future__ import annotations
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from math import sqrt
 from shapely.geometry import LineString, Point
 from sklearn.cluster import DBSCAN
 
@@ -11,18 +10,18 @@ from sklearn.cluster import DBSCAN
 def generalize_railroads(
     railtracks_gdf: gpd.GeoDataFrame,
 ) -> dict[str, gpd.GeoDataFrame]:
-    """
-    Generalizes railroad network by identifying different railroad track types
+    """Generalizes railroad network by identifying different railroad track types
     (sidetracks & maintracks, for example) and reducing and them in dense
     areas. Influenced largely by the proposed algorithm by Savino & Touya
     (hereafter S&T) in (pdf, open access):
-    www.researchgate.net/publication/281857051_Automatic_Structure_Detection_and_Generalization_of_Railway_Networks
+    www.researchgate.net/publication/281857051_Automatic_Structure_Detection_and_Generalization_of_Railway_Networks.
 
-    Parameters:
+    Parameters
+    ----------
         railtracks_gdf (GeoDataFrame): input railtracks GeoDataFrame with
         LineString geometry.
-    """
 
+    """
     # The basic steps of this algorithm are
     # 1a) Create an orthogonal line to the middle point of every input line and
     # determine the intersections of this line with the input lines. If it has
@@ -51,13 +50,12 @@ def generalize_railroads(
 
 
 def calculate_intersections_between_columns(
-        gdf: gpd.GeoDataFrame,
-        geom_col1="geometry",
-        geom_col2="other_geometry",
-        intersection_count_field="intersection_count"
-        ) -> gpd.GeoDataFrame:
-    """
-    Calculate the number of intersections between two geometry columns in a
+    gdf: gpd.GeoDataFrame,
+    geom_col1="geometry",
+    geom_col2="other_geometry",
+    intersection_count_field="intersection_count",
+) -> gpd.GeoDataFrame:
+    """Calculate the number of intersections between two geometry columns in a
     GeoDataFrame and record the result.
     """
     # Ensure both geometry columns exist
@@ -73,15 +71,17 @@ def calculate_intersections_between_columns(
 
     # Calculate intersections for each row
     intersection_counts = []
-    for idx, row in gdf.iterrows():
-        geom1 = row[geom_col1]
+    for _idx, row in gdf.iterrows():
+        row[geom_col1]
         geom2 = row[geom_col2]
 
         # Find potential matches for geom2 using the spatial index of geom1
         possible_matches_index = list(spatial_index.intersection(geom2.bounds))
 
         # Check actual intersections
-        actual_intersections = gdf.iloc[possible_matches_index][geom_col1].intersects(geom2)
+        actual_intersections = gdf.iloc[possible_matches_index][geom_col1].intersects(
+            geom2
+        )
 
         # Count the intersections
         intersection_count = actual_intersections.sum()
@@ -114,11 +114,15 @@ def create_orthogonal_lines(gdf: gpd.GeoDataFrame, length: float):
         return LineString([p1, p2])
 
     # Apply the function to each line in the GeoDataFrame
-    gdf["orthogonal_line"] = gdf.geometry.apply(lambda line: calculate_orthogonal_line(line, length))
+    gdf["orthogonal_line"] = gdf.geometry.apply(
+        lambda line: calculate_orthogonal_line(line, length)
+    )
     return gdf
 
 
-def create_orthogonal_left_sidelines(gdf: gpd.GeoDataFrame, length: float) -> gpd.GeoDataFrame:
+def create_orthogonal_left_sidelines(
+    gdf: gpd.GeoDataFrame, length: float
+) -> gpd.GeoDataFrame:
     def calculate_orthogonal_line_left(line, length):
         centroid = line.interpolate(0.5, normalized=True)
 
@@ -132,11 +136,15 @@ def create_orthogonal_left_sidelines(gdf: gpd.GeoDataFrame, length: float) -> gp
 
         # Create the orthogonal line
         p1 = Point(centroid.x, centroid.y)
-        p2 = Point(centroid.x + length*np.cos(angle), centroid.y + length*np.sin(angle) )
+        p2 = Point(
+            centroid.x + length * np.cos(angle), centroid.y + length * np.sin(angle)
+        )
         return LineString([p1, p2])
 
     # Apply the function to each line in the GeoDataFrame
-    gdf["orthogonal_line_left"] = gdf.geometry.apply(lambda line: calculate_orthogonal_line_left(line, length))
+    gdf["orthogonal_line_left"] = gdf.geometry.apply(
+        lambda line: calculate_orthogonal_line_left(line, length)
+    )
     return gdf
 
 
@@ -155,17 +163,20 @@ def create_orthogonal_right_sidelines(gdf, length):
 
         # Create the orthogonal line
         p1 = Point(centroid.x, centroid.y)
-        p2 = Point(centroid.x + length*np.cos(angle), centroid.y + length*np.sin(angle) )
+        p2 = Point(
+            centroid.x + length * np.cos(angle), centroid.y + length * np.sin(angle)
+        )
         return LineString([p1, p2])
 
     # Apply the function to each line in the GeoDataFrame
-    gdf["orthogonal_line_right"] = gdf.geometry.apply(lambda line: calculate_orthogonal_line_right(line, length))
+    gdf["orthogonal_line_right"] = gdf.geometry.apply(
+        lambda line: calculate_orthogonal_line_right(line, length)
+    )
     return gdf
 
 
 def reduce_line_density(gdf: gpd.GeoDataFrame, distance_threshold=5, sampling_rate=0.5):
-    """
-    Remove parallel lines while trying to main the local fluctuations in the density.
+    """Remove parallel lines while trying to main the local fluctuations in the density.
     Distance_threshold: Max. distance for clustering parallel lines.
     Sampling_rate: Proportion of lines to keep in each cluster (0 < sampling_rate <= 1).
     """
@@ -180,23 +191,22 @@ def reduce_line_density(gdf: gpd.GeoDataFrame, distance_threshold=5, sampling_ra
 
     # Cluster lines based on proximity using DBSCAN
     clustering = DBSCAN(eps=distance_threshold, min_samples=1).fit(coords)
-    gdf['cluster'] = clustering.labels_
+    gdf["cluster"] = clustering.labels_
 
     # Reduce density within each cluster
     reduced_lines = []
-    for cluster_id in gdf['cluster'].unique():
-        cluster_lines = gdf[gdf['cluster'] == cluster_id]
+    for cluster_id in gdf["cluster"].unique():
+        cluster_lines = gdf[gdf["cluster"] == cluster_id]
 
         # Randomly sample lines within the cluster
         # Set random_state for reproducibility
-        sampled_lines = cluster_lines.sample(
-            frac=sampling_rate, random_state=42
-        )
+        sampled_lines = cluster_lines.sample(frac=sampling_rate, random_state=42)
         reduced_lines.append(sampled_lines)
 
     # Combine all sampled lines into a single GeoDataFrame
-    reduced_gdf = gpd.GeoDataFrame(pd.concat(reduced_lines, ignore_index=True),
-                                   crs=gdf.crs).drop(columns=['cluster'])
+    reduced_gdf = gpd.GeoDataFrame(
+        pd.concat(reduced_lines, ignore_index=True), crs=gdf.crs
+    ).drop(columns=["cluster"])
 
     return reduced_gdf  # noqa
 
@@ -204,41 +214,42 @@ def reduce_line_density(gdf: gpd.GeoDataFrame, distance_threshold=5, sampling_ra
 def generalize_sidetracks(sidetracks: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     # Simplified sidetrack generalization approach:
     # select representative tracks
-    inner_sidetracks = sidetracks[~sidetracks['border']]
-    outer_sidetracks = sidetracks[sidetracks['border']]
+    inner_sidetracks = sidetracks[~sidetracks["border"]]
+    outer_sidetracks = sidetracks[sidetracks["border"]]
     removed_dense_tracks = inner_sidetracks[::5]  # select every 5th
     gen_sidetracks = gpd.GeoDataFrame(
         pd.concat([removed_dense_tracks, outer_sidetracks]), crs=sidetracks.crs
-        )
+    )
     return gen_sidetracks  # noqa
 
 
 def collapse_parallel_tracks(parallel_groups: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     # Filter out invalid geometries and ensure only LineStrings are processed
     valid_lines = [
-        line for line in parallel_groups.geometry if line and isinstance(line, LineString)
-        ]
+        line
+        for line in parallel_groups.geometry
+        if line and isinstance(line, LineString)
+    ]
     if not valid_lines:
-        return gpd.GeoDataFrame({'geometry': []})
+        return gpd.GeoDataFrame({"geometry": []})
     # Calculate an approximate center line for the parallel tracks
     all_coords = np.vstack([list(line.coords) for line in valid_lines])
     mean_coords = np.mean(all_coords, axis=0)
     # Ensure that the mean_coords can form a valid LineString
     if len(mean_coords) < 4:  # Need at least two (x,y) points
-        return gpd.GeoDataFrame({'geometry': []})
+        return gpd.GeoDataFrame({"geometry": []})
     center_line = LineString([Point(coord) for coord in mean_coords.reshape(-1, 2)])
-    return gpd.GeoDataFrame({'geometry': [center_line]})
+    return gpd.GeoDataFrame({"geometry": [center_line]})
 
 
 def generalize_railtracks(
-        gdf: gpd.GeoDataFrame,
-        max_intersections=7,
-        border_intersections=2,
-        distance_threshold=50,
-        min_samples=3,
-        ) -> gpd.GeoDataFrame:
-    """
-    max_intersections (int): how many intersections of the orthogonal line drawn in
+    gdf: gpd.GeoDataFrame,
+    max_intersections=7,
+    border_intersections=2,
+    distance_threshold=50,
+    min_samples=3,
+) -> gpd.GeoDataFrame:
+    """max_intersections (int): how many intersections of the orthogonal line drawn in
         the middle point of the track can a rail have before it is considered
         belonging to a sidetrack group
     border_intersections (int): How many intersections can the one-sided orthogonal
@@ -248,23 +259,39 @@ def generalize_railtracks(
     distance_threshold (float):
     min_samples (int):
     """
-
     # STEP 1
 
     gdf = create_orthogonal_lines(gdf, 100)
     gdf = create_orthogonal_left_sidelines(gdf, 30)
     gdf = create_orthogonal_right_sidelines(gdf, 30)
 
-    gdf = calculate_intersections_between_columns(gdf, geom_col1="geometry", geom_col2="orthogonal_line", intersection_count_field="intersection_count")
-    gdf = calculate_intersections_between_columns(gdf, geom_col1="geometry", geom_col2="orthogonal_line_left", intersection_count_field="intersections_left")
-    gdf = calculate_intersections_between_columns(gdf, geom_col1="geometry", geom_col2="orthogonal_line_right", intersection_count_field="intersections_right")
+    gdf = calculate_intersections_between_columns(
+        gdf,
+        geom_col1="geometry",
+        geom_col2="orthogonal_line",
+        intersection_count_field="intersection_count",
+    )
+    gdf = calculate_intersections_between_columns(
+        gdf,
+        geom_col1="geometry",
+        geom_col2="orthogonal_line_left",
+        intersection_count_field="intersections_left",
+    )
+    gdf = calculate_intersections_between_columns(
+        gdf,
+        geom_col1="geometry",
+        geom_col2="orthogonal_line_right",
+        intersection_count_field="intersections_right",
+    )
 
-    gdf['border_all'] = (gdf['intersections_left'] < border_intersections) | ( gdf['intersections_right'] < border_intersections)
+    gdf["border_all"] = (gdf["intersections_left"] < border_intersections) | (
+        gdf["intersections_right"] < border_intersections
+    )
 
-    gdf['sidetrack_candidate'] = gdf["intersection_count"] >= max_intersections
+    gdf["sidetrack_candidate"] = gdf["intersection_count"] >= max_intersections
 
-    gdf_sidetracks = gdf[gdf['sidetrack_candidate']]
-    gdf_maintracks = gdf[~gdf['sidetrack_candidate']]
+    gdf_sidetracks = gdf[gdf["sidetrack_candidate"]]
+    gdf_maintracks = gdf[~gdf["sidetrack_candidate"]]
 
     # STEP 2
 
@@ -272,35 +299,36 @@ def generalize_railtracks(
     coords = np.array([[point.x, point.y] for point in centroids])
 
     clustering = DBSCAN(eps=distance_threshold, min_sample=min_samples).fit(coords)
-    gdf_sidetracks['cluster'] = clustering.labels_
+    gdf_sidetracks["cluster"] = clustering.labels_
 
     combined_tracks = gpd.GeoDataFrame(
         pd.concat([gdf_maintracks, gdf_sidetracks]),
         crs=gdf.crs,
-        )
+    )
 
     # STEP 3
 
-    maintracks = combined_tracks[~combined_tracks['sidetrack_candidate']].copy()
-    sidetracks = combined_tracks[combined_tracks['sidetrack_candidate']].copy()
+    maintracks = combined_tracks[~combined_tracks["sidetrack_candidate"]].copy()
+    sidetracks = combined_tracks[combined_tracks["sidetrack_candidate"]].copy()
 
     maintrack_touching_clusters = {}
 
     # Iterate over maintracks
     for idx, maintrack in maintracks.iterrows():
-        touching_sidetracks = sidetracks[sidetracks.geometry.touches(maintrack.geometry)]
+        touching_sidetracks = sidetracks[
+            sidetracks.geometry.touches(maintrack.geometry)
+        ]
 
-        touching_clusters = touching_sidetracks['cluster'].unique().tolist()
+        touching_clusters = touching_sidetracks["cluster"].unique().tolist()
         maintrack_touching_clusters[idx] = touching_clusters
 
     # Add the new field to the maintracks GeoDataFrame
-    maintracks['touches_clusters'] = maintracks.index.map(maintrack_touching_clusters)
+    maintracks["touches_clusters"] = maintracks.index.map(maintrack_touching_clusters)
 
     # Merge back into the original GeoDataFrame
     combined_tracks = gpd.GeoDataFrame(
-        pd.concat([combined_tracks.drop(maintracks.index), maintracks]),
-        crs=gdf.crs
-        )
+        pd.concat([combined_tracks.drop(maintracks.index), maintracks]), crs=gdf.crs
+    )
 
     """
     TODO: STEP 4: Implement strokes algorithm for railtracks and apply it to

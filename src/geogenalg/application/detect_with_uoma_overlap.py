@@ -31,13 +31,12 @@ from qgis.PyQt.QtCore import (
 
 
 class DetectWithUomaOverlap(QgsProcessingAlgorithm):
-    """
-    The algorithm detects those features of the input layer
+    """The algorithm detects those features of the input layer
     that lie within the buffer formed around the reference layer
-    (uoma layer)
+    (uoma layer).
 
     Parameters
-    -----------
+    ----------
     INPUT: Vector layer
         The input layer that is used for generalization.
     INPUT_UOMA: Vector layer
@@ -51,6 +50,7 @@ class DetectWithUomaOverlap(QgsProcessingAlgorithm):
         Output layer that is copy of the input layer but with new
         attribute field "within_uoma" to indicate whether feature
         corresponds to natural watercourse.
+
     """
 
     # Constants used to refer to parameters and outputs. They will be
@@ -82,17 +82,14 @@ class DetectWithUomaOverlap(QgsProcessingAlgorithm):
         """
 
     def tr(self, string) -> str:
-        """
-        Returns a translatable string with the self.tr() function.
-        """
+        """Returns a translatable string with the self.tr() function."""
         return QCoreApplication.translate("Processing", string)
 
-    def createInstance(self):  # noqa N802
+    def createInstance(self):  # noqa: N802
         return DetectWithUomaOverlap()
 
     def name(self) -> str:
-        """
-        Returns the algorithm name, used for identifying the algorithm. This
+        """Returns the algorithm name, used for identifying the algorithm. This
         string should be fixed for the algorithm, and must not be localised.
         The name should be unique within each provider. Names should contain
         lowercase alphanumeric characters only and no spaces or other
@@ -100,16 +97,14 @@ class DetectWithUomaOverlap(QgsProcessingAlgorithm):
         """
         return self._name
 
-    def displayName(self) -> str:  # noqa N802
-        """
-        Returns the translated algorithm name, which should be used for any
+    def displayName(self) -> str:  # noqa: N802
+        """Returns the translated algorithm name, which should be used for any
         user-visible display of the algorithm name.
         """
         return self.tr(self._display_name)
 
-    def groupId(self) -> str:  # noqa N802
-        """
-        Returns the unique ID of the group this algorithm belongs to. This
+    def groupId(self) -> str:  # noqa: N802
+        """Returns the unique ID of the group this algorithm belongs to. This
         string should be fixed for the algorithm, and must not be localised.
         The group id should be unique within each provider. Group id should
         contain lowercase alphanumeric characters only and no spaces or other
@@ -118,15 +113,13 @@ class DetectWithUomaOverlap(QgsProcessingAlgorithm):
         return self._group_id
 
     def group(self) -> str:
-        """
-        Returns the name of the group this algorithm belongs to. This string
+        """Returns the name of the group this algorithm belongs to. This string
         should be localised.
         """
         return self.tr(self._group)
 
-    def shortHelpString(self) -> str:  # noqa N802
-        """
-        DetectWithUomaOverlap algorithm takes an input vector layer of
+    def shortHelpString(self) -> str:  # noqa: N802
+        """DetectWithUomaOverlap algorithm takes an input vector layer of
         LineStrings as the layer that should be generalized. Another input
         vector layer (Uoma) acts as a reference layer for the natural waterways
         as linestrings. This algorithm tries to detect those features in the
@@ -138,12 +131,10 @@ class DetectWithUomaOverlap(QgsProcessingAlgorithm):
         """
         return self.tr(self._short_help_string)
 
-    def initAlgorithm(self, configuration=None):  # noqa N802
-        """
-        Here we define the inputs and output of the algorithm, along
+    def initAlgorithm(self, configuration=None) -> None:  # noqa: N802
+        """Here we define the inputs and output of the algorithm, along
         with some other properties.
         """
-
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.INPUT,
@@ -167,23 +158,26 @@ class DetectWithUomaOverlap(QgsProcessingAlgorithm):
                 defaultValue=30,
             )
         )
-        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr("DetectNaturalWithUoma")))
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(
+                self.OUTPUT, self.tr("DetectNaturalWithUoma")
+            )
+        )
 
-    def processAlgorithm(  # noqa N802
+    def processAlgorithm(  # noqa: N802
         self,
         parameters: dict[str, Any],
         context: QgsProcessingContext,
         feedback: QgsProcessingFeedback,
     ) -> dict:
-        """
-        Here is where the processing itself takes place.
-        """
-
+        """Here is where the processing itself takes place."""
         # Initialize feedback if it is None
         if feedback is None:
             feedback = QgsProcessingFeedback()
 
-        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(parameters, self.INPUT, context)  # input_layer
+        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(
+            parameters, self.INPUT, context
+        )  # input_layer
         reference_layer: QgsVectorLayer = self.parameterAsVectorLayer(
             parameters, self.INPUT_UOMA, context
         )  # input_uoma_layer
@@ -210,7 +204,9 @@ class DetectWithUomaOverlap(QgsProcessingAlgorithm):
         feedback.setProgressText("Start processing!")
         feedback.setProgress(10)
 
-        total = 100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        total = (
+            100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        )
         # Collect buffered geometries from reference_layer
         buffered_geoms = []
         for feature in reference_layer.getFeatures():

@@ -30,16 +30,14 @@ from qgis.PyQt.QtCore import (
     QCoreApplication,
     QVariant,
 )
-
 from yleistys_qgis_plugin.core.utils import get_subalgorithm_result_layer
 
 
 class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
-    """
-    The algorithm detects ...
+    """The algorithm detects ...
 
     Parameters
-    -----------
+    ----------
     INPUT: Vector layer
         The input layer that is used for generalization.
 
@@ -47,6 +45,7 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
         Output layer that is copy of the input layer but with new
         attribute field "within_uoma" to indicate whether feature
         corresponds to natural watercourse.
+
     """
 
     # Constants used to refer to parameters and outputs. They will be
@@ -67,17 +66,14 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
         self._short_help_string = ""
 
     def tr(self, string) -> str:
-        """
-        Returns a translatable string with the self.tr() function.
-        """
+        """Returns a translatable string with the self.tr() function."""
         return QCoreApplication.translate("Processing", string)
 
-    def createInstance(self):  # noqa N802
+    def createInstance(self):  # noqa: N802
         return DetectWatercourseAreasBorder()
 
     def name(self) -> str:
-        """
-        Returns the algorithm name, used for identifying the algorithm. This
+        """Returns the algorithm name, used for identifying the algorithm. This
         string should be fixed for the algorithm, and must not be localised.
         The name should be unique within each provider. Names should contain
         lowercase alphanumeric characters only and no spaces or other
@@ -85,16 +81,14 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
         """
         return self._name
 
-    def displayName(self) -> str:  # noqa N802
-        """
-        Returns the translated algorithm name, which should be used for any
+    def displayName(self) -> str:  # noqa: N802
+        """Returns the translated algorithm name, which should be used for any
         user-visible display of the algorithm name.
         """
         return self.tr(self._display_name)
 
-    def groupId(self) -> str:  # noqa N802
-        """
-        Returns the unique ID of the group this algorithm belongs to. This
+    def groupId(self) -> str:  # noqa: N802
+        """Returns the unique ID of the group this algorithm belongs to. This
         string should be fixed for the algorithm, and must not be localised.
         The group id should be unique within each provider. Group id should
         contain lowercase alphanumeric characters only and no spaces or other
@@ -103,15 +97,13 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
         return self._group_id
 
     def group(self) -> str:
-        """
-        Returns the name of the group this algorithm belongs to. This string
+        """Returns the name of the group this algorithm belongs to. This string
         should be localised.
         """
         return self.tr(self._group)
 
-    def shortHelpString(self) -> str:  # noqa N802
-        """
-        This algorithms tries to detect the watercourses forming the borders
+    def shortHelpString(self) -> str:  # noqa: N802
+        """This algorithms tries to detect the watercourses forming the borders
         of dense watercourse areas (ojaverkosto, ojitetut suot etc). These
         borders should mostly be kept in the futher generalization.
         This algorithm consists of some basic steps:
@@ -133,8 +125,8 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
         5. Compare output of step 4 with the input and if they overlap,
         tag the input feature field 'area_border' = True
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         INPUT: QgsVectorLayer
         CLUSTER_RATIO: integer
         OUTPUT: QgsVectorLayer
@@ -142,12 +134,10 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
         """
         return self.tr(self._short_help_string)
 
-    def initAlgorithm(self, configuration=None):  # noqa N802
-        """
-        Here we define the inputs and output of the algorithm, along
+    def initAlgorithm(self, configuration=None) -> None:  # noqa: N802
+        """Here we define the inputs and output of the algorithm, along
         with some other properties.
         """
-
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.INPUT,
@@ -172,23 +162,24 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
             )
         )
 
-    def processAlgorithm(  # noqa N802
+    def processAlgorithm(  # noqa: N802
         self,
         parameters: dict[str, Any],
         context: QgsProcessingContext,
         feedback: QgsProcessingFeedback,
     ) -> dict:
-        """
-        Here is where the processing itself takes place.
-        """
-
+        """Here is where the processing itself takes place."""
         # Initialize feedback if it is None
         if feedback is None:
             feedback = QgsProcessingFeedback()
 
-        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(parameters, self.INPUT, context)
+        input_layer: QgsVectorLayer = self.parameterAsVectorLayer(
+            parameters, self.INPUT, context
+        )
 
-        cluster_ratio: float = self.parameterAsDouble(parameters, self.CLUSTER_RATIO, context)
+        cluster_ratio: float = self.parameterAsDouble(
+            parameters, self.CLUSTER_RATIO, context
+        )
 
         # copy layer since we might have to delete some features and we don't
         # want to affect the actual data source
@@ -237,7 +228,7 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
             feedback,
         )
 
-        number_of_faces = network_faces.featureCount() if network_faces.featureCount() else 0
+        number_of_faces = network_faces.featureCount() or 0
 
         number_of_clusters = round(number_of_faces / cluster_ratio)
 
@@ -286,7 +277,9 @@ class DetectWatercourseAreasBorder(QgsProcessingAlgorithm):
             feedback,
         )
 
-        total = 100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        total = (
+            100.0 / copied_layer.featureCount() if copied_layer.featureCount() else 0
+        )
 
         buffered_geoms = []
         for feature in borders.getFeatures():
