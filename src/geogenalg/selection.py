@@ -8,7 +8,6 @@
 from collections import defaultdict
 
 import geopandas as gpd
-import pandas as pd
 from shapely.geometry import LineString, MultiLineString, Point
 
 from geogenalg.continuity import find_all_endpoints
@@ -64,45 +63,32 @@ def remove_disconnected_short_lines(
     return input_gdf[lines_to_keep]
 
 
-def remove_large_polygons_containing_point(
+def split_polygons_by_point_intersection(
     polygon_gdf: gpd.GeoDataFrame,
     point_gdf: gpd.GeoDataFrame,
-    area_threshold_without_point: float,
-    area_threshold_with_point: float,
 ) -> gpd.GeoDataFrame:
-    """Remove polygons based on area thresholds and whether they contain any points.
+    """Split polygons into two GeoDataFrames based on whether they contain any point.
 
     Args:
     ----
         polygon_gdf: A GeoDataFrame containing polygon geometries
         point_gdf: A GeoDataFrame containing point geometries
-        area_threshold_without_point: Maximum allowed area for polygons that do not
-            contain a point
-        area_threshold_with_point: Maximum allowed area for polygons that do contain
-            a point
 
     Returns:
     -------
-        A filtered GeoDataFrame containing only the polygons that meet the criteria.
+        A tuple of two GeoDataFrames:
+        - The first contains polygons that contain at least one point.
+        - The second contains polygons that do not contain any points.
 
     """
     polygons_intersecting_point = polygon_gdf.geometry.apply(
         lambda poly: point_gdf.geometry.intersects(poly).any()
     )
 
-    with_point = polygon_gdf[polygons_intersecting_point]
-    without_point = polygon_gdf[~polygons_intersecting_point]
+    polygons_with_point: gpd.GeoDataFrame = polygon_gdf[polygons_intersecting_point]
+    polygons_without_point: gpd.GeoDataFrame = polygon_gdf[~polygons_intersecting_point]
 
-    kept_with_point = with_point[with_point.geometry.area <= area_threshold_with_point]
-
-    kept_without_point = without_point[
-        without_point.geometry.area <= area_threshold_without_point
-    ]
-
-    # Combine both filtered subsets and return as a new GeoDataFrame
-    return gpd.GeoDataFrame(
-        pd.concat([kept_with_point, kept_without_point]), crs=polygon_gdf.crs
-    )
+    return polygons_with_point, polygons_without_point
 
 
 def remove_lines_on_polygon_edges(
