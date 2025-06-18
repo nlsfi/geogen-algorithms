@@ -61,56 +61,63 @@ def test_remove_short_lines(
     (
         "polygon_gdf",
         "point_gdf",
-        "area_threshold_without_point",
-        "area_threshold_with_point",
-        "expected_indices",
+        "expected_containing_point",
+        "expected_not_containing_point",
     ),
     [
         (
             gpd.GeoDataFrame(
-                {"id": [0, 1, 2, 3]},
+                {"id": [0, 1, 2]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(2, 0), (3, 0), (3, 1), (2, 1)]),
-                    Polygon([(4, 0), (10, 0), (10, 6), (4, 6)]),
-                    Polygon([(11, 0), (20, 0), (20, 9), (11, 9)]),
+                    Polygon([(4, 0), (5, 0), (5, 1), (4, 1)]),
                 ],
                 crs="EPSG:3067",
             ),
             gpd.GeoDataFrame(
-                {"point_id": [4, 5]},
+                {"point_id": [0, 1]},
+                geometry=[Point(2.5, 0.5), Point(4.5, 0.5)],
+                crs="EPSG:3067",
+            ),
+            {1, 2},
+            {0},
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [0, 1]},
                 geometry=[
-                    Point(2.5, 0.5),
-                    Point(6, 4),
+                    Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
+                    Polygon([(3, 0), (5, 0), (5, 2), (3, 2)]),
                 ],
                 crs="EPSG:3067",
             ),
-            10,
-            40,
-            {0, 1, 2},
-        )
+            gpd.GeoDataFrame(
+                {"point_id": []},
+                geometry=[],
+                crs="EPSG:3067",
+            ),
+            set(),
+            {0, 1},
+        ),
     ],
-    ids=["four_polygons_and_two_points"],
+    ids=[
+        "two_polygons_contain_points_one_not",
+        "no_polygons_contain_points",
+    ],
 )
-def test_remove_large_polygons_containing_point(
+def test_split_polygons_by_point_containment(
     polygon_gdf: gpd.GeoDataFrame,
     point_gdf: gpd.GeoDataFrame,
-    area_threshold_without_point: float,
-    area_threshold_with_point: float,
-    expected_indices: dict,
+    expected_containing_point: set[int],
+    expected_not_containing_point: set[int],
 ):
-    result = selection.remove_large_polygons_containing_point(
-        polygon_gdf, point_gdf, area_threshold_without_point, area_threshold_with_point
+    with_points, without_points = selection.split_polygons_by_point_intersection(
+        polygon_gdf, point_gdf
     )
 
-    assert set(result["id"]) == set(expected_indices)
-
-    for _, row in result.iterrows():
-        contains_point = point_gdf.geometry.intersects(row.geometry).any()
-        if contains_point:
-            assert row.geometry.area <= area_threshold_with_point
-        else:
-            assert row.geometry.area <= area_threshold_without_point
+    assert set(with_points["id"]) == expected_containing_point
+    assert set(without_points["id"]) == expected_not_containing_point
 
 
 @pytest.mark.parametrize(
@@ -131,8 +138,17 @@ def test_remove_large_polygons_containing_point(
             ),
             {1, 2},
         ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [0]},
+                geometry=[LineString([(0, 0), (1, 1)])],
+                crs="EPSG:3067",
+            ),
+            gpd.GeoDataFrame(geometry=[], crs="EPSG:3067"),
+            {0},
+        ),
     ],
-    ids=["one_edge_line"],
+    ids=["one_line_on_edge_two_not_on_edge", "empty_polygon_boundary_none"],
 )
 def test_remove_lines_on_polygon_edges(
     lines_gdf: gpd.GeoDataFrame, polygons_gdf: gpd.GeoDataFrame, expected_indices: dict
