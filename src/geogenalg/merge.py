@@ -37,10 +37,13 @@ def merge_connecting_lines_by_attribute(
             if geom is None:
                 continue
             if isinstance(geom, LineString):
-                lines.append((geom, row.drop("geometry").to_dict()))
+                lines.append((geom, row.drop(input_gdf.geometry.name).to_dict()))
             elif isinstance(geom, MultiLineString):
                 lines.extend(
-                    [(part, row.drop("geometry").to_dict()) for part in geom.geoms]
+                    [
+                        (part, row.drop(input_gdf.geometry.name).to_dict())
+                        for part in geom.geoms
+                    ]
                 )
 
         if not lines:
@@ -60,7 +63,7 @@ def merge_connecting_lines_by_attribute(
         properties = lines[0][1]
 
         merged_records.extend(
-            [{**properties, "geometry": line} for line in merged_lines]
+            [{**properties, input_gdf.geometry.name: line} for line in merged_lines]
         )
 
     result_gdf = gpd.GeoDataFrame(merged_records, crs=input_gdf.crs)

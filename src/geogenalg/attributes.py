@@ -13,6 +13,10 @@ def inherit_attributes(
 ) -> gpd.GeoDataFrame:
     """Copy attributes from the source_gdf to the geometries in target_gdf.
 
+    For each target geometry, the attributes of the first intersecting source geometry
+    are inherited. If no intersection is found, the attributes of the first source
+    geometry are used instead.
+
     Args:
     ----
         source_gdf: GeoDataFrame containing polygons with original attributes
@@ -20,8 +24,8 @@ def inherit_attributes(
 
     Returns:
     -------
-        A GeoDataFrame containing the target geometries with inherited attributes from
-              the source geometries.
+        A result GeoDataFrame geometries contains attributes from the source dataframe
+              but no attributes from the target dataframe.
 
     """
     new_features = []
@@ -30,15 +34,23 @@ def inherit_attributes(
     # the first intersecting source GeoDataFrame geometry.
     for _, target_row in target_gdf.iterrows():
         target_geom = target_row.geometry
+        new_attrs = None
 
         candidates = source_gdf[source_gdf.geometry.intersects(target_geom)]
 
         for _, source_row in candidates.iterrows():
             intersection = target_geom.intersection(source_row.geometry)
             if not intersection.is_empty:
-                new_attrs = source_row.drop("geometry").to_dict()
-                new_attrs["geometry"] = target_geom
-                new_features.append(new_attrs)
+                new_attrs = source_row.drop(source_gdf.geometry.name).to_dict()
                 break
 
-    return gpd.GeoDataFrame(new_features, crs=source_gdf.crs)
+        # If no intersection is found, the attributes of the first source row are used
+        if new_attrs is None:
+            new_attrs = source_gdf.iloc[0].drop(source_gdf.geometry.name).to_dict()
+
+        new_attrs[source_gdf.geometry.name] = target_geom
+        new_features.append(new_attrs)
+
+    return gpd.GeoDataFrame(
+        new_features, geometry=source_gdf.geometry.name, crs=source_gdf.crs
+    )
