@@ -23,6 +23,7 @@ def find_all_endpoints(
     -------
         A list of tuples in the format (endpoint, line_index, occurrence_count), where
             occurrence_count indicates how many lines share the same endpoint location
+            up to 5 decimals.
 
     """
     endpoint_map = defaultdict(list)
@@ -43,7 +44,7 @@ def find_all_endpoints(
             coords = list(part.coords)
             if len(coords) >= min_coordinates_for_line:
                 for endpoint in [Point(coords[0]), Point(coords[-1])]:
-                    # Round coordinates
+                    # Round coordinates to five decimal places
                     key = (round(endpoint.x, 5), round(endpoint.y, 5))
                     endpoint_map[key].append((endpoint, idx))
 
