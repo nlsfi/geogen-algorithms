@@ -7,6 +7,8 @@
 
 import geopandas as gpd
 import pytest
+from pandas.testing import assert_frame_equal
+from shapely import MultiLineString
 from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg import selection
@@ -121,7 +123,7 @@ def test_split_polygons_by_point_containment(
 
 
 @pytest.mark.parametrize(
-    ("lines_gdf", "polygons_gdf", "expected_indices"),
+    ("lines_gdf", "polygons_gdf", "expected_gdf"),
     [
         (
             gpd.GeoDataFrame(
@@ -134,9 +136,21 @@ def test_split_polygons_by_point_containment(
                 crs="EPSG:3067",
             ),
             gpd.GeoDataFrame(
-                geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])], crs="EPSG:3067"
+                geometry=[
+                    Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
+                    Polygon([(10, 10), (12, 10), (12, 12), (10, 12)]),
+                    Polygon([(0, 0), (-2, 0), (-2, -2), (0, -2)]),
+                ],
+                crs="EPSG:3067",
             ),
-            {1, 2},
+            gpd.GeoDataFrame(
+                {"id": [1, 2]},
+                geometry=[
+                    LineString([(0.5, 0.5), (1.5, 1.5)]),
+                    LineString([(3, 3), (4, 4)]),
+                ],
+                crs="EPSG:3067",
+            ),
         ),
         (
             gpd.GeoDataFrame(
@@ -145,14 +159,77 @@ def test_split_polygons_by_point_containment(
                 crs="EPSG:3067",
             ),
             gpd.GeoDataFrame(geometry=[], crs="EPSG:3067"),
-            {0},
+            gpd.GeoDataFrame(
+                {"id": [0]},
+                geometry=[LineString([(0, 0), (1, 1)])],
+                crs="EPSG:3067",
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [0]},
+                geometry=[LineString([(1, -1), (1, 3)])],
+                crs="EPSG:3067",
+            ),
+            gpd.GeoDataFrame(
+                geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
+                crs="EPSG:3067",
+            ),
+            gpd.GeoDataFrame(
+                {"id": [0]},
+                geometry=[
+                    MultiLineString(
+                        [
+                            [(1, -1), (1, 0)],
+                            [(1, 0), (1, 2)],
+                            [(1, 2), (1, 3)],
+                        ]
+                    )
+                ],
+                crs="EPSG:3067",
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [0, 1]},
+                geometry=[
+                    LineString([(0, 0), (1, 0), (1, 1)]),
+                    LineString([(0, 0), (0, 1), (-1, 1)]),
+                ],
+                crs="EPSG:3067",
+            ),
+            gpd.GeoDataFrame(
+                geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
+                crs="EPSG:3067",
+            ),
+            gpd.GeoDataFrame(
+                {"id": [0, 1]},
+                geometry=[
+                    LineString([(1, 0), (1, 1)]),
+                    LineString([(0, 1), (-1, 1)]),
+                ],
+                crs="EPSG:3067",
+            ),
         ),
     ],
-    ids=["one_line_on_edge_two_not_on_edge", "empty_polygon_boundary_none"],
+    ids=[
+        "one_line_on_edge_two_not_on_edge",
+        "empty_polygon_boundary_none",
+        "line_intersects_boundary_at_one_point",
+        "two_lines_partially_on_boundary",
+    ],
 )
-def test_remove_lines_on_polygon_edges(
-    lines_gdf: gpd.GeoDataFrame, polygons_gdf: gpd.GeoDataFrame, expected_indices: dict
+def test_remove_parts_of_lines_on_polygon_edges(
+    lines_gdf: gpd.GeoDataFrame,
+    polygons_gdf: gpd.GeoDataFrame,
+    expected_gdf: gpd.GeoDataFrame,
 ):
-    result = selection.remove_lines_on_polygon_edges(lines_gdf, polygons_gdf)
+    result_gdf = selection.remove_parts_of_lines_on_polygon_edges(
+        lines_gdf, polygons_gdf
+    )
 
-    assert set(result["id"]) == set(expected_indices)
+    assert_frame_equal(
+        result_gdf.sort_index().reset_index(drop=True),
+        expected_gdf.sort_index().reset_index(drop=True),
+        check_like=True,
+    )

@@ -6,9 +6,12 @@
 #  LICENSE file in the root directory of this source tree.
 
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 import geopandas as gpd
-from shapely.geometry import LineString, MultiLineString, Point
+
+if TYPE_CHECKING:
+    from shapely.geometry import Point
 
 from geogenalg.continuity import find_all_endpoints
 
@@ -66,7 +69,7 @@ def remove_disconnected_short_lines(
 def split_polygons_by_point_intersection(
     polygon_gdf: gpd.GeoDataFrame,
     point_gdf: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Split polygons into two GeoDataFrames based on whether they contain any point.
 
     Args:
@@ -91,10 +94,10 @@ def split_polygons_by_point_intersection(
     return polygons_with_point, polygons_without_point
 
 
-def remove_lines_on_polygon_edges(
+def remove_parts_of_lines_on_polygon_edges(
     lines_gdf: gpd.GeoDataFrame, polygons_gdf: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
-    """Remove lines that lie exactly on the edges of the given polygons.
+    """Remove line parts that lie exactly on the edges of the given polygons.
 
     Args:
     ----
@@ -103,7 +106,7 @@ def remove_lines_on_polygon_edges(
 
     Returns:
     -------
-        A Filtered GeoDataFrame with lines not lying on polygon boundaries.
+        A Filtered GeoDataFrame with line parts not lying on polygon boundaries.
 
     """
     boundary = polygons_gdf.union_all().boundary
@@ -111,15 +114,10 @@ def remove_lines_on_polygon_edges(
     if boundary is None:
         return lines_gdf.copy()
 
-    # Check if each line lies entirely on the boundary
-    def is_on_boundary(geom: LineString | MultiLineString) -> bool:
-        if geom is None:
-            return False
-        try:
-            return boundary.contains(geom) or boundary.equals(geom)
-        except (TypeError, ValueError):
-            return False
+    result_gdf = lines_gdf.copy()
+    result_gdf.geometry = lines_gdf.geometry.difference(boundary)
 
-    # Filter out lines that are on the polygon edge
-    lines_not_on_boundary = ~lines_gdf.geometry.apply(is_on_boundary)
-    return lines_gdf[lines_not_on_boundary].copy()
+    # Remove rows with missing geometry (None) or empty geometry (is_empty)
+    return result_gdf.dropna(subset=[result_gdf.geometry.name]).loc[
+        ~result_gdf.geometry.is_empty
+    ]
