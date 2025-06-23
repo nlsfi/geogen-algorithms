@@ -14,6 +14,7 @@ fid
 fids
 gdf
 geogenalg
+geoms
 geopandas
 gpd
 idx
