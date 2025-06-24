@@ -7,6 +7,7 @@
 
 from collections import defaultdict
 
+import geopandas as gpd
 from shapely.geometry import LineString, MultiLineString, Point
 
 
@@ -56,3 +57,51 @@ def find_all_endpoints(
             endpoints.append((point, idx, len(entries)))
 
     return endpoints
+
+
+def connect_nearby_endpoints(
+    input_gdf: gpd.GeoDataFrame, gap_threshold: float
+) -> gpd.GeoDataFrame:
+    """Generate helper lines to close small gaps between line endpoints.
+
+    Args:
+    ----
+        input_gdf: A GeoDataFrame containing the original line network
+        gap_threshold: Maximum distance between endpoints to be connected
+
+    Returns:
+    -------
+        A new GeoDataFrame containing only the generated helper lines
+
+    """
+    new_lines = []
+    used_ends = set()
+
+    lines = list(input_gdf.geometry)
+
+    endpoints = find_all_endpoints(lines)
+
+    for i, (point_1, _, count_1) in enumerate(endpoints):
+        if count_1 != 1 or (i in used_ends):
+            continue
+
+        closest_distance = float("inf")
+        best_point = None
+
+        # Search for the nearest other endpoint that is within the gap_threshold
+        for j, (point_2, _, _) in enumerate(endpoints):
+            if i == j:
+                continue
+
+            distance = point_1.distance(point_2)
+            if distance < gap_threshold and distance < closest_distance:
+                closest_distance = distance
+                best_point = point_2
+
+        if best_point:
+            new_line = LineString([point_1, best_point])
+            new_lines.append(new_line)
+            used_ends.update([i])
+
+    # Return a new GeoDataFrame containing only the helper lines
+    return gpd.GeoDataFrame(geometry=new_lines, crs=input_gdf.crs)
