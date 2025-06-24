@@ -39,3 +39,4 @@ pygeoops==0.4.0
 simplification==0.7.13
 shapelysmooth==0.2.1
 scikit-learn==1.6.1
+cartagen==1.0.2
