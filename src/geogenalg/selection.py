@@ -121,3 +121,20 @@ def remove_parts_of_lines_on_polygon_edges(
     return result_gdf.dropna(subset=[result_gdf.geometry.name]).loc[
         ~result_gdf.geometry.is_empty
     ]
+
+
+def remove_large_polygons(
+    input_gdf: gpd.GeoDataFrame, area_threshold: float
+) -> gpd.GeoDataFrame:
+    """Remove polygons from a GeoDataFrame whose area exceeds the given threshold.
+
+    Args:
+        input_gdf: Input GeoDataFrame with polygons
+        area_threshold: Maximum allowed area
+
+    Returns:
+        A new GeoDataFrame containing only polygons with area below or equal to the
+              threshold.
+
+    """
+    return input_gdf[input_gdf.geometry.area <= area_threshold]
