@@ -7,6 +7,7 @@
 
 from collections import defaultdict
 
+import geopandas as gpd
 import pytest
 from shapely.geometry import LineString, MultiLineString
 
@@ -48,3 +49,54 @@ def test_find_all_endpoints(lines: list, expected_results: list):
     for coord, count in expected_dict.items():
         assert coord in coord_count
         assert coord_count[coord] == count
+
+
+@pytest.mark.parametrize(
+    ("input_gdf", "gap_threshold", "expected_helper_lines"),
+    [
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)]), LineString([(1.1, 0), (2, 0)])],
+                crs="EPSG:3067",
+            ),
+            0.2,
+            [LineString([(1, 0), (1.1, 0)]), LineString([(1.1, 0), (1, 0)])],
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)]), LineString([(2, 0), (3, 0)])],
+                crs="EPSG:3067",
+            ),
+            0.5,
+            [],
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0.1), (0, 2)]),
+                    LineString([(-0.1, 0.1), (-3, 3)]),
+                ],
+                crs="EPSG:3067",
+            ),
+            0.2,
+            [
+                LineString([(1, 0), (1, 0.1)]),
+                LineString([(0, 0), (-0.1, 0.1)]),
+                LineString([(1, 0.1), (1, 0)]),
+                LineString([(-0.1, 0.1), (0, 0)]),
+            ],
+        ),
+    ],
+    ids=["within_threshold", "outside_threshold", "multiple_connections"],
+)
+def test_connect_nearby_endpoints_when_gap_within_threshold(
+    input_gdf: gpd.GeoDataFrame,
+    gap_threshold: float,
+    expected_helper_lines: list[LineString],
+):
+    result = continuity.connect_nearby_endpoints(input_gdf, gap_threshold)
+    assert isinstance(result, gpd.GeoDataFrame)
+    for geom in result.geometry:
+        assert geom.length <= gap_threshold
+        assert geom in expected_helper_lines
