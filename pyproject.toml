@@ -205,3 +205,33 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["test"]
+
+[tool.coverage.paths]
+source = ["src", "**/site-packages"]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["geogenalg"]
+# TODO: remove omit section when qgis dependencies removed/function refactored
+omit = [
+    "src/geogenalg/application/generalize_lakes.py",
+    "src/geogenalg/application/generalize_seas.py",
+    "src/geogenalg/buffer/exaggerate_thin_parts.py",
+    "src/geogenalg/buffer/generalize_islands.py",
+    "src/geogenalg/core/extract_interior_rings.py",
+    "src/geogenalg/application/remove_short_watercourses.py",
+    "src/geogenalg/application/remove_dense_watercourses.py",
+    "src/geogenalg/application/generalize_watercourses_50k.py",
+    "src/geogenalg/application/detect_with_uoma_overlap.py",
+    "src/geogenalg/application/detect_watercourse_areas_border.py",
+    "src/geogenalg/core/watercourse_structure_detection.py",
+    "src/geogenalg/application/railroads.py",
+    "src/geogenalg/application/generalize_roads_50k.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
