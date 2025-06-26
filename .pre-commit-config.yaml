@@ -17,19 +17,19 @@ repos:
         args: [--fix=lf]
       - id: check-added-large-files
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.1
+    rev: v0.12.0
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix, --extend-fixable=F401, --unsafe-fixes, --preview]
       - id: ruff-format
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v1.16.1
     hooks:
       - id: mypy
         additional_dependencies:
           - pandas-stubs==2.2.3.241126
   - repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
+    rev: 7.3.0
     hooks:
       - id: flake8
         additional_dependencies:

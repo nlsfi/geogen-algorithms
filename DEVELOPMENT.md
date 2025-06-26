@@ -3,18 +3,21 @@
 ## Development environment setup
 
 - Create a venv: `python -m venv .venv`
-- Install requirements: `pip install -r requirements.txt --no-deps --only-binary=:all:`
+- Activate the venv
+- This project uses [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage dependencies, install uv: `pip install uv`
+- Install the dependencies: `uv sync`
+- Install pre-commit: `pre-commit install`
 - Run tests: `pytest`
 
 ## Requirements changes
 
-TODO
+To update requirements, do `uv lock --upgrade-package <package>`.
+
+To add requirements, do `uv add <package>` or `uv add <package> --dev` for development requirements and `uv add <package> --group lint` for linting requirements.
 
 ## Code style
 
 Included `.code-workspace` has necessary options set (linting, formatting, tests, extensions) set for VS Code.
-
-Verify code style with `pre-commit run --all-files`, or use `pre-commit install` to generate an actual git hook.
 
 ## Commit message style
 
