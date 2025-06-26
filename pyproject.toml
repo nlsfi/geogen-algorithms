@@ -1,3 +1,94 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geogenalg"
+requires-python = ">=3.11"
+authors = [
+    { name = "National Land Survey of Finland", email = "os@nls.fi" },
+]
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+description = "A Python library to perform cartogaphic generalizations."
+keywords = [
+    "gis",
+    "cartography",
+    "generalization",
+]
+dynamic = [
+    "readme",
+    "version",
+]
+dependencies = [
+    "geopandas==1.0.1",
+    "matplotlib==3.9.2",
+    "networkx==3.4.2",
+    "pygeoops==0.4.0",
+    "scikit-learn==1.6.1",
+    "shapely==2.0.6",
+    "shapelysmooth==0.2.1",
+    "simplification==0.7.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/nlsfi/geogen-algorithms"
+Changelog = "https://github.com/nlsfi/geogen-algorithms/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.setuptools.package-data]
+geogenalg = [
+    "py.typed",
+]
+
+[tool.setuptools.dynamic.readme]
+file = [
+    "README.md",
+    "CHANGELOG.md",
+]
+content-type = "text/markdown"
+
+[tool.setuptools.dynamic]
+version = { attr = "geogenalg.__version__" }
+
+[tool.uv]
+default-groups = ["dev", "lint"]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-dotenv>=0.5.2",
+    "pytest-mock>=3.14.1",
+    "pytest-rerunfailures>=15.1",
+    "pytest-subtests>=0.14.2",
+    "pytest-timeout>=2.4.0",
+]
+lint = [
+    "flake8>=7.3.0",
+    "flake8-pyproject>=1.2.3",
+    "mypy>=1.16.1",
+    "pandas-stubs==2.2.3.241126",
+    "ruff>=0.12.0",
+]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 88
@@ -114,7 +205,3 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["test"]
-
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
