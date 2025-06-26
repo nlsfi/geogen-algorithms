@@ -167,13 +167,13 @@ def generalize_watercourse_areas(  # noqa: C901, PLR0913, PLR0915
         segment = perpendicular_segment(segment, segment.centroid, max_width)
         return snap_to_watercourse(segment)
 
-    def create_polygon_remover(line: LineString) -> Polygon:
-        segmentized = line.segmentize(1)
-        segments = explode_line(segmentized)
+    def create_polygon_remover(input_line: LineString) -> Polygon:
+        segmentized = input_line.segmentize(1)
+        line_segments = explode_line(segmentized)
 
         buffers = [
             watercourse_width_ruler(segment).buffer(segment.length * 2)
-            for segment in segments[2:-2]
+            for segment in line_segments[2:-2]
         ]
 
         return shapely.ops.unary_union(buffers)
