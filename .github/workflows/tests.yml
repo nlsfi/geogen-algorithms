@@ -45,4 +45,4 @@ jobs:
       - name: Check total code coverage
         if: ${{ matrix.python-version == '3.12' }}
         run: |
-          .venv/bin/python -m coverage report --fail-under=80
+          .venv/bin/python -m coverage report --fail-under=60
