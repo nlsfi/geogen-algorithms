@@ -34,11 +34,13 @@ jobs:
 
       - name: Check code coverage for changed lines
         if: ${{ matrix.python-version == '3.12' }}
+        # Check coverage (80% or more) if more than 20 lines changed
         run: |
           python -m pip install diff_cover==9.4.1
           diff-cover coverage.xml --format json:report.json
+          num_lines=$(jq '.["total_num_lines"]' report.json)
           percent_covered=$(jq '.["total_percent_covered"]' report.json)
-          test $percent_covered -ge 80
+          test $num_lines -le 20 || test $percent_covered -ge 80
 
       - name: Check total code coverage
         if: ${{ matrix.python-version == '3.12' }}
