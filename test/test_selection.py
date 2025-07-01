@@ -233,3 +233,53 @@ def test_remove_parts_of_lines_on_polygon_edges(
         expected_gdf.sort_index().reset_index(drop=True),
         check_like=True,
     )
+
+
+@pytest.mark.parametrize(
+    ("input_polygons", "threshold", "expected_polygons"),
+    [
+        (
+            [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+            2,
+            [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        ),
+        (
+            [
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
+            ],
+            0.1,
+            [],
+        ),
+        (
+            [
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),
+                Polygon([(0, 0), (0.5, 0), (0.5, 0.5), (0, 0.5)]),
+            ],
+            1,
+            [
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (0.5, 0), (0.5, 0.5), (0, 0.5)]),
+            ],
+        ),
+    ],
+    ids=[
+        "one_polygon_under_threshold",
+        "two_polygons_over_threshold",
+        "two_polygons_under_and_one_over_threshold",
+    ],
+)
+def test_remove_large_polygons_correct(
+    input_polygons: list[Polygon], threshold: float, expected_polygons: list[Polygon]
+):
+    input_gdf = gpd.GeoDataFrame(geometry=input_polygons)
+    expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
+
+    result_gdf = selection.remove_large_polygons(input_gdf, threshold)
+
+    assert_frame_equal(
+        result_gdf.sort_index().reset_index(drop=True),
+        expected_gdf.sort_index().reset_index(drop=True),
+        check_like=True,
+    )
