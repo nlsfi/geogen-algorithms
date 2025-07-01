@@ -208,6 +208,18 @@ wheels = [
 ]
 
 [[package]]
+name = "flake8-spellcheck"
+version = "0.28.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flake8" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/18/61/a5258e373ba98f2fa01f968881167cb9e92760d44b9c4fd2f8418445799b/flake8-spellcheck-0.28.0.tar.gz", hash = "sha256:6fb79724f27097af0b4c678c7eaf731f0d87cf4c1eae7fbd7836c1c78d67e12c", size = 334362, upload-time = "2022-03-27T18:55:47.45Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/06/17debcfce46c197e5158177aa2b076bc4fdf2f189d64272dc553b33018b5/flake8_spellcheck-0.28.0-py3-none-any.whl", hash = "sha256:a0a37164b9175819b143ce0f0a8d2475457af3f0d77cd8423b0daf204662ee72", size = 333527, upload-time = "2022-03-27T18:55:48.918Z" },
+]
+
+[[package]]
 name = "fonttools"
 version = "4.58.4"
 source = { registry = "https://pypi.org/simple" }
@@ -268,6 +280,7 @@ dev = [
 lint = [
     { name = "flake8" },
     { name = "flake8-pyproject" },
+    { name = "flake8-spellcheck" },
     { name = "mypy" },
     { name = "pandas-stubs" },
     { name = "ruff" },
@@ -299,6 +312,7 @@ dev = [
 lint = [
     { name = "flake8", specifier = ">=7.3.0" },
     { name = "flake8-pyproject", specifier = ">=1.2.3" },
+    { name = "flake8-spellcheck", specifier = ">=0.28.0" },
     { name = "mypy", specifier = ">=1.16.1" },
     { name = "pandas-stubs", specifier = "==2.2.3.241126" },
     { name = "ruff", specifier = ">=0.12.0" },

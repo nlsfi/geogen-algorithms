@@ -84,6 +84,7 @@ dev = [
 lint = [
     "flake8>=7.3.0",
     "flake8-pyproject>=1.2.3",
+    "flake8-spellcheck>=0.28.0",
     "mypy>=1.16.1",
     "pandas-stubs==2.2.3.241126",
     "ruff>=0.12.0",
