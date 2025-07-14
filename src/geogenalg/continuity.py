@@ -66,7 +66,8 @@ def connect_nearby_endpoints(
 
     Args:
     ----
-        input_gdf: A GeoDataFrame containing the original line network
+        input_gdf: A GeoDataFrame containing the original line network as LineStrings
+            or MultiLineStrings
         gap_threshold: Maximum distance between endpoints to be connected
 
     Returns:
@@ -75,7 +76,7 @@ def connect_nearby_endpoints(
 
     """
     new_lines = []
-    used_ends = set()
+    used_ends: set[int] = set()
 
     lines = list(input_gdf.geometry)
 
@@ -101,7 +102,7 @@ def connect_nearby_endpoints(
         if best_point:
             new_line = LineString([point_1, best_point])
             new_lines.append(new_line)
-            used_ends.update([i])
+            used_ends.add(i)
 
     # Return a new GeoDataFrame containing only the helper lines
     return gpd.GeoDataFrame(geometry=new_lines, crs=input_gdf.crs)
