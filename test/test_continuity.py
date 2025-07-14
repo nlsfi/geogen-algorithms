@@ -87,8 +87,27 @@ def test_find_all_endpoints(lines: list, expected_results: list):
                 LineString([(-0.1, 0.1), (0, 0)]),
             ],
         ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0, 0), (1, 0, 0)]),
+                    LineString([(1.1, 0, 0), (2, 0, 0)]),
+                ],
+                crs="EPSG:3903",
+            ),
+            0.2,
+            [
+                LineString([(1, 0, 0), (1.1, 0, 0)]),
+                LineString([(1.1, 0, 0), (1, 0, 0)]),
+            ],
+        ),
     ],
-    ids=["within_threshold", "outside_threshold", "multiple_connections"],
+    ids=[
+        "within_threshold",
+        "outside_threshold",
+        "multiple_connections",
+        "coordinates_with_height",
+    ],
 )
 def test_connect_nearby_endpoints_when_gap_within_threshold(
     input_gdf: gpd.GeoDataFrame,
@@ -97,6 +116,7 @@ def test_connect_nearby_endpoints_when_gap_within_threshold(
 ):
     result = continuity.connect_nearby_endpoints(input_gdf, gap_threshold)
     assert isinstance(result, gpd.GeoDataFrame)
+    assert len(result) == len(expected_helper_lines)
     for geom in result.geometry:
         assert geom.length <= gap_threshold
         assert geom in expected_helper_lines

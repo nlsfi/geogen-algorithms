@@ -263,11 +263,20 @@ def test_remove_parts_of_lines_on_polygon_edges(
                 Polygon([(0, 0), (0.5, 0), (0.5, 0.5), (0, 0.5)]),
             ],
         ),
+        (
+            [
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),
+            ],
+            0.5,
+            [],
+        ),
     ],
     ids=[
         "one_polygon_under_threshold",
         "two_polygons_over_threshold",
         "two_polygons_under_and_one_over_threshold",
+        "no_polygons_under_threshold",
     ],
 )
 def test_remove_large_polygons_correct(
