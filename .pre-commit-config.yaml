@@ -16,6 +16,7 @@ repos:
         name: LF for all files
         args: [--fix=lf]
       - id: check-added-large-files
+        exclude: \.gpkg$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.0
     hooks:
