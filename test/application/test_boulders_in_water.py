@@ -15,13 +15,13 @@ from geogenalg.application.boulders_in_water import generalize_boulders_in_water
 
 
 def test_boulders_in_water_10k(
-    boulders_in_water_10k_sourcedata_path: Path,
+    testdata_path: Path,
 ) -> None:
     """
     Test generalizing boulders in water to the 1: 10 000 scale, where
     the polygonal layer should not be generalized at all.
     """
-    source_path = boulders_in_water_10k_sourcedata_path
+    source_path = testdata_path / "boulders_in_water_10k.gpkg"
 
     temp_dir = tempfile.TemporaryDirectory()
     output_path = temp_dir.name + "/boulder_in_water.gpkg"
@@ -54,13 +54,13 @@ def test_boulders_in_water_10k(
 
 
 def test_boulders_in_water_no_land(
-    boulders_in_water_no_land_sourcedata_path: Path,
+    testdata_path: Path,
 ) -> None:
     """
     Test that no newly generated boulder clusters in water end up on
     land.
     """
-    source_path = boulders_in_water_no_land_sourcedata_path
+    source_path = testdata_path / "boulders_in_water_no_land.gpkg"
 
     temp_dir = tempfile.TemporaryDirectory()
     output_path = temp_dir.name + "/boulder_in_water.gpkg"

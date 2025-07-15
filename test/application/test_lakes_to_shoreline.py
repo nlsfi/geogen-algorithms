@@ -17,21 +17,22 @@ from geogenalg.application.lakes_to_shoreline import (
 
 
 def test_extract_shoreline_from_generalized_lakes(
-    lakes_to_shoreline_sourcedata_path: Path,
+    testdata_path: Path,
 ) -> None:
     temp_dir = tempfile.TemporaryDirectory()
     output_path = temp_dir.name + "/shoreline.gpkg"
+    test_file = testdata_path / "lakes_to_shoreline.gpkg"
 
     original_shoreline = gpd.read_file(
-        lakes_to_shoreline_sourcedata_path,
+        test_file,
         layer="original_shoreline",
     )
     generalized_lakes = gpd.read_file(
-        lakes_to_shoreline_sourcedata_path,
+        test_file,
         layer="generalized_lakes",
     )
     control: gpd.GeoDataFrame = gpd.read_file(
-        lakes_to_shoreline_sourcedata_path,
+        test_file,
         layer="control",
     )
 
