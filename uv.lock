@@ -16,6 +16,22 @@ wheels = [
 ]
 
 [[package]]
+name = "cartagen"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "geopandas" },
+    { name = "matplotlib" },
+    { name = "networkx" },
+    { name = "numpy" },
+    { name = "shapely" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/95/ea/af44ea5ef2c9ced9d6aa4cdfc621966b3e42e858168005498fa0f3627e4d/cartagen-1.0.2.tar.gz", hash = "sha256:7277868cf8b5f3dc21611698d33880018071c6c9c00be2ea86306d12dd5b61ff", size = 166466, upload-time = "2024-12-04T13:46:34.386Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/9e/bdf686806b979ee8be01c76b30cc24fe5a53873ba37ea2c5a89ae5bf8372/cartagen-1.0.2-py3-none-any.whl", hash = "sha256:1920be111aa6f9ae6966458ccec95c25a7c84182928d59ca9af356a563236efa", size = 182159, upload-time = "2024-12-04T13:46:32.736Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2025.6.15"
 source = { registry = "https://pypi.org/simple" }
@@ -256,6 +272,7 @@ wheels = [
 name = "geogenalg"
 source = { editable = "." }
 dependencies = [
+    { name = "cartagen" },
     { name = "geopandas" },
     { name = "matplotlib" },
     { name = "networkx" },
@@ -288,6 +305,7 @@ lint = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cartagen", specifier = ">=1.0.2" },
     { name = "geopandas", specifier = "==1.0.1" },
     { name = "matplotlib", specifier = "==3.9.2" },
     { name = "networkx", specifier = "==3.4.2" },
