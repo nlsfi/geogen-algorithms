@@ -292,3 +292,144 @@ def test_remove_large_polygons_correct(
         expected_gdf.sort_index().reset_index(drop=True),
         check_like=True,
     )
+
+
+@pytest.mark.parametrize(
+    ("input_polygons", "threshold", "expected_polygons"),
+    [
+        (
+            [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+            0.5,
+            [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        ),
+        (
+            [
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
+            ],
+            5,
+            [],
+        ),
+        (
+            [
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),
+                Polygon([(0, 0), (0.5, 0), (0.5, 0.5), (0, 0.5)]),
+            ],
+            2,
+            [
+                Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),
+            ],
+        ),
+        (
+            [
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),
+            ],
+            10,
+            [],
+        ),
+    ],
+    ids=[
+        "one_polygon_over_threshold",
+        "two_polygons_under_threshold",
+        "two_polygons_under_and_one_over_threshold",
+        "no_polygons_over_threshold",
+    ],
+)
+def test_remove_small_polygons_correct(
+    input_polygons: list[Polygon], threshold: float, expected_polygons: list[Polygon]
+):
+    input_gdf = gpd.GeoDataFrame(geometry=input_polygons)
+    expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
+
+    result_gdf = selection.remove_small_polygons(input_gdf, threshold)
+
+    assert_frame_equal(
+        result_gdf.sort_index().reset_index(drop=True),
+        expected_gdf.sort_index().reset_index(drop=True),
+        check_like=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_polygons", "hole_threshold", "expected_polygons"),
+    [
+        (
+            [
+                Polygon(
+                    shell=[(0, 0), (4, 0), (4, 4), (0, 4)],
+                    holes=[[(1, 1), (3, 1), (3, 3), (1, 3)]],
+                )
+            ],
+            1,
+            [
+                Polygon(
+                    shell=[(0, 0), (4, 0), (4, 4), (0, 4)],
+                    holes=[[(1, 1), (3, 1), (3, 3), (1, 3)]],
+                )
+            ],
+        ),
+        (
+            [
+                Polygon(
+                    shell=[(0, 0), (4, 0), (4, 4), (0, 4)],
+                    holes=[[(1, 1), (1.2, 1), (1.2, 1.2), (1, 1.2)]],
+                )
+            ],
+            0.1,
+            [
+                Polygon(
+                    shell=[(0, 0), (4, 0), (4, 4), (0, 4)],
+                    holes=[],
+                )
+            ],
+        ),
+        (
+            [
+                Polygon(
+                    shell=[(0, 0), (5, 0), (5, 5), (0, 5)],
+                    holes=[
+                        [(1, 1), (1.2, 1), (1.2, 1.2), (1, 1.2)],
+                        [(2, 2), (4, 2), (4, 4), (2, 4)],
+                    ],
+                )
+            ],
+            0.5,
+            [
+                Polygon(
+                    shell=[(0, 0), (5, 0), (5, 5), (0, 5)],
+                    holes=[
+                        [(2, 2), (4, 2), (4, 4), (2, 4)],
+                    ],
+                )
+            ],
+        ),
+        (
+            [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+            0.1,
+            [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        ),
+    ],
+    ids=[
+        "one_large_hole_retained",
+        "one_small_hole_removed",
+        "mixed_holes_filtering",
+        "no_holes",
+    ],
+)
+def test_remove_small_holes_correct(
+    input_polygons: list[Polygon],
+    hole_threshold: float,
+    expected_polygons: list[Polygon],
+):
+    input_gdf = gpd.GeoDataFrame(geometry=input_polygons)
+    expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
+
+    result_gdf = selection.remove_small_holes(input_gdf, hole_threshold)
+
+    assert_frame_equal(
+        result_gdf.sort_index().reset_index(drop=True),
+        expected_gdf.sort_index().reset_index(drop=True),
+        check_like=True,
+    )

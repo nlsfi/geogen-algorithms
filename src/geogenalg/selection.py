@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import geopandas as gpd
+from shapely.geometry import Polygon
 
 if TYPE_CHECKING:
     from shapely.geometry import Point
@@ -129,12 +130,77 @@ def remove_large_polygons(
     """Remove polygons from a GeoDataFrame whose area exceeds the given threshold.
 
     Args:
+    ----
         input_gdf: Input GeoDataFrame with polygons
         area_threshold: Maximum allowed area
 
     Returns:
+    -------
         A new GeoDataFrame containing only polygons with area below or equal to the
               threshold.
 
     """
     return input_gdf[input_gdf.geometry.area <= area_threshold]
+
+
+def remove_small_polygons(
+    input_gdf: gpd.GeoDataFrame, area_threshold: float
+) -> gpd.GeoDataFrame:
+    """Remove polygons that are smaller than the area_threshold.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame with polygons
+        area_threshold: Minimum allowed area
+
+    Returns:
+    -------
+        A new GeoDataFrame containing only polygons with area greater or equal to the
+              threshold.
+
+    """
+    return input_gdf[input_gdf.geometry.area >= area_threshold]
+
+
+def remove_small_holes(
+    input_gdf: gpd.GeoDataFrame, hole_threshold: float
+) -> gpd.GeoDataFrame:
+    """Remove too small polygon holes.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame with polygons
+        hole_threshold: Minimum area for a hole
+
+    Returns:
+    -------
+        A GeoDataFrame containing original polygons without too small holes.
+
+    """
+
+    def filter_holes(polygon: Polygon) -> Polygon:
+        """Filter out holes in a polygon that are smaller than the hole_threshold.
+
+        Args:
+        ----
+            polygon: A shapely Polygon geometry potentially containing interior rings
+
+        Returns:
+        -------
+            A new polygon with only the retained holes.
+
+        """
+        if polygon.interiors:
+            new_exteriors = [
+                hole
+                for hole in polygon.interiors
+                if Polygon(hole).area >= hole_threshold
+            ]
+            # Reconstruct the polygon with the original exterior and the filtered holes
+            return Polygon(polygon.exterior, new_exteriors)
+
+        return polygon
+
+    input_gdf.geometry = input_gdf.geometry.apply(filter_holes)
+
+    return input_gdf
