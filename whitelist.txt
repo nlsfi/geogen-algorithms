@@ -2,6 +2,7 @@
 bbox
 cartagen
 centroid
+chaikin
 changelog
 concat
 coords
@@ -19,6 +20,7 @@ geoms
 geopandas
 gpd
 idx
+landcover
 linemerge
 loc
 polygonize
