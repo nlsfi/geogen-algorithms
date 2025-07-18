@@ -9,7 +9,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import geopandas as gpd
-from shapely.geometry import Polygon
+from shapely.geometry import MultiPolygon, Polygon
 
 if TYPE_CHECKING:
     from shapely.geometry import Point
@@ -159,7 +159,14 @@ def remove_small_polygons(
               threshold.
 
     """
-    return input_gdf[input_gdf.geometry.area >= area_threshold]
+    return input_gdf[
+        ~(
+            input_gdf.geometry.apply(
+                lambda geom: isinstance(geom, (Polygon, MultiPolygon))
+            )
+        )
+        | (input_gdf.geometry.area >= area_threshold)
+    ]
 
 
 def remove_small_holes(
@@ -178,28 +185,34 @@ def remove_small_holes(
 
     """
 
-    def filter_holes(polygon: Polygon) -> Polygon:
+    def filter_holes(geometry: Polygon | MultiPolygon) -> Polygon | MultiPolygon:
         """Filter out holes in a polygon that are smaller than the hole_threshold.
 
         Args:
         ----
-            polygon: A shapely Polygon geometry potentially containing interior rings
+            geometry: A shapely Polygon or MultiPolygon geometry potentially containing
+                  interior rings
 
         Returns:
         -------
-            A new polygon with only the retained holes.
+            A new Polygon or MultiPolygon with only the retained holes.
 
         """
-        if polygon.interiors:
-            new_exteriors = [
-                hole
-                for hole in polygon.interiors
-                if Polygon(hole).area >= hole_threshold
-            ]
-            # Reconstruct the polygon with the original exterior and the filtered holes
-            return Polygon(polygon.exterior, new_exteriors)
+        if isinstance(geometry, Polygon):
+            if geometry.interiors:
+                new_interiors = [
+                    hole
+                    for hole in geometry.interiors
+                    if Polygon(hole).area >= hole_threshold
+                ]
+                return Polygon(geometry.exterior, new_interiors)
+            return geometry
 
-        return polygon
+        if isinstance(geometry, MultiPolygon):
+            filtered_polygons = [filter_holes(polygon) for polygon in geometry.geoms]
+            return MultiPolygon(filtered_polygons)
+
+        return geometry
 
     input_gdf.geometry = input_gdf.geometry.apply(filter_holes)
 
