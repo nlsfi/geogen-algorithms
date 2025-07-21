@@ -1,0 +1,75 @@
+#  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
+#
+#  This file is part of geogen-algorithms.
+#
+#  This source code is licensed under the MIT license found in the
+#  LICENSE file in the root directory of this source tree.
+
+import geopandas as gpd
+import pytest
+from shapely import equals_exact
+from shapely.geometry import Point
+
+from geogenalg import cluster
+
+
+@pytest.mark.parametrize(
+    ("input_gdf", "threshold", "expected_gdf"),
+    [
+        (
+            gpd.GeoDataFrame(geometry=[Point(0, 0)]),
+            1.0,
+            gpd.GeoDataFrame(geometry=[Point(0, 0)]),
+        ),
+        (
+            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0.5, 0)]),
+            1.0,
+            gpd.GeoDataFrame(geometry=[Point(0.25, 0)]),
+        ),
+        (
+            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(5, 5)]),
+            1.0,
+            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(5, 5)]),
+        ),
+        (
+            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0.5, 0), Point(5, 5)]),
+            1.0,
+            gpd.GeoDataFrame(geometry=[Point(0.25, 0), Point(5, 5)]),
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[Point(0, 0), Point(1, 0), Point(0, 1), Point(1, 1)]
+            ),
+            2.0,
+            gpd.GeoDataFrame(geometry=[Point(0.5, 0.5)]),
+        ),
+        (
+            gpd.GeoDataFrame(geometry=[Point(1, 1), Point(1, 1), Point(1, 1)]),
+            0.5,
+            gpd.GeoDataFrame(geometry=[Point(1, 1)]),
+        ),
+        (
+            gpd.GeoDataFrame(geometry=[]),
+            1.0,
+            gpd.GeoDataFrame(geometry=[]),
+        ),
+    ],
+    ids=[
+        "single_point",
+        "two_close_points_clustered",
+        "two_far_points_separate",
+        "two_clustered_one_separate",
+        "all_clustered_together",
+        "three_points_same_location",
+        "empty_data_frame",
+    ],
+)
+def test_reduce_nearby_points_correctly(
+    input_gdf: gpd.GeoDataFrame, threshold: float, expected_gdf: gpd.GeoDataFrame
+):
+    result_gdf = cluster.reduce_nearby_points(input_gdf, threshold)
+    equals_exact(
+        result_gdf.sort_index().reset_index(drop=True),
+        expected_gdf.sort_index().reset_index(drop=True),
+        tolerance=1e-5,
+    )
