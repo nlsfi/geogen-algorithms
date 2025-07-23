@@ -6,6 +6,9 @@
 #  LICENSE file in the root directory of this source tree.
 
 import geopandas as gpd
+from shapely.geometry import Point
+
+from geogenalg.core.exceptions import GeometryTypeError
 
 
 def reduce_nearby_points(
@@ -22,7 +25,15 @@ def reduce_nearby_points(
     -------
         A GeoDataFrame containing centroids of clusters.
 
+    Raises:
+    ------
+        GeometryTypeError: If the input GeoDataFrame contains other than point features
+
     """
+    if not input_gdf.geometry.apply(lambda geom: isinstance(geom, Point)).all():
+        msg = "reduce_nearby_points only supports Point geometries."
+        raise GeometryTypeError(msg)
+
     result_gdf = input_gdf.copy()
 
     result_gdf.geometry = result_gdf.buffer(reduce_threshold)
