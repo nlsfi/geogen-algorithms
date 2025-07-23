@@ -5,12 +5,15 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+import re
+
 import geopandas as gpd
 import pytest
 from shapely import equals_exact
-from shapely.geometry import Point
+from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg import cluster
+from geogenalg.core.exceptions import GeometryTypeError
 
 
 @pytest.mark.parametrize(
@@ -73,3 +76,20 @@ def test_reduce_nearby_points_correctly(
         expected_gdf.sort_index().reset_index(drop=True),
         tolerance=1e-5,
     )
+
+
+def test_reduce_nearby_points_raises_on_non_point_geometry():
+    invalid_input_gdf = gpd.GeoDataFrame(
+        geometry=[
+            Point(0, 0),
+            LineString([(0, 0), (1, 1)]),
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+        ]
+    )
+    threshold = 1.0
+
+    with pytest.raises(
+        GeometryTypeError,
+        match=re.escape("reduce_nearby_points only supports Point geometries."),
+    ):
+        cluster.reduce_nearby_points(invalid_input_gdf, threshold)
