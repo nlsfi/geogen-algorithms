@@ -19,6 +19,7 @@ geogenalg
 geoms
 geopandas
 gpd
+hypot
 idx
 landcover
 linemerge
@@ -30,6 +31,7 @@ segmentize
 segmentized
 shapelysmooth
 simplifier
+starmap
 tolist
 unary
 utils
