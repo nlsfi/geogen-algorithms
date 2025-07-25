@@ -9,6 +9,7 @@ import re
 
 import geopandas as gpd
 import pytest
+from pandas.testing import assert_frame_equal
 from shapely import equals_exact
 from shapely.geometry import LineString, Point, Polygon
 
@@ -17,44 +18,107 @@ from geogenalg.core.exceptions import GeometryTypeError
 
 
 @pytest.mark.parametrize(
-    ("input_gdf", "threshold", "expected_gdf"),
+    ("input_gdf", "threshold", "unique_id_column", "expected_gdf"),
     [
         (
-            gpd.GeoDataFrame(geometry=[Point(0, 0)]),
+            gpd.GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)]),
             1.0,
-            gpd.GeoDataFrame(geometry=[Point(0, 0)]),
+            "id",
+            gpd.GeoDataFrame(
+                {"id": [1], "cluster_members": [None]}, geometry=[Point(0, 0)]
+            ),
         ),
         (
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0.5, 0)]),
+            gpd.GeoDataFrame({"id": [2, 1]}, geometry=[Point(0, 0), Point(0.5, 0)]),
             1.0,
-            gpd.GeoDataFrame(geometry=[Point(0.25, 0)]),
+            "id",
+            gpd.GeoDataFrame(
+                {"id": [1], "cluster_members": [[2, 1]]}, geometry=[Point(0.25, 0)]
+            ),
         ),
         (
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(5, 5)]),
+            gpd.GeoDataFrame({"id": [1, 2]}, geometry=[Point(0, 0), Point(5, 5)]),
             1.0,
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(5, 5)]),
-        ),
-        (
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0.5, 0), Point(5, 5)]),
-            1.0,
-            gpd.GeoDataFrame(geometry=[Point(0.25, 0), Point(5, 5)]),
+            "id",
+            gpd.GeoDataFrame(
+                {"id": [1, 2], "cluster_members": [None, None]},
+                geometry=[Point(0, 0), Point(5, 5)],
+            ),
         ),
         (
             gpd.GeoDataFrame(
-                geometry=[Point(0, 0), Point(1, 0), Point(0, 1), Point(1, 1)]
+                {"id": [5, 4, 6]}, geometry=[Point(0, 0), Point(0.5, 0), Point(5, 5)]
+            ),
+            1.0,
+            "id",
+            gpd.GeoDataFrame(
+                {"id": [4, 6], "cluster_members": [[5, 4], None]},
+                geometry=[Point(0.25, 0), Point(5, 5)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [10, 9, 8, 7]},
+                geometry=[Point(0, 0), Point(1, 0), Point(0, 1), Point(1, 1)],
             ),
             2.0,
-            gpd.GeoDataFrame(geometry=[Point(0.5, 0.5)]),
+            "id",
+            gpd.GeoDataFrame(
+                {"id": [7], "cluster_members": [[10, 9, 8, 7]]},
+                geometry=[Point(0.5, 0.5)],
+            ),
         ),
         (
-            gpd.GeoDataFrame(geometry=[Point(1, 1), Point(1, 1), Point(1, 1)]),
+            gpd.GeoDataFrame(
+                {"id": [3, 2, 1]}, geometry=[Point(1, 1), Point(1, 1), Point(1, 1)]
+            ),
             0.5,
-            gpd.GeoDataFrame(geometry=[Point(1, 1)]),
+            "id",
+            gpd.GeoDataFrame(
+                {"id": [1], "cluster_members": [[3, 2, 1]]},
+                geometry=[Point(1, 1)],
+            ),
         ),
         (
-            gpd.GeoDataFrame(geometry=[]),
+            gpd.GeoDataFrame({"id": [1], "name": ["A"]}, geometry=[Point(0, 0)]),
             1.0,
-            gpd.GeoDataFrame(geometry=[]),
+            "id",
+            gpd.GeoDataFrame(
+                {"id": [1], "name": ["A"], "cluster_members": [None]},
+                geometry=[Point(0, 0)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [2, 1], "name": ["B", "A"]},
+                geometry=[Point(0, 0), Point(0.5, 0)],
+            ),
+            1.0,
+            "id",
+            gpd.GeoDataFrame(
+                {
+                    "id": [1],
+                    "name": ["A"],
+                    "cluster_members": [[2, 1]],
+                },
+                geometry=[Point(0.25, 0)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [5, 4, 6], "category": ["Z", "X", "Y"]},
+                geometry=[Point(0, 0), Point(0.5, 0), Point(5, 5)],
+            ),
+            1.0,
+            "id",
+            gpd.GeoDataFrame(
+                {
+                    "id": [4, 6],
+                    "category": ["X", "Y"],
+                    "cluster_members": [[5, 4], None],
+                },
+                geometry=[Point(0.25, 0), Point(5, 5)],
+            ),
         ),
     ],
     ids=[
@@ -64,18 +128,34 @@ from geogenalg.core.exceptions import GeometryTypeError
         "two_clustered_one_separate",
         "all_clustered_together",
         "three_points_same_location",
-        "empty_data_frame",
+        "single_point_with_attributes",
+        "two_points_with_attributes",
+        "three_points_with_attributes",
     ],
 )
 def test_reduce_nearby_points_correctly(
-    input_gdf: gpd.GeoDataFrame, threshold: float, expected_gdf: gpd.GeoDataFrame
+    input_gdf: gpd.GeoDataFrame,
+    threshold: float,
+    unique_id_column: str,
+    expected_gdf: gpd.GeoDataFrame,
 ):
-    result_gdf = cluster.reduce_nearby_points(input_gdf, threshold)
+    result_gdf = cluster.reduce_nearby_points(input_gdf, threshold, unique_id_column)
+
+    # Check geometries
     equals_exact(
-        result_gdf.sort_index().reset_index(drop=True),
-        expected_gdf.sort_index().reset_index(drop=True),
-        tolerance=1e-5,
+        result_gdf.geometry.sort_index().reset_index(drop=True),
+        expected_gdf.geometry.sort_index().reset_index(drop=True),
+        tolerance=1e-4,
     )
+
+    # Check attributes
+    result_attrs = (
+        result_gdf.drop(columns="geometry").sort_values("id").reset_index(drop=True)
+    )
+    expected_attrs = (
+        expected_gdf.drop(columns="geometry").sort_values("id").reset_index(drop=True)
+    )
+    assert_frame_equal(result_attrs, expected_attrs)
 
 
 def test_reduce_nearby_points_raises_on_non_point_geometry():
@@ -87,9 +167,10 @@ def test_reduce_nearby_points_raises_on_non_point_geometry():
         ]
     )
     threshold = 1.0
+    unique_id_column = "id"
 
     with pytest.raises(
         GeometryTypeError,
         match=re.escape("reduce_nearby_points only supports Point geometries."),
     ):
-        cluster.reduce_nearby_points(invalid_input_gdf, threshold)
+        cluster.reduce_nearby_points(invalid_input_gdf, threshold, unique_id_column)
