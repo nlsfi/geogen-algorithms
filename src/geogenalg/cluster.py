@@ -15,6 +15,7 @@ def reduce_nearby_points(
     input_gdf: gpd.GeoDataFrame,
     reduce_threshold: float,
     unique_key_column: str,
+    cluster_members_column: str = "cluster_members",
 ) -> gpd.GeoDataFrame:
     """Reduce the number of points by clustering and replacing them with their centroid.
 
@@ -24,6 +25,8 @@ def reduce_nearby_points(
               include a column with a unique key.
         reduce_threshold: Distance used for buffering and clustering
         unique_key_column: Name of the column containing unique identifiers
+        cluster_members_column: Name of the column that lists the points included in
+              each cluster.
 
     Returns:
     -------
@@ -62,13 +65,23 @@ def reduce_nearby_points(
 
         # If several points are clustered, their keys are saved as cluster members
         if len(in_cluster_gdf) > 1:
-            representative_point_gdf["cluster_members"] = [
-                in_cluster_gdf[unique_key_column].tolist()
-            ]
+            new_cluster_members = in_cluster_gdf[unique_key_column].tolist()
+            if (
+                cluster_members_column in representative_point_gdf.columns
+                and representative_point_gdf[cluster_members_column] is not None
+            ):
+                existing_members = representative_point_gdf[cluster_members_column]
+                representative_point_gdf[cluster_members_column] = (
+                    existing_members + new_cluster_members
+                )
 
-        # For single points, the cluster members field is set to None
-        else:
-            representative_point_gdf["cluster_members"] = None
+            else:
+                representative_point_gdf[cluster_members_column] = [new_cluster_members]
+
+        # For single points, the cluster members field is set to None if the field
+        # does not contain any cluster members
+        elif cluster_members_column not in representative_point_gdf.columns:
+            representative_point_gdf[cluster_members_column] = None
 
         clustered_points_gdfs.append(representative_point_gdf)
 
