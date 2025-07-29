@@ -122,15 +122,15 @@ from geogenalg.core.exceptions import GeometryTypeError
         ),
     ],
     ids=[
-        "single_point",
-        "two_close_points_clustered",
-        "two_far_points_separate",
-        "two_clustered_one_separate",
-        "all_clustered_together",
-        "three_points_same_location",
-        "single_point_with_attributes",
-        "two_points_with_attributes",
-        "three_points_with_attributes",
+        "single point should remain unmodified",
+        "two close should be clustered",
+        "two far apart should remain separate",
+        "two close and one far should cluster only the close pair",
+        "four should be clustered together",
+        "three points at same location should cluster",
+        "single point with attributes",
+        "two points with attributes",
+        "three points with attributes",
     ],
 )
 def test_reduce_nearby_points_correctly(
@@ -142,11 +142,14 @@ def test_reduce_nearby_points_correctly(
     result_gdf = cluster.reduce_nearby_points(input_gdf, threshold, unique_id_column)
 
     # Check geometries
-    equals_exact(
-        result_gdf.geometry.sort_index().reset_index(drop=True),
-        expected_gdf.geometry.sort_index().reset_index(drop=True),
-        tolerance=1e-4,
-    )
+    for _, (result_geometry, expected_geometry) in enumerate(
+        zip(
+            result_gdf.geometry.sort_index().reset_index(drop=True),
+            expected_gdf.geometry.sort_index().reset_index(drop=True),
+            strict=False,
+        )
+    ):
+        assert equals_exact(result_geometry, expected_geometry, tolerance=1e-5)
 
     # Check attributes
     result_attrs = (
