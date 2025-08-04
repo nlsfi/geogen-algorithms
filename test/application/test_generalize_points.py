@@ -5,10 +5,7 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-from pathlib import Path
-
 import geopandas as gpd
-import geopandas.testing
 from pandas.testing import assert_frame_equal
 from shapely import Point, equals_exact
 
@@ -18,9 +15,7 @@ from geogenalg.application.generalize_points import (
 )
 
 
-def test_generalize_points(
-    testdata_path: Path,
-) -> None:
+def test_generalize_points() -> None:
     """
     Test generalize points algorithm
     """
@@ -28,7 +23,7 @@ def test_generalize_points(
     options = AlgorithmOptions(
         reduce_threshold=0.5,
         displace_threshold=3,
-        iterations=10,
+        displace_points_iterations=10,
         unique_key_column="id",
         cluster_members_column="cluster_members",
     )
@@ -39,10 +34,10 @@ def test_generalize_points(
             "category": ["A", "A", "C", "A", "A", "B", "B", "B", "A", "A"],
         },
         geometry=[
-            Point(0, 0),
+            Point(0, 0, 1),
             Point(0.5, 0.5),
-            Point(1, 3),
-            Point(0, 4),
+            Point(1, 3, 1),
+            Point(0, 4, 5),
             Point(2, 6),
             Point(5, 4),
             Point(4, 7.1),
@@ -70,14 +65,14 @@ def test_generalize_points(
             ],
         },
         geometry=[
-            Point(0.15222, 0.04288),
-            Point(1.67094, 2.62775),
-            Point(-0.93985, 4.3516),
-            Point(5, 4),
-            Point(1.77584, 5.62341),
-            Point(3.27958, 8.21452),
-            Point(6.15843, 7.38223),
-            Point(9.15285, 7.50761),
+            Point(0.15222, 0.04288, 1),
+            Point(1.67094, 2.62775, 1),
+            Point(-0.93985, 4.3516, 5),
+            Point(5, 4, 0),
+            Point(1.77584, 5.62341, 0),
+            Point(3.27958, 8.21452, 0),
+            Point(6.15843, 7.38223, 0),
+            Point(9.15285, 7.50761, 0),
         ],
     )
 
@@ -90,6 +85,10 @@ def test_generalize_points(
         )
     ):
         assert equals_exact(result_geometry, expected_geometry, tolerance=1e-3)
+
+        # Shapely 2.0 equals_exact compares only XY coordinates
+        if result_geometry.has_z or expected_geometry.has_z:
+            assert abs(result_geometry.z - expected_geometry.z) < 1e-3
 
     # Check attributes
     result_attrs = result_gdf.drop(columns="geometry").reset_index(drop=True)
