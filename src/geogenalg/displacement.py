@@ -5,8 +5,6 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-from itertools import starmap
-
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import Point
@@ -25,6 +23,10 @@ def displace_points(
         If more than two points are located close to each other, the exact
         displace_threshold may not be achieved. Increasing the number of iterations
         will bring the minimum distances closer to the threshold.
+
+        The Z coordinates of the original points are preserved, but they are not taken
+        into account during displacement. If a point does not have a Z coordinate, it is
+        set to 0.0.
 
     Args:
     ----
@@ -49,24 +51,28 @@ def displace_points(
 
     for _ in range(iterations):
         original_coordinates = np.array(
-            [[geom.x, geom.y] for geom in result_gdf.geometry]
+            [
+                [geom.x, geom.y, geom.z if geom.has_z else 0.0]
+                for geom in result_gdf.geometry
+            ]
         )
         number_of_coordinates = len(original_coordinates)
 
         # Initialize displacement vectors for each point
-        displacement_vectors = np.zeros((number_of_coordinates, 2))
+        # Only work with XY for displacement
+        xy_coordinates = original_coordinates[:, :2]
+        displacement_vectors = np.zeros_like(xy_coordinates)
 
         for i in range(number_of_coordinates):
             for j in range(number_of_coordinates):
                 if i == j:
                     continue
 
-                dx = original_coordinates[i][0] - original_coordinates[j][0]
-                dy = original_coordinates[i][1] - original_coordinates[j][1]
+                dx, dy = xy_coordinates[i] - xy_coordinates[j]
                 distance = np.hypot(dx, dy)
 
                 # If points are too close, calculate how much to move them apart
-                if distance < displace_threshold and distance != 0:
+                if 0 < distance < displace_threshold:
                     move_distance = (displace_threshold - distance) / 2
                     unit_vector = np.array([dx, dy]) / distance
                     move_vector = unit_vector * move_distance
@@ -74,8 +80,15 @@ def displace_points(
                     # Accumulate the displacement for the current point
                     displacement_vectors[i] += move_vector
 
-        # Apply displacement vectors to coordinates
-        new_coordinates = original_coordinates + displacement_vectors
-        result_gdf.geometry = list(starmap(Point, new_coordinates))
+        new_xy_coords = xy_coordinates + displacement_vectors
+
+        # Rebuild points with preserved Z
+        new_geoms = [
+            Point(x, y, z)
+            for (x, y), (_, _, z) in zip(
+                new_xy_coords, original_coordinates, strict=False
+            )
+        ]
+        result_gdf.geometry = new_geoms
 
     return result_gdf
