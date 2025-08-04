@@ -7,6 +7,7 @@
 
 import geopandas as gpd
 from pandas import concat
+from shapely import Point
 
 from geogenalg.core.exceptions import GeometryTypeError
 
@@ -18,6 +19,11 @@ def reduce_nearby_points(
     cluster_members_column: str = "cluster_members",
 ) -> gpd.GeoDataFrame:
     """Reduce the number of points by clustering and replacing them with their centroid.
+
+    Note:
+        The Z coordinate of each new point is calculated as the mean of the Z values of
+        the clustered points. If none of the clustered points have a Z coordinate, the Z
+        value is set to 0.0.
 
     Args:
     ----
@@ -59,9 +65,19 @@ def reduce_nearby_points(
             in_cluster_gdf[unique_key_column] == min_id
         ].copy()
 
-        representative_point_gdf = representative_point_gdf.set_geometry(
-            [cluster_polygon.centroid]
-        )
+        # Shapely/GeoPandas centroid discards Z-dimension
+        xy_centroid = cluster_polygon.centroid
+
+        # Estimate Z coordinates for centroids by averaging Z values of clustered points
+        z_values = [
+            geom.z
+            for geom in in_cluster_gdf.geometry
+            if isinstance(geom, Point) and geom.has_z
+        ]
+        average_z = sum(z_values) / len(z_values) if z_values else 0.0
+
+        new_centroid = Point(xy_centroid.x, xy_centroid.y, average_z)
+        representative_point_gdf = representative_point_gdf.set_geometry([new_centroid])
 
         # If several points are clustered, their keys are saved as cluster members
         if len(in_cluster_gdf) > 1:
