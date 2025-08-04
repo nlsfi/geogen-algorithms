@@ -20,7 +20,7 @@ class AlgorithmOptions:
     Attributes:
         reduce_threshold: Distance used for buffering and clustering points
         displace_threshold: Minimum allowed distance between points after displacement
-        iterations: The number of times to repeat displacement loop
+        displace_points_iterations: The number of times to repeat displacement loop
         unique_key_column: Name of the column containing unique identifiers
         cluster_members_column: Name of the column that lists the points included in
               each cluster
@@ -29,7 +29,7 @@ class AlgorithmOptions:
 
     reduce_threshold: float
     displace_threshold: float
-    iterations: int
+    displace_points_iterations: int
     unique_key_column: str
     cluster_members_column: str
 
@@ -72,8 +72,8 @@ def generalize_points(
 
     Note:
         If more than two points are located close to each other, the exact
-        displace_threshold may not be achieved. Increasing the number of iterations
-        will bring the minimum distances closer to the threshold.
+        displace_threshold may not be achieved. Increasing the number of iterations for
+        displacing points will bring the minimum distances closer to the threshold.
 
     Args:
     ----
@@ -95,5 +95,5 @@ def generalize_points(
     )
 
     return displacement.displace_points(
-        result_gdf, options.displace_threshold, options.iterations
+        result_gdf, options.displace_threshold, options.displace_points_iterations
     )
