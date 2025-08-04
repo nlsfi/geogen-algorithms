@@ -21,11 +21,11 @@ from geogenalg.core.exceptions import GeometryTypeError
     ("input_gdf", "threshold", "unique_id_column", "expected_gdf"),
     [
         (
-            gpd.GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)]),
+            gpd.GeoDataFrame({"id": [1]}, geometry=[Point(0, 0, 1)]),
             1.0,
             "id",
             gpd.GeoDataFrame(
-                {"id": [1], "cluster_members": [None]}, geometry=[Point(0, 0)]
+                {"id": [1], "cluster_members": [None]}, geometry=[Point(0, 0, 1)]
             ),
         ),
         (
@@ -33,39 +33,40 @@ from geogenalg.core.exceptions import GeometryTypeError
             1.0,
             "id",
             gpd.GeoDataFrame(
-                {"id": [1], "cluster_members": [[2, 1]]}, geometry=[Point(0.25, 0)]
+                {"id": [1], "cluster_members": [[2, 1]]}, geometry=[Point(0.25, 0, 0.0)]
             ),
         ),
         (
-            gpd.GeoDataFrame({"id": [1, 2]}, geometry=[Point(0, 0), Point(5, 5)]),
+            gpd.GeoDataFrame({"id": [1, 2]}, geometry=[Point(0, 0, 1), Point(5, 5, 2)]),
             1.0,
             "id",
             gpd.GeoDataFrame(
                 {"id": [1, 2], "cluster_members": [None, None]},
-                geometry=[Point(0, 0), Point(5, 5)],
+                geometry=[Point(0, 0, 1), Point(5, 5, 2)],
             ),
         ),
         (
             gpd.GeoDataFrame(
-                {"id": [5, 4, 6]}, geometry=[Point(0, 0), Point(0.5, 0), Point(5, 5)]
+                {"id": [5, 4, 6]},
+                geometry=[Point(0, 0, 0), Point(0.5, 0, 1), Point(5, 5)],
             ),
             1.0,
             "id",
             gpd.GeoDataFrame(
                 {"id": [4, 6], "cluster_members": [[5, 4], None]},
-                geometry=[Point(0.25, 0), Point(5, 5)],
+                geometry=[Point(0.25, 0, 0.5), Point(5, 5, 0.0)],
             ),
         ),
         (
             gpd.GeoDataFrame(
                 {"id": [10, 9, 8, 7]},
-                geometry=[Point(0, 0), Point(1, 0), Point(0, 1), Point(1, 1)],
+                geometry=[Point(0, 0), Point(1, 0, 2), Point(0, 1, 3), Point(1, 1)],
             ),
             2.0,
             "id",
             gpd.GeoDataFrame(
                 {"id": [7], "cluster_members": [[10, 9, 8, 7]]},
-                geometry=[Point(0.5, 0.5)],
+                geometry=[Point(0.5, 0.5, 2.5)],
             ),
         ),
         (
@@ -76,7 +77,7 @@ from geogenalg.core.exceptions import GeometryTypeError
             "id",
             gpd.GeoDataFrame(
                 {"id": [1], "cluster_members": [[3, 2, 1]]},
-                geometry=[Point(1, 1)],
+                geometry=[Point(1, 1, 0.0)],
             ),
         ),
         (
@@ -85,7 +86,7 @@ from geogenalg.core.exceptions import GeometryTypeError
             "id",
             gpd.GeoDataFrame(
                 {"id": [1], "name": ["A"], "cluster_members": [None]},
-                geometry=[Point(0, 0)],
+                geometry=[Point(0, 0, 0.0)],
             ),
         ),
         (
@@ -101,7 +102,7 @@ from geogenalg.core.exceptions import GeometryTypeError
                     "name": ["A"],
                     "cluster_members": [[2, 1]],
                 },
-                geometry=[Point(0.25, 0)],
+                geometry=[Point(0.25, 0, 0.0)],
             ),
         ),
         (
@@ -117,7 +118,7 @@ from geogenalg.core.exceptions import GeometryTypeError
                     "category": ["X", "Y"],
                     "cluster_members": [[5, 4], None],
                 },
-                geometry=[Point(0.25, 0), Point(5, 5)],
+                geometry=[Point(0.25, 0, 0.0), Point(5, 5, 0.0)],
             ),
         ),
     ],
@@ -150,6 +151,10 @@ def test_reduce_nearby_points_correctly(
         )
     ):
         assert equals_exact(result_geometry, expected_geometry, tolerance=1e-5)
+
+        # Shapely 2.0 equals_exact compares only XY coordinates
+        if result_geometry.has_z or expected_geometry.has_z:
+            assert abs(result_geometry.z - expected_geometry.z) < 1e-5
 
     # Check attributes
     result_attrs = (
