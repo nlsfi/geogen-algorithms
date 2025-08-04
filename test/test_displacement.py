@@ -4,60 +4,66 @@
 #
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
+import re
 
 import geopandas as gpd
 import pytest
 from pandas.testing import assert_frame_equal
 from shapely import equals_exact
-from shapely.geometry import Point
+from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg import displacement
+from geogenalg.core.exceptions import GeometryTypeError
 
 
 @pytest.mark.parametrize(
     ("input_gdf", "threshold", "iterations", "expected_gdf"),
     [
         (
-            gpd.GeoDataFrame(geometry=[Point(0, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(0, 0, 2)]),
             1.0,
             1,
-            gpd.GeoDataFrame(geometry=[Point(0, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(0, 0, 2)]),
         ),
         (
             gpd.GeoDataFrame(geometry=[Point(0, 0), Point(2, 0)]),
             1.0,
             1,
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(2, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(0, 0, 0), Point(2, 0, 0)]),
         ),
         (
             gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0.5, 0)]),
             1.0,
             1,
-            gpd.GeoDataFrame(geometry=[Point(-0.25, 0), Point(0.75, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(-0.25, 0, 0), Point(0.75, 0, 0)]),
         ),
         (
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0), Point(2, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(0, 0, 1), Point(1, 0, 1), Point(2, 0, 1)]),
             2.0,
             10,
-            gpd.GeoDataFrame(geometry=[Point(-1, 0), Point(1, 0), Point(3, 0)]),
+            gpd.GeoDataFrame(
+                geometry=[Point(-1, 0, 1), Point(1, 0, 1), Point(3, 0, 1)]
+            ),
         ),
         (
             gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0.5, 0), Point(5, 5)]),
             1.0,
             5,
-            gpd.GeoDataFrame(geometry=[Point(-0.25, 0), Point(0.75, 0), Point(5, 5)]),
+            gpd.GeoDataFrame(
+                geometry=[Point(-0.25, 0, 0), Point(0.75, 0, 0), Point(5, 5, 0)]
+            ),
         ),
         (
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0, 0), Point(0, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(0, 0, 1), Point(0, 0, 2), Point(0, 0, 3)]),
             1.0,
             2,
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0, 0), Point(0, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(0, 0, 1), Point(0, 0, 2), Point(0, 0, 3)]),
         ),
         (
             gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1.0, 0)]),
             1.0,
             1,
-            gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1.0, 0)]),
+            gpd.GeoDataFrame(geometry=[Point(0, 0, 0), Point(1.0, 0, 0)]),
         ),
     ],
     ids=[
@@ -87,6 +93,10 @@ def test_displace_points_moves_points_as_expected(
     ):
         assert equals_exact(result_geometry, expected_geometry, tolerance=1e-3)
 
+        # Shapely 2.0 equals_exact compares only XY coordinates
+        if result_geometry.has_z or expected_geometry.has_z:
+            assert abs(result_geometry.z - expected_geometry.z) < 1e-3
+
 
 def test_displace_points_preserves_attributes_intact():
     input_gdf = gpd.GeoDataFrame(
@@ -106,3 +116,21 @@ def test_displace_points_preserves_attributes_intact():
     result_attrs = result_gdf.drop(columns="geometry").reset_index(drop=True)
     expected_attrs = expected_gdf.drop(columns="geometry").reset_index(drop=True)
     assert_frame_equal(result_attrs, expected_attrs)
+
+
+def test_displace_points_raises_on_non_point_geometry():
+    invalid_input_gdf = gpd.GeoDataFrame(
+        geometry=[
+            Point(0, 0),
+            LineString([(0, 0), (1, 1)]),
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+        ]
+    )
+    displace_threshold = 1.0
+    iterations = 5
+
+    with pytest.raises(
+        GeometryTypeError,
+        match=re.escape("displace_points only supports Point geometries."),
+    ):
+        displacement.displace_points(invalid_input_gdf, displace_threshold, iterations)
