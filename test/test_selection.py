@@ -5,6 +5,8 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+import re
+
 import geopandas as gpd
 import pytest
 from pandas.testing import assert_frame_equal
@@ -12,6 +14,7 @@ from shapely import MultiLineString
 from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg import selection
+from geogenalg.core.exceptions import GeometryTypeError
 
 
 @pytest.mark.parametrize(
@@ -433,3 +436,193 @@ def test_remove_small_holes_correct(
         expected_gdf.sort_index().reset_index(drop=True),
         check_like=True,
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "reference_gdf",
+        "distance_threshold",
+        "priority_column",
+        "expected_gdf",
+    ),
+    [
+        (
+            gpd.GeoDataFrame(
+                {"id": [1, 2], "priority": [10, 20]},
+                geometry=[Point(0, 0), Point(10, 0)],
+            ),
+            None,
+            5.0,
+            "priority",
+            gpd.GeoDataFrame(
+                {"id": [1, 2], "priority": [10, 20]},
+                geometry=[Point(0, 0), Point(10, 0)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [1, 2], "priority": [10, 20]},
+                geometry=[Point(0, 0), Point(1, 0)],
+            ),
+            None,
+            2.0,
+            "priority",
+            gpd.GeoDataFrame(
+                {"id": [2], "priority": [20]},
+                geometry=[Point(1, 0)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [1], "priority": [10]},
+                geometry=[Point(0, 0)],
+            ),
+            gpd.GeoDataFrame(
+                {"id": [99], "priority": [5]},
+                geometry=[Point(1, 0)],
+            ),
+            2.0,
+            "priority",
+            gpd.GeoDataFrame(
+                {"id": [1], "priority": [10]},
+                geometry=[Point(0, 0)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [1], "priority": [10]},
+                geometry=[Point(0, 0)],
+            ),
+            gpd.GeoDataFrame(
+                {"id": [2], "priority": [10]},
+                geometry=[Point(1, 0)],
+            ),
+            2.0,
+            "priority",
+            gpd.GeoDataFrame(
+                {"id": [1], "priority": [10]},
+                geometry=[Point(0, 0)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            None,
+            2.0,
+            "priority",
+            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 2, 3, 4, 5],
+                    "priority": [1, 2, 3, 4, 5],
+                    "name": ["A", "B", "C", "D", "E"],
+                },
+                geometry=[Point(x, 0) for x in range(5)],
+            ),
+            None,
+            1.5,
+            "priority",
+            gpd.GeoDataFrame(
+                {
+                    "id": [5],
+                    "priority": [5],
+                    "name": ["E"],
+                },
+                geometry=[Point(4, 0)],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [1], "priority": [5]},
+                geometry=[Point(0, 0)],
+            ),
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 99],
+                    "priority": [5, 10],
+                },
+                geometry=[Point(0, 0), Point(1, 0)],
+            ),
+            2.0,
+            "priority",
+            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": list(range(1, 11)), "priority": [1] * 9 + [100]},
+                geometry=[
+                    Point(5, 0),
+                    Point(3.5, 3.5),
+                    Point(0, 5),
+                    Point(-3.5, 3.5),
+                    Point(-5, 0),
+                    Point(-3.5, -3.5),
+                    Point(0, -5),
+                    Point(3.5, -3.5),
+                    Point(4, 1),
+                    Point(0, 0),
+                ],
+            ),
+            None,
+            6.0,
+            "priority",
+            gpd.GeoDataFrame(
+                {"id": [10], "priority": [100]},
+                geometry=[Point(0, 0)],
+            ),
+        ),
+    ],
+    ids=[
+        "no reference, no removals",
+        "no reference, remove lower priority",
+        "separate reference_gdf, no removal",
+        "equal priority keeps candidate",
+        "empty input_gdf",
+        "chain should remove many points",
+        "same point in both and removed",
+        "circle with strong center point",
+    ],
+)
+def test_reduce_nearby_points_selects_points_correctly(
+    input_gdf: gpd.GeoDataFrame,
+    reference_gdf: gpd.GeoDataFrame,
+    distance_threshold: float,
+    priority_column: str,
+    expected_gdf: gpd.GeoDataFrame,
+):
+    result_gdf = selection.reduce_nearby_points_by_selecting(
+        input_gdf, reference_gdf, distance_threshold, priority_column
+    )
+
+    result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
+    expected_sorted = expected_gdf.sort_values("id").reset_index(drop=True)
+
+    # Check geometries
+    for res_geom, exp_geom in zip(
+        result_sorted.geometry, expected_sorted.geometry, strict=False
+    ):
+        assert res_geom.equals(exp_geom), f"Geometry mismatch: {res_geom} vs {exp_geom}"
+
+    # Check attributes
+    assert_frame_equal(
+        result_sorted.drop(columns="geometry"),
+        expected_sorted.drop(columns="geometry"),
+        check_dtype=False,
+    )
+
+
+def test_reduce_nearby_points_by_selecting_raises_on_invalid_geometry():
+    invalid_gdf = gpd.GeoDataFrame(
+        {"id": [1], "priority": [10]},
+        geometry=[LineString([(0, 0), (1, 1)])],
+    )
+
+    with pytest.raises(
+        GeometryTypeError,
+        match=re.escape(
+            "reduce_nearby_points_by_selecting only supports Point geometries."
+        ),
+    ):
+        selection.reduce_nearby_points_by_selecting(invalid_gdf, None, 2.0, "priority")
