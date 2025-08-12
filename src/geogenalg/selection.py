@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from shapely.geometry import Point
 
 from geogenalg.continuity import find_all_endpoints
+from geogenalg.core.exceptions import GeometryTypeError
 
 
 def remove_disconnected_short_lines(
@@ -217,3 +218,73 @@ def remove_small_holes(
     input_gdf.geometry = input_gdf.geometry.apply(filter_holes)
 
     return input_gdf
+
+
+def reduce_nearby_points_by_selecting(
+    input_points_gdf: gpd.GeoDataFrame,
+    reference_points_gdf: gpd.GeoDataFrame | None,
+    distance_threshold: float,
+    priority_column: str,
+) -> gpd.GeoDataFrame:
+    """Reduce points by removing those too close to others based on given rules.
+
+    Args:
+    ----
+        input_points_gdf: A GeoDataFrame containing the points to be reduced
+        reference_points_gdf: A GeoDataFrame containing the points used for distance and
+              priority comparison. If None, the same GeoDataFrame as input gdf is used.
+        distance_threshold: Maximum distance for two points to be considered "too close"
+        priority_column: Column name whose higher value determines which point is kept
+
+    Returns:
+    -------
+        A GeoDataFrame containing the reduced set of points.
+
+    Raises:
+    ------
+        GeometryTypeError: If the input GeoDataFrames contain other than
+              point geometries.
+
+    """
+    # Use self-comparison if no reference set is provided
+    if reference_points_gdf is None:
+        reference_points_gdf = input_points_gdf
+    if input_points_gdf.empty:
+        return input_points_gdf
+
+    if input_points_gdf.geometry.type.unique().tolist() != [
+        "Point"
+    ] or reference_points_gdf.geometry.type.unique().tolist() != ["Point"]:
+        msg = "reduce_nearby_points_by_selecting only supports Point geometries."
+        raise GeometryTypeError(msg)
+
+    reference_points_sindex = reference_points_gdf.sindex
+
+    to_remove = set()
+
+    for idx, point in input_points_gdf.iterrows():
+        if idx in to_remove:
+            continue
+
+        possible_matches_index = list(
+            reference_points_sindex.intersection(
+                point.geometry.buffer(distance_threshold).bounds
+            )
+        )
+        possible_matches: gpd.GeoDataFrame = reference_points_gdf.iloc[
+            possible_matches_index
+        ]
+
+        for other_idx, other_point in possible_matches.iterrows():
+            if other_idx == idx or other_idx in to_remove:
+                continue
+
+            if point.geometry.distance(other_point.geometry) <= distance_threshold:
+                # Compare priority and decide which to remove
+                if point[priority_column] >= other_point[priority_column]:
+                    to_remove.add(other_idx)
+                else:
+                    to_remove.add(idx)
+                    break
+
+    return input_points_gdf.drop(index=to_remove)
