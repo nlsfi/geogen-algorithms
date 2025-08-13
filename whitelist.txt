@@ -1,4 +1,6 @@
 2d
+arctan2
+argmax
 bbox
 cartagen
 centroid
@@ -22,6 +24,7 @@ gpd
 hypot
 idx
 landcover
+linalg
 linemerge
 loc
 polygonize

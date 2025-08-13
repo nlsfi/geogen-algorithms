@@ -5,7 +5,13 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+
+import geopandas as gpd
+import numpy as np
 from geopandas import GeoDataFrame, overlay
+from shapely.geometry import LineString, Polygon
+
+from geogenalg.core.exceptions import GeometryTypeError
 
 
 def calculate_coverage(
@@ -58,3 +64,119 @@ def calculate_coverage(
         columns=["base_feature_id", "overlay_area", "base_area"],
         errors="ignore",
     )
+
+
+def calculate_main_angle(polygon: Polygon) -> float:
+    """Calculate the main angle of a polygon based on its minimum bounding rectangle.
+
+    Args:
+    ----
+        polygon: A Shapely Polygon geometry
+
+    Returns:
+    -------
+        Orientation angle in degrees (range: 0 to 180), measured from the positive
+        Y-axis.
+
+    Raises:
+    ------
+        TypeError: If the input is not a Shapely Polygon.
+        ValueError: If the input polygon is empty.
+
+    """
+    if not isinstance(polygon, Polygon):
+        msg = "Input geometry must be a Shapely Polygon."
+        raise TypeError(msg)
+
+    if polygon.is_empty:
+        msg = "Input polygon is empty."
+        raise ValueError(msg)
+
+    min_rotated_rectangle = polygon.minimum_rotated_rectangle
+    coordinates = list(min_rotated_rectangle.exterior.coords)
+
+    edges = [
+        np.array(coordinates[1]) - np.array(coordinates[0]),
+        np.array(coordinates[3]) - np.array(coordinates[0]),
+    ]
+
+    edge_lengths = [np.linalg.norm(edge) for edge in edges]
+
+    longest_edge = edges[np.argmax(edge_lengths)]
+
+    # Calculate and return the angle of the longest edge
+    return np.degrees(np.arctan2(longest_edge[0], longest_edge[1])) % 180
+
+
+def classify_polygons_by_size_of_minimum_bounding_rectangle(
+    input_gdf: gpd.GeoDataFrame,
+    side_threshold: float,
+    class_column: str,
+    classes_for_ignore_size: list[str] | list[int],
+) -> dict[str, gpd.GeoDataFrame]:
+    """Classifiy polygons as small or large based on the minimum bounding rectangle.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame containing Polygon or MultiPolygon geometries
+        side_threshold: Length threshold for the longest side of the bounding rectangle
+        class_column: Name of the column containing the polygon class
+        classes_for_ignore_size: List of classes that should always be classified as
+              small, regardless of their bounding rectangle size
+
+    Returns:
+    -------
+        Dictionary with two keys:
+            - "small_polygons": GeoDataFrame of polygons classified as small
+            - "large_polygons": GeoDataFrame of polygons classified as large.
+
+    Raises:
+    ------
+        GeometryTypeError: If the input GeoDataFrame contains other than
+              polygon geometries.
+
+    """
+    if not all(input_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])):
+        msg = "Classify polygons only supports Polygon or MultiPolygon geometries."
+        raise GeometryTypeError(msg)
+
+    if input_gdf.empty:
+        return {
+            "small_polygons": gpd.GeoDataFrame(
+                columns=input_gdf.columns, crs=input_gdf.crs
+            ),
+            "large_polygons": gpd.GeoDataFrame(
+                columns=input_gdf.columns, crs=input_gdf.crs
+            ),
+        }
+
+    large_polygon_indices = []
+    small_polygon_indices = []
+
+    for idx, row in input_gdf.iterrows():
+        geom = row.geometry
+        min_rotated_rectangle = geom.minimum_rotated_rectangle
+        coordinates = list(min_rotated_rectangle.exterior.coords)
+
+        longest_side = max(
+            LineString([coordinates[i], coordinates[i + 1]]).length
+            for i in range(len(coordinates) - 1)
+        )
+
+        building_class = row[class_column]
+
+        if (
+            longest_side > side_threshold
+            and building_class not in classes_for_ignore_size
+        ):
+            large_polygon_indices.append(idx)
+        else:
+            small_polygon_indices.append(idx)
+
+    large_gdf = input_gdf.loc[large_polygon_indices].copy()
+    small_gdf = input_gdf.loc[small_polygon_indices].copy()
+
+    return {
+        "small_polygons": small_gdf,
+        "large_polygons": large_gdf,
+    }
