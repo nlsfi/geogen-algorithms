@@ -12,7 +12,7 @@ from shapely import Point
 from geogenalg.core.exceptions import GeometryTypeError
 
 
-def reduce_nearby_points(
+def reduce_nearby_points_by_clustering(
     input_gdf: gpd.GeoDataFrame,
     reduce_threshold: float,
     unique_key_column: str,

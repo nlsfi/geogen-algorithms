@@ -134,13 +134,15 @@ from geogenalg.core.exceptions import GeometryTypeError
         "three points with attributes",
     ],
 )
-def test_reduce_nearby_points_correctly(
+def test_reduce_nearby_points_by_clustering_correctly(
     input_gdf: gpd.GeoDataFrame,
     threshold: float,
     unique_id_column: str,
     expected_gdf: gpd.GeoDataFrame,
 ):
-    result_gdf = cluster.reduce_nearby_points(input_gdf, threshold, unique_id_column)
+    result_gdf = cluster.reduce_nearby_points_by_clustering(
+        input_gdf, threshold, unique_id_column
+    )
 
     # Check geometries
     for _, (result_geometry, expected_geometry) in enumerate(
@@ -181,4 +183,6 @@ def test_reduce_nearby_points_raises_on_non_point_geometry():
         GeometryTypeError,
         match=re.escape("reduce_nearby_points only supports Point geometries."),
     ):
-        cluster.reduce_nearby_points(invalid_input_gdf, threshold, unique_id_column)
+        cluster.reduce_nearby_points_by_clustering(
+            invalid_input_gdf, threshold, unique_id_column
+        )
