@@ -5,6 +5,8 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+from itertools import chain
+
 import geopandas as gpd
 import pandas as pd
 from shapely import line_merge
@@ -118,10 +120,13 @@ def dissolve_and_inherit_attributes(
         group_value = dissolved_row[by_column]
 
         # Only intersect polygons from the same group
-        intersecting_polygons_gdf = input_gdf[
+        intersecting_polygons_gdf: gpd.GeoDataFrame = input_gdf[
             (input_gdf[by_column] == group_value)
             & (input_gdf.geometry.intersects(dissolved_geom))
-        ]
+        ].copy()
+
+        if dissolve_members_column not in intersecting_polygons_gdf.columns:
+            intersecting_polygons_gdf[dissolve_members_column] = None
 
         # TODO: Add feature to choose how the representative point is selected
         min_id = intersecting_polygons_gdf[unique_key_column].min()
@@ -129,28 +134,53 @@ def dissolve_and_inherit_attributes(
             intersecting_polygons_gdf[unique_key_column] == min_id
         ].copy()
 
-        # If several polygons are dissolved, their keys are saved as dissolve members
         if len(intersecting_polygons_gdf) > 1:
-            new_dissolve_members = intersecting_polygons_gdf[unique_key_column].tolist()
-            if (
-                dissolve_members_column in representative_polygon_gdf.columns
-                and representative_polygon_gdf[dissolve_members_column] is not None
-            ):
-                existing_members = representative_polygon_gdf[dissolve_members_column]
-                representative_polygon_gdf[dissolve_members_column] = (
-                    existing_members + new_dissolve_members
-                )
-            else:
-                representative_polygon_gdf[dissolve_members_column] = [
-                    new_dissolve_members
-                ]
+            _merge_dissolve_members_column(
+                intersecting_polygons_gdf,
+                dissolve_members_column,
+                dissolved_row,
+                unique_key_column,
+                representative_polygon_gdf,
+            )
 
         # For single polygons, the dissolve members field is set to None if the field
         # does not contain any dissolve members
         elif dissolve_members_column not in representative_polygon_gdf.columns:
             representative_polygon_gdf[dissolve_members_column] = None
 
+        representative_polygon_gdf = representative_polygon_gdf.iloc[[0]].copy()
         representative_polygon_gdf.geometry = [dissolved_geom]
         dissolved_polygons_gdfs.append(representative_polygon_gdf)
 
     return pd.concat(dissolved_polygons_gdfs).reset_index(drop=True)
+
+
+def _merge_dissolve_members_column(
+    intersecting_polygons_gdf: gpd.GeoDataFrame,
+    dissolve_members_column: str,
+    dissolved_row: pd.Series,
+    unique_key_column: str,
+    representative_polygon_gdf: gpd.GeoDataFrame,
+) -> None:
+    """List all dissolve member keys into the dissolve_members_column."""
+    existing_members = (
+        intersecting_polygons_gdf[dissolve_members_column].dropna().to_list()
+    )
+
+    existing_members = list(chain.from_iterable(existing_members))
+
+    new_dissolve_members = []
+    if dissolve_members_column in dissolved_row:
+        for value in dissolved_row[dissolve_members_column]:
+            if isinstance(value, list):
+                new_dissolve_members += value
+            else:
+                new_dissolve_members.append(value)
+
+    dissolve_members = intersecting_polygons_gdf[unique_key_column].dropna().to_list()
+
+    all_dissolve_members = sorted(
+        set(existing_members + new_dissolve_members + dissolve_members)
+    )
+
+    representative_polygon_gdf[dissolve_members_column] = [all_dissolve_members]
