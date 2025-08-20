@@ -149,8 +149,6 @@ def test_calculate_main_angle_empty_polygon():
     (
         "input_gdf",
         "side_threshold",
-        "class_column",
-        "classes_for_ignore_size",
         "expected_gdfs",
     ),
     [
@@ -160,8 +158,6 @@ def test_calculate_main_angle_empty_polygon():
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             5.0,
-            "class",
-            [],
             {
                 "small_polygons": gpd.GeoDataFrame(
                     {"id": [1], "class": ["A"]},
@@ -178,8 +174,6 @@ def test_calculate_main_angle_empty_polygon():
                 geometry=[Polygon([(0, 0), (10, 0), (10, 1), (0, 1)])],
             ),
             5.0,
-            "class",
-            [],
             {
                 "small_polygons": gpd.GeoDataFrame(
                     columns=["id", "class"], geometry=[]
@@ -195,9 +189,7 @@ def test_calculate_main_angle_empty_polygon():
                 {"id": [1], "class": ["SPECIAL"]},
                 geometry=[Polygon([(0, 0), (10, 0), (10, 1), (0, 1)])],
             ),
-            5.0,
-            "class",
-            ["SPECIAL"],
+            15.0,
             {
                 "small_polygons": gpd.GeoDataFrame(
                     {"id": [1], "class": ["SPECIAL"]},
@@ -211,8 +203,6 @@ def test_calculate_main_angle_empty_polygon():
         (
             gpd.GeoDataFrame(columns=["id", "class"], geometry=[]),
             5.0,
-            "class",
-            [],
             {
                 "small_polygons": gpd.GeoDataFrame(
                     columns=["id", "class"], geometry=[]
@@ -231,8 +221,6 @@ def test_calculate_main_angle_empty_polygon():
                 ],
             ),
             5.0,
-            "class",
-            [],
             {
                 "small_polygons": gpd.GeoDataFrame(
                     {"id": [1], "class": ["A"]},
@@ -264,8 +252,6 @@ def test_calculate_main_angle_empty_polygon():
                 ],
             ),
             5.5,
-            "class",
-            [],
             {
                 "small_polygons": gpd.GeoDataFrame(
                     columns=["id", "class"], geometry=[]
@@ -294,7 +280,7 @@ def test_calculate_main_angle_empty_polygon():
     ids=[
         "single small polygon",
         "single large polygon",
-        "large polygon in ignore list",
+        "large polygon with attributes",
         "empty GeoDataFrame",
         "mix of large and small polygons",
         "irregular polygon with small edge segments",
@@ -303,15 +289,11 @@ def test_calculate_main_angle_empty_polygon():
 def test_classify_polygons_by_size_of_minimum_bounding_rectangle(
     input_gdf: gpd.GeoDataFrame,
     side_threshold: float,
-    class_column: str,
-    classes_for_ignore_size: list[str] | list[int],
     expected_gdfs: dict[str, gpd.GeoDataFrame],
 ):
     result_gdfs = classify_polygons_by_size_of_minimum_bounding_rectangle(
         input_gdf,
         side_threshold,
-        class_column,
-        classes_for_ignore_size,
     )
 
     for key, expected in expected_gdfs.items():
@@ -352,6 +334,4 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
             "Classify polygons only supports Polygon or MultiPolygon geometries."
         ),
     ):
-        classify_polygons_by_size_of_minimum_bounding_rectangle(
-            invalid_gdf, 5.0, "class", []
-        )
+        classify_polygons_by_size_of_minimum_bounding_rectangle(invalid_gdf, 5.0)

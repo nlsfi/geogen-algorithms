@@ -92,8 +92,7 @@ def calculate_main_angle(polygon: Polygon) -> float:
         msg = "Input polygon is empty."
         raise ValueError(msg)
 
-    min_rotated_rectangle = polygon.minimum_rotated_rectangle
-    coordinates = list(min_rotated_rectangle.exterior.coords)
+    coordinates = list(polygon.minimum_rotated_rectangle.exterior.coords)
 
     edges = [
         np.array(coordinates[1]) - np.array(coordinates[0]),
@@ -111,8 +110,6 @@ def calculate_main_angle(polygon: Polygon) -> float:
 def classify_polygons_by_size_of_minimum_bounding_rectangle(
     input_gdf: gpd.GeoDataFrame,
     side_threshold: float,
-    class_column: str,
-    classes_for_ignore_size: list[str] | list[int],
 ) -> dict[str, gpd.GeoDataFrame]:
     """Classifiy polygons as small or large based on the minimum bounding rectangle.
 
@@ -120,9 +117,6 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
     ----
         input_gdf: Input GeoDataFrame containing Polygon or MultiPolygon geometries
         side_threshold: Length threshold for the longest side of the bounding rectangle
-        class_column: Name of the column containing the polygon class
-        classes_for_ignore_size: List of classes that should always be classified as
-              small, regardless of their bounding rectangle size
 
     Returns:
     -------
@@ -155,20 +149,14 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
 
     for idx, row in input_gdf.iterrows():
         geom = row.geometry
-        min_rotated_rectangle = geom.minimum_rotated_rectangle
-        coordinates = list(min_rotated_rectangle.exterior.coords)
+        coordinates = list(geom.minimum_rotated_rectangle.exterior.coords)
 
         longest_side = max(
             LineString([coordinates[i], coordinates[i + 1]]).length
             for i in range(len(coordinates) - 1)
         )
 
-        building_class = row[class_column]
-
-        if (
-            longest_side > side_threshold
-            and building_class not in classes_for_ignore_size
-        ):
+        if longest_side > side_threshold:
             large_polygon_indices.append(idx)
         else:
             small_polygon_indices.append(idx)
