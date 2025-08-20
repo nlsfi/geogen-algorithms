@@ -147,9 +147,9 @@ def test_merges_lines_with_same_attribute_value_into_one(
             ),
             "group",
             "id",
-            "merged_ids",
+            "dissolve_members",
             gpd.GeoDataFrame(
-                {"id": [1], "group": ["A"], "merged_ids": [None]},
+                {"id": [1], "group": ["A"], "dissolve_members": [None]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
         ),
@@ -163,9 +163,9 @@ def test_merges_lines_with_same_attribute_value_into_one(
             ),
             "group",
             "id",
-            "merged_ids",
+            "dissolve_members",
             gpd.GeoDataFrame(
-                {"id": [1], "group": ["A"], "merged_ids": [[2, 1]]},
+                {"id": [1], "group": ["A"], "dissolve_members": [[1, 2]]},
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
         ),
@@ -179,9 +179,9 @@ def test_merges_lines_with_same_attribute_value_into_one(
             ),
             "group",
             "id",
-            "merged_ids",
+            "dissolve_members",
             gpd.GeoDataFrame(
-                {"id": [1, 2], "group": ["A", "B"], "merged_ids": [None, None]},
+                {"id": [1, 2], "group": ["A", "B"], "dissolve_members": [None, None]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(2, 0), (3, 0), (3, 1), (2, 1)]),
@@ -192,7 +192,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
             gpd.GeoDataFrame(columns=["id", "group"], geometry=[]),
             "group",
             "id",
-            "merged_ids",
+            "dissolve_members",
             gpd.GeoDataFrame(columns=["id", "group"], geometry=[]),
         ),
         (
@@ -205,9 +205,9 @@ def test_merges_lines_with_same_attribute_value_into_one(
             ),
             "group",
             "id",
-            "merged_ids",
+            "dissolve_members",
             gpd.GeoDataFrame(
-                {"group": ["A", "A"], "id": [1, 2], "merged_ids": [None, None]},
+                {"group": ["A", "A"], "id": [1, 2], "dissolve_members": [None, None]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(2, 2), (3, 2), (3, 3), (2, 3)]),
@@ -229,19 +229,125 @@ def test_merges_lines_with_same_attribute_value_into_one(
             ),
             "group",
             "id",
-            "merged_ids",
+            "dissolve_members",
             gpd.GeoDataFrame(
                 {
                     "group": ["A", "B"],
                     "id": [1, 3],
                     "name": ["first", "third"],
-                    "merged_ids": [[1, 2], None],
+                    "dissolve_members": [[1, 2], None],
                 },
                 geometry=[
                     Polygon(
                         [(0, 0), (2, 0), (2, 1), (3, 1), (3, 3), (1, 3), (1, 2), (0, 2)]
                     ),
                     Polygon([(1, 1), (3, 1), (3, 3), (1, 3)]),
+                ],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 2],
+                    "group": ["A", "A"],
+                    "dissolve_members": [[10, 1], [20]],
+                },
+                geometry=[
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
+                ],
+            ),
+            "group",
+            "id",
+            "dissolve_members",
+            gpd.GeoDataFrame(
+                {
+                    "id": [1],
+                    "group": ["A"],
+                    "dissolve_members": [[1, 2, 10, 20]],
+                },
+                geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "group": ["A", "A", "A"],
+                    "dissolve_members": [None, [10, 20], [3, 30]],
+                },
+                geometry=[
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    Polygon([(0.9, 0), (2, 0), (2, 1), (0.9, 1)]),
+                    Polygon([(1.9, 0), (3, 0), (3, 1), (1.9, 1)]),
+                ],
+            ),
+            "group",
+            "id",
+            "dissolve_members",
+            gpd.GeoDataFrame(
+                {
+                    "id": [1],
+                    "group": ["A"],
+                    "dissolve_members": [[1, 2, 3, 10, 20, 30]],
+                },
+                geometry=[Polygon([(0, 0), (3, 0), (3, 1), (0, 1)])],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 2, 3, 4],
+                    "group": ["A", "A", "B", "B"],
+                    "dissolve_members": [[100], None, [3, 200, 201], None],
+                },
+                geometry=[
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
+                    Polygon([(0, 2), (1, 2), (1, 3), (0, 3)]),
+                    Polygon([(1, 2), (2, 2), (2, 3), (1, 3)]),
+                ],
+            ),
+            "group",
+            "id",
+            "dissolve_members",
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 3],
+                    "group": ["A", "B"],
+                    "dissolve_members": [[1, 2, 100], [3, 4, 200, 201]],
+                },
+                geometry=[
+                    Polygon([(0, 0), (2, 0), (2, 1), (0, 1)]),
+                    Polygon([(0, 2), (2, 2), (2, 3), (0, 3)]),
+                ],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "group": ["A", "A", "A"],
+                    "dissolve_members": [[1, 5], None, [3, 50, 789]],
+                },
+                geometry=[
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    Polygon([(0.9, 0), (2, 0), (2, 1), (0.9, 1)]),
+                    Polygon([(2.1, 0), (3, 0), (3, 1), (2.1, 1)]),
+                ],
+            ),
+            "group",
+            "id",
+            "dissolve_members",
+            gpd.GeoDataFrame(
+                {
+                    "id": [1, 3],
+                    "group": ["A", "A"],
+                    "dissolve_members": [[1, 2, 5], [3, 50, 789]],
+                },
+                geometry=[
+                    Polygon([(0, 0), (2, 0), (2, 1), (0, 1)]),
+                    Polygon([(2.1, 0), (3, 0), (3, 1), (2.1, 1)]),
                 ],
             ),
         ),
@@ -253,6 +359,10 @@ def test_merges_lines_with_same_attribute_value_into_one(
         "empty GeoDataFrame should return input GeoDataFrame",
         "two separate polygons in same group should not dissolve",
         "three intersecting polygons with extra attributes, two in same group",
+        "polygons already have attribute for dissolve_members",
+        "mixed None and lists in same group",
+        "multiple groups with mixed dissolve_members",
+        "two dissolving geometries and one separate in same group",
     ],
 )
 def test_dissolve_and_inherit_attributes(
