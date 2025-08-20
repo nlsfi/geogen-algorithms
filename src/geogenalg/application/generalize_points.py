@@ -87,7 +87,7 @@ def generalize_points(
     """
     result_gdf = points_gdf.copy()
 
-    result_gdf = cluster.reduce_nearby_points(
+    result_gdf = cluster.reduce_nearby_points_by_clustering(
         result_gdf,
         options.reduce_threshold,
         options.unique_key_column,
