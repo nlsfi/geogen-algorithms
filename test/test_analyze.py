@@ -8,6 +8,7 @@
 import re
 
 import geopandas as gpd
+import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from pandas.testing import assert_frame_equal
@@ -141,8 +142,8 @@ def test_calculate_main_angle_invalid_geometry():
 
 def test_calculate_main_angle_empty_polygon():
     empty_poly = Polygon()
-    with pytest.raises(ValueError, match="Input polygon is empty"):
-        calculate_main_angle(empty_poly)
+    result = calculate_main_angle(empty_poly)
+    assert np.isnan(result)
 
 
 @pytest.mark.parametrize(

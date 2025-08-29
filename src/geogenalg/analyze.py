@@ -81,16 +81,14 @@ def calculate_main_angle(polygon: Polygon) -> float:
     Raises:
     ------
         TypeError: If the input is not a Shapely Polygon.
-        ValueError: If the input polygon is empty.
 
     """
+    if polygon is None or polygon.is_empty:
+        return np.nan
+
     if not isinstance(polygon, Polygon):
         msg = "Input geometry must be a Shapely Polygon."
         raise TypeError(msg)
-
-    if polygon.is_empty:
-        msg = "Input polygon is empty."
-        raise ValueError(msg)
 
     coordinates = list(polygon.minimum_rotated_rectangle.exterior.coords)
 
