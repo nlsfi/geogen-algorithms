@@ -22,12 +22,12 @@ from geogenalg.core.exceptions import GeometryTypeError
         (
             gpd.GeoDataFrame(
                 {"id": [1]},
-                geometry=[Polygon([(0, 0), (0, 0.4), (2, 0.4), (2, 0)])],
+                geometry=[Polygon([(0, 0, 5), (0, 0.4, 5), (2, 0.4, 5), (2, 0, 5)])],
             ),
             1.0,
             gpd.GeoDataFrame(
                 {"id": [1]},
-                geometry=[Polygon([(0, 0), (0, 0.4), (2, 0.4), (2, 0)])],
+                geometry=[Polygon([(0, 0, 5), (0, 0.4, 5), (2, 0.4, 5), (2, 0, 5)])],
             ),
         ),
         (
@@ -47,7 +47,7 @@ from geogenalg.core.exceptions import GeometryTypeError
                 geometry=[
                     MultiPolygon(
                         [
-                            Polygon([(0, 0), (0, 0.4), (2, 0.4), (2, 0)]),
+                            Polygon([(0, 0, 1), (0, 0.4, 2), (2, 0.4, 3), (2, 0, 4)]),
                             Polygon([(3, 0), (5, 0), (5, 3), (3, 3)]),
                         ]
                     )
@@ -56,7 +56,7 @@ from geogenalg.core.exceptions import GeometryTypeError
             1.0,
             gpd.GeoDataFrame(
                 {"id": [3]},
-                geometry=[Polygon([(0, 0.4), (2, 0.4), (2, 0), (0, 0)])],
+                geometry=[Polygon([(0, 0.4, 2), (2, 0.4, 3), (2, 0, 4), (0, 0, 1)])],
             ),
         ),
         (
@@ -88,10 +88,41 @@ from geogenalg.core.exceptions import GeometryTypeError
                 geometry=[
                     Polygon(
                         [
-                            (0, 0),
                             (0, 0.4),
                             (2.2, 0.4),
                             (2.2, 0),
+                            (0, 0),
+                        ]
+                    )
+                ],
+            ),
+        ),
+        (
+            gpd.GeoDataFrame(
+                {"id": [6]},
+                geometry=[
+                    Polygon(
+                        [
+                            (0, -2),
+                            (0, 0.75),
+                            (0.75, 0.75),
+                            (0.75, 0),
+                            (2.25, 0),
+                            (2.25, 0.5),
+                            (3, 0.5),
+                            (3, -2),
+                        ]
+                    )
+                ],
+            ),
+            1,
+            gpd.GeoDataFrame(
+                {"id": [6]},
+                geometry=[
+                    MultiPolygon(
+                        [
+                            Polygon([(2.25, 0.5), (3, 0.5), (3, 0), (2.25, 0)]),
+                            Polygon([(0, 0.75), (0.75, 0.75), (0.75, 0), (0, 0)]),
                         ]
                     )
                 ],
@@ -99,12 +130,13 @@ from geogenalg.core.exceptions import GeometryTypeError
         ),
     ],
     ids=[
-        "narrow polygon extracted",
+        "narrow polygon extracted with z-coordinates",
         "no narrow parts",
-        "multipolygon with one narrow polygon",
+        "multipolygon with one narrow polygon with z-coordinates",
         "empty input",
         "attributes should be inherited",
         "polygon with narrow part",
+        "input polygon with two separate narrow parts",
     ],
 )
 def test_extract_narrow_polygon_parts(
@@ -144,7 +176,7 @@ def test_extract_narrow_polygon_parts_raises_on_non_polygon_geometry():
     with pytest.raises(
         GeometryTypeError,
         match=re.escape(
-            "Separate narrow parts only supports Polygon or MultiPolygon geometries."
+            "Extract narrow parts only supports Polygon or MultiPolygon geometries."
         ),
     ):
         exaggeration.extract_narrow_polygon_parts(invalid_gdf, 1.0)
