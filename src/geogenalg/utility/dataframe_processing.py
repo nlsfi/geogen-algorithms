@@ -33,6 +33,8 @@ def group_gdfs_by_geometry_type(
     point_gdfs = []
 
     for input_gdf in input_gdfs:
+        if not isinstance(input_gdf, gpd.GeoDataFrame):
+            continue
         geom_types = input_gdf.geometry.geom_type.unique()
         if all(geom_type in {"Polygon", "MultiPolygon"} for geom_type in geom_types):
             polygon_gdfs.append(input_gdf)
