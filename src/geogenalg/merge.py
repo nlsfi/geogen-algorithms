@@ -109,6 +109,8 @@ def dissolve_and_inherit_attributes(
     if input_gdf.empty:
         return input_gdf
 
+    input_gdf.geometry = input_gdf.buffer(0)
+
     dissolved_gdf: gpd.GeoDataFrame = (
         input_gdf.dissolve(by=by_column).explode(index_parts=True).reset_index()
     )
@@ -130,9 +132,15 @@ def dissolve_and_inherit_attributes(
 
         # TODO: Add feature to choose how the representative point is selected
         min_id = intersecting_polygons_gdf[unique_key_column].min()
-        representative_polygon_gdf: gpd.GeoDataFrame = intersecting_polygons_gdf.loc[
-            intersecting_polygons_gdf[unique_key_column] == min_id
-        ].copy()
+        representative_polygon_gdf: gpd.GeoDataFrame = (
+            intersecting_polygons_gdf.loc[
+                intersecting_polygons_gdf[unique_key_column] == min_id
+            ]
+            .iloc[
+                [0]
+            ]  # if multiple polygons with same key value, only one is representing
+            .copy()
+        )
 
         if len(intersecting_polygons_gdf) > 1:
             _merge_dissolve_members_column(
@@ -170,7 +178,7 @@ def _merge_dissolve_members_column(
     existing_members = list(chain.from_iterable(existing_members))
 
     new_dissolve_members = []
-    if dissolve_members_column in dissolved_row:
+    if dissolved_row.get(dissolve_members_column):
         for value in dissolved_row[dissolve_members_column]:
             if isinstance(value, list):
                 new_dissolve_members += value
@@ -180,7 +188,7 @@ def _merge_dissolve_members_column(
     dissolve_members = intersecting_polygons_gdf[unique_key_column].dropna().to_list()
 
     all_dissolve_members = sorted(
-        set(existing_members + new_dissolve_members + dissolve_members)
+        {str(x) for x in (existing_members + new_dissolve_members + dissolve_members)}
     )
 
     representative_polygon_gdf[dissolve_members_column] = [all_dissolve_members]
