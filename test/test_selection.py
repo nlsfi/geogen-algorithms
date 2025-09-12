@@ -443,7 +443,6 @@ def test_remove_small_holes_correct(
         "input_gdf",
         "reference_gdf",
         "distance_threshold",
-        "priority_column",
         "expected_gdf",
     ),
     [
@@ -454,7 +453,6 @@ def test_remove_small_holes_correct(
             ),
             None,
             5.0,
-            "priority",
             gpd.GeoDataFrame(
                 {"id": [1, 2], "priority": [10, 20]},
                 geometry=[Point(0, 0), Point(10, 0)],
@@ -467,7 +465,6 @@ def test_remove_small_holes_correct(
             ),
             None,
             2.0,
-            "priority",
             gpd.GeoDataFrame(
                 {"id": [2], "priority": [20]},
                 geometry=[Point(1, 0)],
@@ -483,7 +480,6 @@ def test_remove_small_holes_correct(
                 geometry=[Point(1, 0)],
             ),
             2.0,
-            "priority",
             gpd.GeoDataFrame(
                 {"id": [1], "priority": [10]},
                 geometry=[Point(0, 0)],
@@ -499,17 +495,12 @@ def test_remove_small_holes_correct(
                 geometry=[Point(1, 0)],
             ),
             2.0,
-            "priority",
-            gpd.GeoDataFrame(
-                {"id": [1], "priority": [10]},
-                geometry=[Point(0, 0)],
-            ),
+            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
         ),
         (
             gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
             None,
             2.0,
-            "priority",
             gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
         ),
         (
@@ -523,7 +514,6 @@ def test_remove_small_holes_correct(
             ),
             None,
             1.5,
-            "priority",
             gpd.GeoDataFrame(
                 {
                     "id": [5],
@@ -546,7 +536,6 @@ def test_remove_small_holes_correct(
                 geometry=[Point(0, 0), Point(1, 0)],
             ),
             2.0,
-            "priority",
             gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
         ),
         (
@@ -567,7 +556,6 @@ def test_remove_small_holes_correct(
             ),
             None,
             6.0,
-            "priority",
             gpd.GeoDataFrame(
                 {"id": [10], "priority": [100]},
                 geometry=[Point(0, 0)],
@@ -589,11 +577,14 @@ def test_reduce_nearby_points_selects_points_correctly(
     input_gdf: gpd.GeoDataFrame,
     reference_gdf: gpd.GeoDataFrame,
     distance_threshold: float,
-    priority_column: str,
     expected_gdf: gpd.GeoDataFrame,
 ):
     result_gdf = selection.reduce_nearby_points_by_selecting(
-        input_gdf, reference_gdf, distance_threshold, priority_column
+        input_gdf,
+        reference_gdf,
+        distance_threshold,
+        priority_column="priority",
+        unique_key_column="id",
     )
 
     result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
@@ -625,4 +616,6 @@ def test_reduce_nearby_points_by_selecting_raises_on_invalid_geometry():
             "reduce_nearby_points_by_selecting only supports Point geometries."
         ),
     ):
-        selection.reduce_nearby_points_by_selecting(invalid_gdf, None, 2.0, "priority")
+        selection.reduce_nearby_points_by_selecting(
+            invalid_gdf, None, 2.0, "priority", "id"
+        )
