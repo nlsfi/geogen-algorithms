@@ -24,7 +24,11 @@ def extract_narrow_polygon_parts(
 
     Returns:
     -------
-        GeoDataFrame containing only the narrow polygon parts.
+        GeoDataFrame containing the narrow polygon parts. **Each row corresponds
+        to a row in the input GeoDataFrame.** If an input polygon does not
+        contain any parts narrower than the threshold, the corresponding
+        geometry in the result will be empty (a GeometryCollection), but the row
+        will still be present.
 
     Raises:
     ------
@@ -33,25 +37,24 @@ def extract_narrow_polygon_parts(
 
     """
     if not all(input_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])):
-        msg = "Separate narrow parts only supports Polygon or MultiPolygon geometries."
+        msg = "Extract narrow parts only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
-    result_gdf = input_gdf.copy()
+    input_gdf.geometry = input_gdf.geometry.buffer(0)
+    wide_parts_gdf = input_gdf.copy()
 
     # Remove polygon parts narrower than threshold
-    result_gdf.geometry = result_gdf.buffer(
-        (-0.5 * threshold), cap_style="flat", join_style="mitre"
-    )
-    result_gdf.geometry = result_gdf.buffer(
-        (0.5 * threshold), cap_style="flat", join_style="mitre"
-    )
+    wide_parts_gdf.geometry = wide_parts_gdf.buffer(
+        -0.5 * threshold, cap_style="flat", join_style="mitre"
+    ).buffer(0.5 * threshold, cap_style="flat", join_style="mitre")
 
     # Extract narrow parts by difference
-    result_gdf.geometry = input_gdf.difference(result_gdf.union_all())
+    narrow_parts_gdf = wide_parts_gdf.copy()
+    narrow_parts_gdf.geometry = input_gdf.difference(wide_parts_gdf.union_all())
 
     # Clean small slivers
-    result_gdf.geometry = result_gdf.buffer(
+    narrow_parts_gdf.geometry = narrow_parts_gdf.buffer(
         -0.1, cap_style="flat", join_style="mitre"
     ).buffer(0.1, cap_style="flat", join_style="mitre")
 
-    return result_gdf
+    return narrow_parts_gdf
