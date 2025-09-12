@@ -165,7 +165,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
             "id",
             "dissolve_members",
             gpd.GeoDataFrame(
-                {"id": [1], "group": ["A"], "dissolve_members": [[1, 2]]},
+                {"id": [1], "group": ["A"], "dissolve_members": [["1", "2"]]},
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
         ),
@@ -235,7 +235,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     "group": ["A", "B"],
                     "id": [1, 3],
                     "name": ["first", "third"],
-                    "dissolve_members": [[1, 2], None],
+                    "dissolve_members": [["1", "2"], None],
                 },
                 geometry=[
                     Polygon(
@@ -250,7 +250,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1, 2],
                     "group": ["A", "A"],
-                    "dissolve_members": [[10, 1], [20]],
+                    "dissolve_members": [["10", "1"], ["20"]],
                 },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -264,7 +264,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1],
                     "group": ["A"],
-                    "dissolve_members": [[1, 2, 10, 20]],
+                    "dissolve_members": [["1", "10", "2", "20"]],
                 },
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
@@ -274,7 +274,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1, 2, 3],
                     "group": ["A", "A", "A"],
-                    "dissolve_members": [None, [10, 20], [3, 30]],
+                    "dissolve_members": [None, ["10", "20"], ["3", "30"]],
                 },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -289,7 +289,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1],
                     "group": ["A"],
-                    "dissolve_members": [[1, 2, 3, 10, 20, 30]],
+                    "dissolve_members": [["1", "10", "2", "20", "3", "30"]],
                 },
                 geometry=[Polygon([(0, 0), (3, 0), (3, 1), (0, 1)])],
             ),
@@ -299,7 +299,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1, 2, 3, 4],
                     "group": ["A", "A", "B", "B"],
-                    "dissolve_members": [[100], None, [3, 200, 201], None],
+                    "dissolve_members": [["100"], None, ["3", "200", "201"], None],
                 },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -315,7 +315,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1, 3],
                     "group": ["A", "B"],
-                    "dissolve_members": [[1, 2, 100], [3, 4, 200, 201]],
+                    "dissolve_members": [["1", "100", "2"], ["200", "201", "3", "4"]],
                 },
                 geometry=[
                     Polygon([(0, 0), (2, 0), (2, 1), (0, 1)]),
@@ -328,7 +328,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1, 2, 3],
                     "group": ["A", "A", "A"],
-                    "dissolve_members": [[1, 5], None, [3, 50, 789]],
+                    "dissolve_members": [["1", "5"], None, ["3", "50", "789"]],
                 },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -343,7 +343,7 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1, 3],
                     "group": ["A", "A"],
-                    "dissolve_members": [[1, 2, 5], [3, 50, 789]],
+                    "dissolve_members": [["1", "2", "5"], ["3", "50", "789"]],
                 },
                 geometry=[
                     Polygon([(0, 0), (2, 0), (2, 1), (0, 1)]),
