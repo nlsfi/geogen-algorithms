@@ -4,14 +4,17 @@ argmax
 bbox
 cartagen
 centroid
+centroids
 chaikin
 changelog
 concat
 coords
 const
 crs
+dataframe
 densify
 dest
+dtype
 dx
 dy
 fid
