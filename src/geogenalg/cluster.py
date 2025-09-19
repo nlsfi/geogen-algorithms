@@ -102,3 +102,29 @@ def reduce_nearby_points_by_clustering(
         clustered_points_gdfs.append(representative_point_gdf)
 
     return concat(clustered_points_gdfs)
+
+
+def group_touching_or_intersecting_features(
+    data: gpd.GeoDataFrame, group_by_column: str = "_group"
+) -> None:
+    """Group touching or intersecting rows.
+
+    Args:
+        data: GeodataFrame that contains grouped rows.
+        group_by_column: Name of the column that contains the group id (integer 0-n).
+
+    """
+    if data.empty:
+        return
+
+    data[group_by_column] = -1
+    current_group = 0
+    for index in data.index:
+        if data.loc[index, group_by_column] != -1:
+            continue
+        touching_or_intersecting = data[
+            data.geometry.touches(data.loc[index, data.active_geometry_name])
+            | data.geometry.intersects(data.loc[index, data.active_geometry_name])
+        ].index
+        data.loc[touching_or_intersecting, group_by_column] = current_group
+        current_group += 1

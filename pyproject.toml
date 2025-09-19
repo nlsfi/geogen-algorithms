@@ -89,6 +89,7 @@ lint = [
     "mypy>=1.16.1",
     "pandas-stubs==2.2.3.241126",
     "ruff>=0.12.0",
+    "types-shapely>=2.1.0.20250917",
 ]
 
 [tool.ruff]
