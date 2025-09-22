@@ -17,6 +17,13 @@ from geogenalg import analyze, exaggeration, merge, selection
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.utility import dataframe_processing, fix_geometries
 
+SIMPLIFY_EDGE_THRESHOLD = 5
+SIMPLIFY_EDGE_THRESHOLD_AFTER_NARROW_PARTS = 7.5
+SIMPLIFY_EDGE_THRESHOLD_AFTER_NARROW_GAPS = 8
+NARROW_GAPS_THRESHOLD = 12
+BUFFER_SIZE_FOR_NARROW_PARTS = 3
+BUFFER_SIZE_FOR_NARROW_GAPS = 3.5
+
 
 @dataclass
 class AlgorithmOptions:
@@ -67,7 +74,11 @@ def create_generalized_buildings(
     options: AlgorithmOptions,
     output_path: str,
 ) -> None:
-    """Create GeoDataFrames and pass them to the generalization function.
+    """Wrap the building generalization workflow for use with GeoPackages.
+
+    This function reads input building geometries from a GeoPackage, applies
+    the generalize_buildings algorithm with the provided options, and writes
+    the generalized buildings back to disk as a new GeoPackage.
 
     Args:
     ----
@@ -281,15 +292,15 @@ def generalize_polygon_buildings(
     result_gdf = input_gdf.copy()
 
     # Simplify polygons using CartaGen Ruas simplification
-    result_gdf = _simplify_buildings(result_gdf, 5)
+    result_gdf = _simplify_buildings(result_gdf, SIMPLIFY_EDGE_THRESHOLD)
     simplified_gdf = result_gdf.copy()
 
-    # Buffer the narrow building parts by 3 meters
+    # Buffer the narrow building parts
     narrow_parts_gdf = exaggeration.extract_narrow_polygon_parts(
         result_gdf, options.point_size
     )
     narrow_parts_gdf.geometry = narrow_parts_gdf.geometry.buffer(
-        (3), cap_style="flat", join_style="mitre"
+        (BUFFER_SIZE_FOR_NARROW_PARTS), cap_style="flat", join_style="mitre"
     )
 
     # Dissolve the expanded narrow parts and already large enough parts
@@ -299,7 +310,9 @@ def generalize_polygon_buildings(
     )
 
     # Simplify polygons again using CartaGen Ruas simplification
-    result_gdf = _simplify_buildings(result_gdf, 7.5)
+    result_gdf = _simplify_buildings(
+        result_gdf, SIMPLIFY_EDGE_THRESHOLD_AFTER_NARROW_PARTS
+    )
 
     # Subtract buildings from the background
     result_gdf = fix_geometries.drop_empty_geometries(result_gdf)
@@ -312,8 +325,10 @@ def generalize_polygon_buildings(
         crs=input_gdf.crs,
     )
 
-    # Find areas where buildings are less than 12 meters apart
-    narrow_gaps_gdf = exaggeration.extract_narrow_polygon_parts(difference_gdf, 12)
+    # Find areas where buildings are less than NARROW_GAPS_THRESHOLD meters apart
+    narrow_gaps_gdf = exaggeration.extract_narrow_polygon_parts(
+        difference_gdf, NARROW_GAPS_THRESHOLD
+    )
 
     # Remove areas from narrow gaps where actual buildings exist —
     # do not want to widen gaps that already contain building
@@ -323,7 +338,7 @@ def generalize_polygon_buildings(
 
     # Expand narrow gaps
     narrow_gaps_gdf = narrow_gaps_gdf.geometry.buffer(
-        (3.5), cap_style="flat", join_style="mitre"
+        BUFFER_SIZE_FOR_NARROW_GAPS, cap_style="flat", join_style="mitre"
     )
 
     # Subtract expanded gaps from the generalized buildings
@@ -335,7 +350,9 @@ def generalize_polygon_buildings(
     )
 
     # Simplify polygons once again
-    result_gdf = _simplify_buildings(result_gdf, 8)
+    result_gdf = _simplify_buildings(
+        result_gdf, SIMPLIFY_EDGE_THRESHOLD_AFTER_NARROW_GAPS
+    )
 
     # Remove holes smaller than the hole_threshold size
     result_gdf = selection.remove_small_holes(result_gdf, options.hole_threshold)
@@ -445,13 +462,19 @@ def _add_attributes_for_area_and_angle(
 def _simplify_buildings(
     input_gdf: gpd.GeoDataFrame, edge_threshold: float
 ) -> gpd.GeoDataFrame:
-    """Simplifiy building geometries using the Cartagen Ruas algorithm.
+    """Simplifiy building geometries using the Cartagen Ruas simplification algorithm.
 
-    Returns
+    Args:
+    ----
+        input_gdf: A GeoDataFrame containing Polygon or MultiPolygon geometries
+        edge_threshold: Minimum edge length to preserve. Edges shorter than this
+              threshold will be simplified.
+
+    Returns:
     -------
         A GeoDataFrame containing simplified polygon geometries.
 
-    Raises
+    Raises:
     ------
         GeometryTypeError: If the input GeoDataFrame contains other than
               Polygon or MultiPolygon geometries.
