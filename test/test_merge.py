@@ -134,9 +134,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
 @pytest.mark.parametrize(
     (
         "input_gdf",
-        "by_column",
-        "unique_key_column",
-        "dissolve_members_column",
         "expected_gdf",
     ),
     [
@@ -145,9 +142,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                 {"id": [1], "group": ["A"]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {"id": [1], "group": ["A"], "dissolve_members": [None]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
@@ -161,9 +155,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {"id": [1], "group": ["A"], "dissolve_members": [["1", "2"]]},
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
@@ -177,9 +168,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(2, 0), (3, 0), (3, 1), (2, 1)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {"id": [1, 2], "group": ["A", "B"], "dissolve_members": [None, None]},
                 geometry=[
@@ -189,13 +177,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
             ),
         ),
         (
-            gpd.GeoDataFrame(columns=["id", "group"], geometry=[]),
-            "group",
-            "id",
-            "dissolve_members",
-            gpd.GeoDataFrame(columns=["id", "group"], geometry=[]),
-        ),
-        (
             gpd.GeoDataFrame(
                 {"group": ["A", "A"], "id": [1, 2]},
                 geometry=[
@@ -203,9 +184,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(2, 2), (3, 2), (3, 3), (2, 3)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {"group": ["A", "A"], "id": [1, 2], "dissolve_members": [None, None]},
                 geometry=[
@@ -227,9 +205,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(1, 1), (3, 1), (3, 3), (1, 3)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {
                     "group": ["A", "B"],
@@ -257,9 +232,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {
                     "id": [1],
@@ -282,9 +254,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(1.9, 0), (3, 0), (3, 1), (1.9, 1)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {
                     "id": [1],
@@ -308,9 +277,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(1, 2), (2, 2), (2, 3), (1, 3)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {
                     "id": [1, 3],
@@ -336,9 +302,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
                     Polygon([(2.1, 0), (3, 0), (3, 1), (2.1, 1)]),
                 ],
             ),
-            "group",
-            "id",
-            "dissolve_members",
             gpd.GeoDataFrame(
                 {
                     "id": [1, 3],
@@ -356,7 +319,6 @@ def test_merges_lines_with_same_attribute_value_into_one(
         "single polygon",
         "two polygons in same group should dissolve",
         "two polygons in different groups should not dissolve",
-        "empty GeoDataFrame should return input GeoDataFrame",
         "two separate polygons in same group should not dissolve",
         "three intersecting polygons with extra attributes, two in same group",
         "polygons already have attribute for dissolve_members",
@@ -367,17 +329,17 @@ def test_merges_lines_with_same_attribute_value_into_one(
 )
 def test_dissolve_and_inherit_attributes(
     input_gdf: gpd.GeoDataFrame,
-    by_column: str,
-    unique_key_column: str,
-    dissolve_members_column: str,
     expected_gdf: gpd.GeoDataFrame,
 ):
     result_gdf = merge.dissolve_and_inherit_attributes(
-        input_gdf, by_column, unique_key_column, dissolve_members_column
+        input_gdf,
+        by_column="group",
+        unique_key_column="id",
+        dissolve_members_column="dissolve_members",
     )
 
-    result_sorted = result_gdf.sort_values(unique_key_column).reset_index(drop=True)
-    expected_sorted = expected_gdf.sort_values(unique_key_column).reset_index(drop=True)
+    result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
+    expected_sorted = expected_gdf.sort_values("id").reset_index(drop=True)
 
     # Check geometries
     for result_geom, expected_geom in zip(
@@ -391,6 +353,20 @@ def test_dissolve_and_inherit_attributes(
     result_attrs = result_sorted.drop(columns="geometry")
     expected_attrs = expected_sorted.drop(columns="geometry")
     assert_frame_equal(result_attrs, expected_attrs)
+
+
+def test_dissolve_and_inherit_attributes_handles_empty_gdf_correctly():
+    input_gdf = gpd.GeoDataFrame(columns=["id", "group"], geometry=[])
+    expected_gdf = gpd.GeoDataFrame(columns=["id", "group"], geometry=[])
+
+    result_gdf = merge.dissolve_and_inherit_attributes(
+        input_gdf,
+        by_column="group",
+        unique_key_column="id",
+        dissolve_members_column="dissolve_members",
+    )
+
+    assert result_gdf.equals(expected_gdf)
 
 
 def test_dissolve_and_inherit_attributes_raises_on_non_polygon_geometry():
@@ -407,4 +383,6 @@ def test_dissolve_and_inherit_attributes_raises_on_non_polygon_geometry():
         GeometryTypeError,
         match=re.escape("Dissolve only supports Polygon or MultiPolygon geometries."),
     ):
-        merge.dissolve_and_inherit_attributes(invalid_gdf, "group", "id")
+        merge.dissolve_and_inherit_attributes(
+            invalid_gdf, by_column="group", unique_key_column="id"
+        )
