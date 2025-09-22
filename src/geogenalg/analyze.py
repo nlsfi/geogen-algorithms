@@ -20,13 +20,23 @@ def calculate_coverage(
     base_features: GeoDataFrame,
     coverage_attribute: str = "coverage",
 ) -> GeoDataFrame:
-    """Calculate the percentage area coverage of base features by overlay features.
+    """Calculate the percentage of area covered by overlay features on base features.
+
+    Args:
+    ----
+        overlay_features: GeoDataFrame whose geometries are overlaid on top of the base.
+        base_features: GeoDataFrame to which the coverage percentage is written.
+        coverage_attribute: Name of the output column that will hold the coverage (%).
 
     Returns:
-        GeoDataFrame: Base features with new 'coverage' column, no unnecessary columns
+    -------
+        GeoDataFrame
+            A version of 'base_features' with an additional 'coverage_attribute' column.
+            Unnecessary columns are dropped.
 
     Raises:
-        ValueError: If CRS is missing or not projected.
+    ------
+    ValueError: If CRS is not projected for both layers.
 
     """
     if (
