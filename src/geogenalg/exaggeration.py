@@ -40,6 +40,8 @@ def extract_narrow_polygon_parts(
         msg = "Extract narrow parts only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
+    # Apply buffer(0) to clean geometries. It fixes invalid polygons and
+    # ensures resulting geometries are valid before further processing.
     input_gdf.geometry = input_gdf.geometry.buffer(0)
     wide_parts_gdf = input_gdf.copy()
 
