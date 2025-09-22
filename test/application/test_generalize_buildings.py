@@ -25,7 +25,7 @@ from geogenalg.application.generalize_buildings import (
     _dissolve_touching_buildings,
     _filter_buildings_by_area_and_class,
     _simplify_buildings,
-    generalize_buildings,
+    create_generalized_buildings,
 )
 from geogenalg.core.exceptions import GeometryTypeError
 
@@ -34,9 +34,7 @@ if TYPE_CHECKING:
 from cartagen.algorithms import buildings
 
 
-def test_generalize_buildings_50k(
-    testdata_path: Path,
-) -> None:
+def test_generalize_buildings_50k(testdata_path: Path) -> None:
     """
     Test generalizing buildings with parameters to the 1: 50 000 scale
     """
@@ -44,7 +42,7 @@ def test_generalize_buildings_50k(
     control_path = testdata_path / "buildings_generalized_50k_helsinki.gpkg"
 
     temp_dir = tempfile.TemporaryDirectory()
-    output_path = temp_dir.name + "/generalized_buildings_50k.gpkg"
+    output_path = Path(temp_dir.name) / "generalized_buildings_50k.gpkg"
 
     options = AlgorithmOptions(
         area_threshold_for_all_buildings=5,
@@ -60,57 +58,31 @@ def test_generalize_buildings_50k(
         building_class_column="kayttotarkoitus",
     )
 
-    layers_info = gpd.list_layers(input_path)
-    layer_names = layers_info["name"].tolist()
+    create_generalized_buildings(input_path, options, str(output_path))
 
-    input_gdfs = [gpd.read_file(input_path, layer=name) for name in layer_names]
+    control_large = gpd.read_file(control_path, layer="large_buildings")
+    control_small = gpd.read_file(control_path, layer="small_buildings")
+    result_large = gpd.read_file(output_path, layer="large_buildings")
+    result_small = gpd.read_file(output_path, layer="small_buildings")
 
-    result_gdfs = generalize_buildings(
-        input_gdfs,
-        options,
-    )
+    control_large = control_large.sort_values("geometry").reset_index(drop=True)
+    control_small = control_small.sort_values("geometry").reset_index(drop=True)
+    result_large = result_large.sort_values("geometry").reset_index(drop=True)
+    result_small = result_small.sort_values("geometry").reset_index(drop=True)
 
-    for layer_name, result_gdf in result_gdfs.items():
-        assert result_gdf is not None
-        result_gdf.to_file(output_path, layer=layer_name, driver="GPKG")
-
-    control_large_buildings: gpd.GeoDataFrame = gpd.read_file(
-        control_path, layer="large_buildings"
-    )
-    control_small_buildings: gpd.GeoDataFrame = gpd.read_file(
-        control_path, layer="small_buildings"
-    )
-
-    result_large_buildings = gpd.read_file(output_path, layer="large_buildings")
-    result_small_buildings = gpd.read_file(output_path, layer="small_buildings")
-
-    control_large_buildings = control_large_buildings.sort_values(
-        "geometry"
-    ).reset_index(drop=True)
-    control_small_buildings = control_small_buildings.sort_values(
-        "geometry"
-    ).reset_index(drop=True)
-    result_large_buildings = result_large_buildings.sort_values("geometry").reset_index(
-        drop=True
-    )
-    result_small_buildings = result_small_buildings.sort_values("geometry").reset_index(
-        drop=True
-    )
-
-    control_large_buildings["geometry"] = control_large_buildings.buffer(0)
-    result_large_buildings["geometry"] = result_large_buildings.buffer(0)
+    # Clean geometries: buffer(0) fixes invalid polygons/self-intersections
+    control_large["geometry"] = control_large.buffer(0)
+    result_large["geometry"] = result_large.buffer(0)
 
     geopandas.testing.assert_geodataframe_equal(
-        control_large_buildings, result_large_buildings, check_index_type=False
+        control_large, result_large, check_index_type=False
     )
     geopandas.testing.assert_geodataframe_equal(
-        control_small_buildings, result_small_buildings, check_index_type=False
+        control_small, result_small, check_index_type=False
     )
 
 
-def test_generalize_buildings_100k(
-    testdata_path: Path,
-) -> None:
+def test_generalize_buildings_100k(testdata_path: Path) -> None:
     """
     Test generalizing buildings with parameters to the 1: 100 000 scale
     """
@@ -118,7 +90,7 @@ def test_generalize_buildings_100k(
     control_path = testdata_path / "buildings_generalized_100k_helsinki.gpkg"
 
     temp_dir = tempfile.TemporaryDirectory()
-    output_path = temp_dir.name + "/generalized_buildings_100k.gpkg"
+    output_path = Path(temp_dir.name) / "generalized_buildings_100k.gpkg"
 
     options = AlgorithmOptions(
         area_threshold_for_all_buildings=10,
@@ -134,51 +106,27 @@ def test_generalize_buildings_100k(
         building_class_column="kayttotarkoitus",
     )
 
-    layers_info = gpd.list_layers(input_path)
-    layer_names = layers_info["name"].tolist()
+    create_generalized_buildings(input_path, options, str(output_path))
 
-    input_gdfs = [gpd.read_file(input_path, layer=name) for name in layer_names]
+    control_large = gpd.read_file(control_path, layer="large_buildings")
+    control_small = gpd.read_file(control_path, layer="small_buildings")
+    result_large = gpd.read_file(output_path, layer="large_buildings")
+    result_small = gpd.read_file(output_path, layer="small_buildings")
 
-    result_gdfs = generalize_buildings(
-        input_gdfs,
-        options,
-    )
+    control_large = control_large.sort_values("geometry").reset_index(drop=True)
+    control_small = control_small.sort_values("geometry").reset_index(drop=True)
+    result_large = result_large.sort_values("geometry").reset_index(drop=True)
+    result_small = result_small.sort_values("geometry").reset_index(drop=True)
 
-    for layer_name, result_gdf in result_gdfs.items():
-        assert result_gdf is not None
-        result_gdf.to_file(output_path, layer=layer_name, driver="GPKG")
-
-    control_large_buildings: gpd.GeoDataFrame = gpd.read_file(
-        control_path, layer="large_buildings"
-    )
-    control_small_buildings: gpd.GeoDataFrame = gpd.read_file(
-        control_path, layer="small_buildings"
-    )
-
-    result_large_buildings = gpd.read_file(output_path, layer="large_buildings")
-    result_small_buildings = gpd.read_file(output_path, layer="small_buildings")
-
-    control_large_buildings = control_large_buildings.sort_values(
-        "geometry"
-    ).reset_index(drop=True)
-    control_small_buildings = control_small_buildings.sort_values(
-        "geometry"
-    ).reset_index(drop=True)
-    result_large_buildings = result_large_buildings.sort_values("geometry").reset_index(
-        drop=True
-    )
-    result_small_buildings = result_small_buildings.sort_values("geometry").reset_index(
-        drop=True
-    )
-
-    control_large_buildings["geometry"] = control_large_buildings.buffer(0)
-    result_large_buildings["geometry"] = result_large_buildings.buffer(0)
+    # Clean geometries: buffer(0) fixes invalid polygons/self-intersections
+    control_large["geometry"] = control_large.buffer(0)
+    result_large["geometry"] = result_large.buffer(0)
 
     geopandas.testing.assert_geodataframe_equal(
-        control_large_buildings, result_large_buildings, check_index_type=False
+        control_large, result_large, check_index_type=False
     )
     geopandas.testing.assert_geodataframe_equal(
-        control_small_buildings, result_small_buildings, check_index_type=False
+        control_small, result_small, check_index_type=False
     )
 
 
@@ -327,7 +275,7 @@ def test_filter_buildings_by_area_and_class(
         "both polygons should be retained",
     ],
 )
-def test_filter_with_varied_geometries(
+def test_filter_buildings_by_area_and_class_with_varied_geometries(
     original_areas: list[int],
     classes: list[str],
     geometries: list[BaseGeometry],

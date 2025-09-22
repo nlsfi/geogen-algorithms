@@ -145,29 +145,42 @@ def remove_large_polygons(
 
 
 def remove_small_polygons(
-    input_gdf: gpd.GeoDataFrame, area_threshold: float
+    polygons_gdf: gpd.GeoDataFrame, area_threshold: float
 ) -> gpd.GeoDataFrame:
-    """Remove polygons that are smaller than the area_threshold.
+    """Remove polygons smaller than a minimum area threshold.
 
     Args:
     ----
-        input_gdf: Input GeoDataFrame with polygons
-        area_threshold: Minimum allowed area
+        polygons_gdf: GeoDataFrame containing Polygon or MultiPolygon geometries.
+        area_threshold: Minimum area in the units of the projected CRS
+            (e.g. square metres). Polygons with smaller area are removed.
 
     Returns:
     -------
-        A new GeoDataFrame containing only polygons with area greater or equal to the
-              threshold.
+        GeoDataFrame
+            A version of the input GeoDataFrame where only polygons with
+            area greater than or equal to the threshold remain.
+
+    Raises:
+    ------
+    ValueError: If area_threshold <= 0 or CRS is not projected.
 
     """
-    return input_gdf[
-        ~(
-            input_gdf.geometry.apply(
-                lambda geom: isinstance(geom, (Polygon, MultiPolygon))
-            )
-        )
-        | (input_gdf.geometry.area >= area_threshold)
+    if area_threshold <= 0:
+        msg = "area_threshold must be > 0."
+        raise ValueError(msg)
+
+    if polygons_gdf.crs is None or not polygons_gdf.crs.is_projected:
+        msg = "Input layer must have a projected CRS to compute area."
+        raise ValueError(msg)
+
+    # Drop missing/empty geometries before area calculation
+    gdf = polygons_gdf.dropna(subset=[polygons_gdf.geometry.name]).loc[
+        ~polygons_gdf.geometry.is_empty
     ]
+
+    mask = gdf.geometry.area >= area_threshold
+    return gdf.loc[mask].copy()
 
 
 def remove_small_holes(
