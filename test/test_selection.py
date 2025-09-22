@@ -13,8 +13,16 @@ from pandas.testing import assert_frame_equal
 from shapely import MultiLineString
 from shapely.geometry import LineString, Point, Polygon
 
-from geogenalg import selection
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.selection import (
+    reduce_nearby_points_by_selecting,
+    remove_disconnected_short_lines,
+    remove_large_polygons,
+    remove_parts_of_lines_on_polygon_edges,
+    remove_small_holes,
+    remove_small_polygons,
+    split_polygons_by_point_intersection,
+)
 
 
 @pytest.mark.parametrize(
@@ -58,7 +66,7 @@ def test_remove_short_lines(
         geometry=input_lines,
         crs="EPSG:3067",
     )
-    result = selection.remove_disconnected_short_lines(lines_gdf, threshold)
+    result = remove_disconnected_short_lines(lines_gdf, threshold)
     assert len(result) == expected_num_lines
 
 
@@ -117,7 +125,7 @@ def test_split_polygons_by_point_containment(
     expected_containing_point: set[int],
     expected_not_containing_point: set[int],
 ):
-    with_points, without_points = selection.split_polygons_by_point_intersection(
+    with_points, without_points = split_polygons_by_point_intersection(
         polygon_gdf, point_gdf
     )
 
@@ -227,9 +235,7 @@ def test_remove_parts_of_lines_on_polygon_edges(
     polygons_gdf: gpd.GeoDataFrame,
     expected_gdf: gpd.GeoDataFrame,
 ):
-    result_gdf = selection.remove_parts_of_lines_on_polygon_edges(
-        lines_gdf, polygons_gdf
-    )
+    result_gdf = remove_parts_of_lines_on_polygon_edges(lines_gdf, polygons_gdf)
 
     assert_frame_equal(
         result_gdf.sort_index().reset_index(drop=True),
@@ -285,10 +291,10 @@ def test_remove_parts_of_lines_on_polygon_edges(
 def test_remove_large_polygons_correct(
     input_polygons: list[Polygon], threshold: float, expected_polygons: list[Polygon]
 ):
-    input_gdf = gpd.GeoDataFrame(geometry=input_polygons)
+    input_gdf = gpd.GeoDataFrame(geometry=input_polygons, crs="EPSG:3067")
     expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
 
-    result_gdf = selection.remove_large_polygons(input_gdf, threshold)
+    result_gdf = remove_large_polygons(input_gdf, threshold)
 
     assert_frame_equal(
         result_gdf.sort_index().reset_index(drop=True),
@@ -343,10 +349,10 @@ def test_remove_large_polygons_correct(
 def test_remove_small_polygons_correct(
     input_polygons: list[Polygon], threshold: float, expected_polygons: list[Polygon]
 ):
-    input_gdf = gpd.GeoDataFrame(geometry=input_polygons)
+    input_gdf = gpd.GeoDataFrame(geometry=input_polygons, crs="EPSG:3067")
     expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
 
-    result_gdf = selection.remove_small_polygons(input_gdf, threshold)
+    result_gdf = remove_small_polygons(input_gdf, threshold)
 
     assert_frame_equal(
         result_gdf.sort_index().reset_index(drop=True),
@@ -429,7 +435,7 @@ def test_remove_small_holes_correct(
     input_gdf = gpd.GeoDataFrame(geometry=input_polygons)
     expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
 
-    result_gdf = selection.remove_small_holes(input_gdf, hole_threshold)
+    result_gdf = remove_small_holes(input_gdf, hole_threshold)
 
     assert_frame_equal(
         result_gdf.sort_index().reset_index(drop=True),
@@ -579,7 +585,7 @@ def test_reduce_nearby_points_selects_points_correctly(
     distance_threshold: float,
     expected_gdf: gpd.GeoDataFrame,
 ):
-    result_gdf = selection.reduce_nearby_points_by_selecting(
+    result_gdf = reduce_nearby_points_by_selecting(
         input_gdf,
         reference_gdf,
         distance_threshold,
@@ -616,6 +622,58 @@ def test_reduce_nearby_points_by_selecting_raises_on_invalid_geometry():
             "reduce_nearby_points_by_selecting only supports Point geometries."
         ),
     ):
-        selection.reduce_nearby_points_by_selecting(
-            invalid_gdf, None, 2.0, "priority", "id"
-        )
+        reduce_nearby_points_by_selecting(invalid_gdf, None, 2.0, "priority", "id")
+
+
+def test_remove_small_polygons_a():  # test A - simple case of a few different-sized squares
+    gdf = gpd.GeoDataFrame(
+        {"id": [0, 1, 2]},
+        geometry=[
+            Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),  # 3 m x 3 m = 9 m²
+            Polygon([(0, 0), (4, 0), (4, 4), (0, 4)]),  # 4 m x 4 m = 16 m²
+            Polygon([(0, 0), (5, 0), (5, 5), (0, 5)]),  # 5 m x 5 m = 25 m²
+        ],
+        crs="EPSG:3067",
+    )
+
+    threshold = 12.0
+    result = remove_small_polygons(gdf, area_threshold=threshold)
+
+    for idx, _geom in enumerate(gdf.geometry):
+        "remains" if idx in result["id"].to_numpy() else "is removed"
+
+    assert len(result) == 2  # number of polygons that should remain
+
+
+def test_remove_small_polygons_b():  # test B - handling None and empty geometries
+    gdf = gpd.GeoDataFrame(
+        {"id": [0, 1, 2]},
+        geometry=[
+            None,  # should be ignored
+            Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
+            Polygon(),  # should be ignored
+        ],
+        crs="EPSG:3067",
+    )
+
+    threshold = 5.0
+    result = remove_small_polygons(gdf, area_threshold=threshold)
+
+    for idx, geom in enumerate(gdf.geometry):
+        if geom is None or geom.is_empty:
+            pass
+        else:
+            "remains" if idx in result["id"].to_numpy() else " is removed"
+
+    assert len(result) == 0  # number of polygons that should remain
+
+
+def test_remove_small_polygons_c():  # test C- handling CRS problems
+    gdf = gpd.GeoDataFrame(
+        {"id": [0]},
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        crs="EPSG:4326",  # not projected (degrees)
+    )
+
+    with pytest.raises(ValueError, match="projected CRS"):
+        remove_small_polygons(gdf, area_threshold=1.0)
