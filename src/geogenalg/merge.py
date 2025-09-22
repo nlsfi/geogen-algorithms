@@ -109,6 +109,8 @@ def dissolve_and_inherit_attributes(
     if input_gdf.empty:
         return input_gdf
 
+    # Apply buffer(0) to clean geometries. It fixes invalid polygons and
+    # ensures resulting geometries are valid before further processing.
     input_gdf.geometry = input_gdf.buffer(0)
 
     dissolved_gdf: gpd.GeoDataFrame = (
