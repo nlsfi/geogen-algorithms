@@ -22,6 +22,7 @@ fids
 gdf
 geogenalg
 geoms
+geopackage
 geopandas
 gpd
 hypot
