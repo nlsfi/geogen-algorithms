@@ -7,7 +7,7 @@
 
 import geopandas as gpd
 from pandas import Series, concat
-from sklearn.cluster import DBSCAN  # noqa: SC200
+from sklearn.cluster import DBSCAN
 
 
 def generalize_boulders_in_water(
