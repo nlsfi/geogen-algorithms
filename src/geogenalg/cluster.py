@@ -5,19 +5,128 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-import geopandas as gpd
-from pandas import concat
-from shapely import Point
+from collections.abc import Callable
+from statistics import mean
+
+from geopandas.geodataframe import GeoDataFrame
+from pandas import Series, concat
+from shapely import MultiPoint, Point
+from sklearn.cluster import DBSCAN
 
 from geogenalg.core.exceptions import GeometryTypeError
 
 
+def dbscan_cluster_ids(
+    input_gdf: GeoDataFrame,
+    cluster_distance: float,
+    *,
+    cluster_column_name: str = "cluster_id",
+    ignore_z: bool = True,
+) -> Series:
+    """Create Series of cluster ids.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame containing Points to be clustered.
+        cluster_distance: Points within this distance will be considered a
+            cluster, must be > 0.0.
+        cluster_column_name: Name of the returned Series.
+        ignore_z: Whether the point's z coordinate should affect clustering.
+
+    Returns:
+    -------
+        Series of int64 denoting which cluster the corresponding point belongs
+        to (-1 meaning the point does not belong to any cluster).
+
+    """
+    clusters = DBSCAN(
+        eps=cluster_distance,  # noqa: SC200
+        min_samples=2,
+    ).fit(input_gdf.get_coordinates(include_z=not ignore_z).to_numpy())
+
+    return Series(clusters.labels_, name=cluster_column_name)
+
+
+def get_cluster_centroids(
+    input_gdf: GeoDataFrame,
+    cluster_distance: float,
+    unique_id_column: str,
+    *,
+    aggregation_functions: dict[str, Callable | str] | None = None,
+    old_ids_column: str = "old_ids",
+) -> GeoDataFrame:
+    """Cluster points in a GeoDataFrame and return their centroids.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame containing Points to be clustered.
+        cluster_distance: Points within this distance will be clustered, must
+            be > 0.0.
+        unique_id_column: Name of a column containing unique identifiers in the
+            GeoDataFrame
+        aggregation_functions: Dictionary of aggregation functions, which is
+            passed to geopandas' dissolve function. The keys should correspond
+            to column names in the input GeoDataFrame. If aggregation function
+            is not specified for column, "first" will be used.
+        old_ids_column: Name of the column in the output GeoDataFrame
+            containing a tuple of the cluster's old identifiers.
+
+    Returns:
+    -------
+        A new GeoDataFrame containing the centroids of each cluster and
+        identifiers of the original points as a tuple in a new column.
+
+    """
+    cluster_id_column = "__cluster_id"
+    cluster_ids = dbscan_cluster_ids(
+        input_gdf,
+        cluster_distance,
+        cluster_column_name=cluster_id_column,
+    )
+
+    gdf = GeoDataFrame(concat([input_gdf, cluster_ids], axis=1))
+    gdf = gdf[gdf[cluster_id_column] != -1]
+    gdf[old_ids_column] = gdf[unique_id_column]
+
+    if aggregation_functions is None:
+        aggregation_functions = {}
+
+    for column in gdf:
+        if column in {gdf.geometry.name, old_ids_column, cluster_id_column}:
+            continue
+
+        if column not in aggregation_functions:
+            aggregation_functions[str(column)] = "first"
+
+    aggregation_functions[old_ids_column] = lambda ids: tuple(ids.to_list())
+
+    gdf = gdf.dissolve(
+        by=cluster_id_column,
+        as_index=False,
+        aggfunc=aggregation_functions,  # noqa: SC200
+    )
+    gdf = gdf.drop(columns=[cluster_id_column])
+
+    def _make_centroid(geom: MultiPoint) -> Point:
+        centroid = geom.centroid
+
+        if geom.has_z:
+            mean_z = mean([part.z for part in geom.geoms])
+            centroid = Point(centroid.x, centroid.y, mean_z)
+
+        return centroid
+
+    gdf.geometry = gdf.geometry.apply(_make_centroid)
+
+    return gdf
+
+
 def reduce_nearby_points_by_clustering(
-    input_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
     reduce_threshold: float,
     unique_key_column: str,
     cluster_members_column: str = "cluster_members",
-) -> gpd.GeoDataFrame:
+) -> GeoDataFrame:
     """Reduce the number of points by clustering and replacing them with their centroid.
 
     Note:
@@ -51,17 +160,17 @@ def reduce_nearby_points_by_clustering(
 
     buffered_gdf.geometry = buffered_gdf.buffer(reduce_threshold)
 
-    dissolved_gdf: gpd.GeoDataFrame = (
+    dissolved_gdf: GeoDataFrame = (
         buffered_gdf.dissolve().explode(index_parts=True).reset_index(drop=True)
     )
 
-    clustered_points_gdfs: list[gpd.GeoDataFrame] = []
+    clustered_points_gdfs: list[GeoDataFrame] = []
 
     for cluster_polygon in dissolved_gdf.geometry:
         in_cluster_gdf = input_gdf[input_gdf.geometry.within(cluster_polygon)]
 
         min_id = in_cluster_gdf[unique_key_column].min()
-        representative_point_gdf: gpd.GeoDataFrame = in_cluster_gdf.loc[
+        representative_point_gdf: GeoDataFrame = in_cluster_gdf.loc[
             in_cluster_gdf[unique_key_column] == min_id
         ].copy()
 
