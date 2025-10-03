@@ -74,10 +74,12 @@ def get_cluster_centroids(
     Returns:
     -------
         A new GeoDataFrame containing the centroids of each cluster and
-        identifiers of the original points as a tuple in a new column.
+        identifiers of the original points as a tuple in a new column. If the
+        input points have a z value, the centroid's z value will be the mean of
+        all the points in the cluster.
 
     """
-    cluster_id_column = "__cluster_id"
+    cluster_id_column = "__cluster_id"  # temporary column
     cluster_ids = dbscan_cluster_ids(
         input_gdf,
         cluster_distance,
@@ -85,12 +87,19 @@ def get_cluster_centroids(
     )
 
     gdf = GeoDataFrame(concat([input_gdf, cluster_ids], axis=1))
+
+    # Filter out non-clustered points denoted by the -1 value
     gdf = gdf[gdf[cluster_id_column] != -1]
+
+    # Copy id column, so all the cluster's ids can be aggregated into it later
     gdf[old_ids_column] = gdf[unique_id_column]
 
     if aggregation_functions is None:
         aggregation_functions = {}
 
+    # If the aggfunc parameter is passed into dissolve() and columns are
+    # missing, they are dropped. Therefore explicitly define a default
+    # aggregation function for each column if one was not already given.
     for column in gdf:
         if column in {gdf.geometry.name, old_ids_column, cluster_id_column}:
             continue
@@ -107,6 +116,8 @@ def get_cluster_centroids(
     )
     gdf = gdf.drop(columns=[cluster_id_column])
 
+    # Dissolve aggregates geometries into a MultiPoint, turn into single point
+    # at its centroid.
     def _make_centroid(geom: MultiPoint) -> Point:
         centroid = geom.centroid
 
