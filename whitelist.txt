@@ -47,6 +47,7 @@ sindex
 sklearn
 starmap
 tolist
+typer
 unary
 utils
 visvalingam
