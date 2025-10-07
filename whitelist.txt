@@ -27,6 +27,7 @@ geogenalg
 geoms
 geopackage
 geopandas
+geoseries
 gpd
 hypot
 idx
