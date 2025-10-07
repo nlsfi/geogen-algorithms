@@ -12,6 +12,7 @@ from geopandas import GeoDataFrame, overlay
 from shapely.geometry import LineString, Polygon
 
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 def calculate_coverage(
@@ -128,7 +129,7 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
               polygon geometries.
 
     """
-    if not all(input_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])):
+    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
         msg = "Classify polygons only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 

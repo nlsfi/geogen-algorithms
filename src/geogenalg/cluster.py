@@ -7,6 +7,7 @@
 
 from collections.abc import Callable
 from statistics import mean
+from typing import Any
 
 from geopandas.geodataframe import GeoDataFrame
 from pandas import Series, concat
@@ -52,7 +53,7 @@ def get_cluster_centroids(
     cluster_distance: float,
     unique_id_column: str,
     *,
-    aggregation_functions: dict[str, Callable | str] | None = None,
+    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None = None,
     old_ids_column: str = "old_ids",
 ) -> GeoDataFrame:
     """Cluster points in a GeoDataFrame and return their centroids.

@@ -9,6 +9,7 @@
 import geopandas as gpd
 
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 def extract_narrow_polygon_parts(
@@ -36,7 +37,7 @@ def extract_narrow_polygon_parts(
               polygon geometries.
 
     """
-    if not all(input_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])):
+    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
         msg = "Extract narrow parts only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 

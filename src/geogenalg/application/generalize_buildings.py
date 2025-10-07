@@ -16,6 +16,7 @@ from shapely.geometry import Polygon
 from geogenalg import analyze, exaggeration, merge, selection
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.utility import dataframe_processing, fix_geometries
+from geogenalg.utility.validation import check_gdf_geometry_type
 
 SIMPLIFY_EDGE_THRESHOLD = 5
 SIMPLIFY_EDGE_THRESHOLD_AFTER_NARROW_PARTS = 7.5
@@ -282,7 +283,7 @@ def generalize_polygon_buildings(
               Polygon or MultiPolygon geometries.
 
     """
-    if not all(input_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])):
+    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
         msg = (
             "generalize_polygon_buildings only supports "
             + "Polygon or MultiPolygon geometries."
@@ -480,7 +481,7 @@ def _simplify_buildings(
               Polygon or MultiPolygon geometries.
 
     """
-    if not all(input_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])):
+    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
         msg = "Simplify buildings only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
