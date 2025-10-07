@@ -33,9 +33,9 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     unique_id_column: str
     """Name of column containing type of output feature."""
     feature_type_column: str
-    """Dictionary containing keys corresponding to a column in a geodataframe
-    and a function which will aggregate the column's value when turning
-    multiple points to a cluster."""
+    """Dictionary containing keys corresponding to a column in a GeoDataFrame
+    and a function which will aggregate the column's values when creating
+    centroid from multiple points."""
     aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
 
     def _process_polygons(
@@ -71,15 +71,16 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
         Args:
         ----
             data: GeoDataFrame containing Points and/or Polygons.
-            reference_data: If contains an value with they key "mask", new
-                clusters will not be generated outside of it.
+            reference_data: May contain a Polygon GeoDataFrame with the key
+                "mask". If so new centroids will not be created outside of its
+                features.
 
         Returns:
         -------
             GeoDataFrame with generalized data, which contains the newly
-            created cluster points and all input features which were not turned
-            into clusters. These can be distinguished by the value in the
-            column of the name set by the feature_type_column attribute.
+            created centroids and all input features which were not turned into
+            centroids. These can be distinguished by the value in the column of
+            the name set by the feature_type_column attribute.
 
         Raises:
         ------
@@ -120,12 +121,11 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
 
             clusters_from_points[self.identity_hash_column] = (
                 clusters_from_points.old_ids.apply(
-                    # TODO: MAKE SURE THE ORDER DOES NOT MATTER
-                    lambda ids: sha256("".join(ids).encode()).hexdigest(),
+                    lambda ids: sha256("".join(sorted(ids)).encode()).hexdigest(),
                 )
             )
 
-            clusters_from_points[self.feature_type_column] = "rock_cluster_from_point"
+            clusters_from_points[self.feature_type_column] = "centroid_from_point"
 
         if reference_data.get("mask") is not None:
             mask_gdf = reference_data["mask"]
@@ -140,9 +140,7 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
         clusters_from_polygons = GeoDataFrame()
         if not polygons.empty:
             clusters_from_polygons = self._process_polygons(polygons, mask_geom)
-            clusters_from_polygons[self.feature_type_column] = (
-                "rock_cluster_from_polygon"
-            )
+            clusters_from_polygons[self.feature_type_column] = "centroid_from_polygon"
 
         if not clusters_from_points.empty:
             clusters_from_points = clusters_from_points[
