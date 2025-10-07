@@ -35,7 +35,9 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     feature_type_column: str
     """Dictionary containing keys corresponding to a column in a GeoDataFrame
     and a function which will aggregate the column's values when creating
-    centroid from multiple points."""
+    centroid from multiple points. If the function is given as a string, it
+    must correspond to Pandas's aggregation function names. If no function is
+    given "first" will be used by default."""
     aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
 
     def _process_polygons(
