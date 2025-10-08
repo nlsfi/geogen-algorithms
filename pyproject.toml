@@ -37,11 +37,15 @@ dependencies = [
     "shapely==2.0.6",
     "shapelysmooth==0.2.1",
     "simplification==0.7.13",
+    "typer>=0.19.2",
 ]
 
 [project.urls]
 Homepage = "https://github.com/nlsfi/geogen-algorithms"
 Changelog = "https://github.com/nlsfi/geogen-algorithms/blob/main/CHANGELOG.md"
+
+[project.scripts]
+generalize = "geogenalg.main:main"
 
 [tool.setuptools]
 include-package-data = false
@@ -171,6 +175,11 @@ geopandas = "gpd"
     "D",       # pydocstyle
     "CPY",       # Missing copyright notice at top of file
     "INP001",     # implicit-namespace-package
+]
+
+"src/geogenalg/main.py" = [
+    "PLR0913", # too-many-arguments
+    "PLR0917", # too-many-positional-arguments
 ]
 
 [tool.flake8]
