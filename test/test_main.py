@@ -12,9 +12,26 @@ from geopandas import read_file
 from geopandas.testing import assert_geodataframe_equal
 from typer.testing import CliRunner
 
-from geogenalg.main import app
+from geogenalg.main import app, geopackage_uri
 
 runner = CliRunner()
+
+
+def test_geopackage_uri():
+    assert geopackage_uri("/path/to/geopackage.gpkg").file == "/path/to/geopackage.gpkg"
+    assert geopackage_uri("/path/to/geopackage.gpkg").layer_name is None
+
+    assert (
+        geopackage_uri("/path/to/geopackage.gpkg|layer").file
+        == "/path/to/geopackage.gpkg"
+    )
+    assert geopackage_uri("/path/to/geopackage.gpkg|layer").layer_name == "layer"
+
+    assert (
+        geopackage_uri('"/path/to/geopackage.gpkg|layer"').file
+        == "/path/to/geopackage.gpkg"
+    )
+    assert geopackage_uri('"/path/to/geopackage.gpkg|layer"').layer_name == "layer"
 
 
 def test_clusters_to_centroids(testdata_path: Path):
