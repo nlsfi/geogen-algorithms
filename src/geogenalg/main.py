@@ -47,8 +47,10 @@ def geopackage_uri(value: str) -> GeoPackageURI:
 
     expected_split_parts = 2
 
-    if "|" in value:
-        split = value.split("|")
+    stripped = value.strip("\"'")
+
+    if "|" in stripped:
+        split = stripped.split("|")
         if len(split) != expected_split_parts:
             return uri
 
@@ -71,17 +73,26 @@ GeoPackageArgument = Annotated[
     ),
 ]
 
+GeoPackageOption = Annotated[
+    GeoPackageURI | None,
+    typer.Option(
+        parser=geopackage_uri,
+        help=(
+            "Path to a GeoPackage, with layer name optionally specified, "
+            + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg|my_layer_name"'
+        ),
+    ),
+]
+
 app = typer.Typer()
 
 
-# PLR0913 meaning too-many-arguments and PLR0917 too-many-positional-arguments,
-# however there's probably no getting around having lots of arguments in the
-# command functions, so disable rule
 @app.command()
-def clusters_to_centroids(  # noqa: PLR0913, PLR0917
+def clusters_to_centroids(
     input_geopackage: GeoPackageArgument,
     output_geopackage: GeoPackageArgument,
     unique_id_column: Annotated[str, typer.Option()],
+    mask_data: GeoPackageOption = None,
     cluster_distance: float = 30.0,
     polygon_min_area: float = 4000.0,
     feature_type_column: str = "feature_type",
@@ -95,8 +106,14 @@ def clusters_to_centroids(  # noqa: PLR0913, PLR0917
         aggregation_functions=None,
     )
 
+    if mask_data is not None:
+        mask_gdf = read_file(mask_data.file, layer=mask_data.layer_name)
+        reference_data = {"mask": mask_gdf}
+    else:
+        reference_data = {}
+
     in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
-    output = algorithm.execute(in_gdf, reference_data={})
+    output = algorithm.execute(in_gdf, reference_data=reference_data)
     output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 
 

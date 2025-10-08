@@ -177,6 +177,11 @@ geopandas = "gpd"
     "INP001",     # implicit-namespace-package
 ]
 
+"src/geogenalg/main.py" = [
+    "PLR0913", # too-many-arguments
+    "PLR0917", # too-many-positional-arguments
+]
+
 [tool.flake8]
 spellcheck-targets = "names"
 dictionaries = "en_US,python,technical,pandas"
