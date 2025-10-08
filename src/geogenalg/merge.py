@@ -195,3 +195,55 @@ def _merge_dissolve_members_column(
     )
 
     representative_polygon_gdf[dissolve_members_column] = [all_dissolve_members]
+
+
+def dissolve_polygon_layers(
+    path: str | None = None,
+    layers: list[str] | None = None,
+    input_gdfs: list[gpd.GeoDataFrame] | None = None,
+) -> gpd.GeoDataFrame:
+    """Append and dissolve multiple polygon layers into one.
+
+    Args:
+        path: Optional path to a GeoPackage/directory.
+        layers: Optional list of layer names to be read.
+        input_gdfs: Optional list of GeoDataFrames to merge directly.
+
+    Returns:
+        GeoDataFrame containing dissolved polygon geometries (geometry only).
+
+    Raises:
+        ValueError: If neither input_gdfs nor valid path and layer list are provided.
+        GeometryTypeError: If input data is not Polygons or MultiPolygons.
+
+    """
+    landcover_gdfs: list[gpd.GeoDataFrame] = []
+
+    if input_gdfs:
+        landcover_gdfs.extend(input_gdfs)
+    elif path and layers:
+        for layer_name in layers:
+            gdf = gpd.read_file(path, layer=layer_name)
+            landcover_gdfs.append(gdf)
+    else:
+        error_msg_1 = "Provide either 'input_gdfs' or both 'path' and 'layers'."
+        raise ValueError(error_msg_1)
+
+    if not landcover_gdfs:
+        return gpd.GeoDataFrame()
+
+    # Combine all layers
+    combined = pd.concat(landcover_gdfs, ignore_index=True)
+    combined = gpd.GeoDataFrame(combined, crs=landcover_gdfs[0].crs)
+
+    # Validate geometry type
+    if not check_gdf_geometry_type(combined, ["Polygon", "MultiPolygon"]):
+        error_msg_2 = "Only Polygon or MultiPolygon geometries are supported."
+        raise GeometryTypeError(error_msg_2)
+
+    # Clean geometries and dissolve (remove duplicates / internal borders)
+    combined.geometry = combined.buffer(0)
+    dissolved = combined.dissolve().explode(index_parts=True, ignore_index=True)
+
+    # Return geometry-only GeoDataFrame
+    return dissolved[[dissolved.geometry.name]].set_geometry(dissolved.geometry.name)

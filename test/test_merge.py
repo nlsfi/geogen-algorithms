@@ -386,3 +386,35 @@ def test_dissolve_and_inherit_attributes_raises_on_non_polygon_geometry():
         merge.dissolve_and_inherit_attributes(
             invalid_gdf, by_column="group", unique_key_column="id"
         )
+
+
+def test_dissolve_polygon_layers_with_valid_input():
+    """Happy path: two simple polygons that should dissolve into one."""
+
+    poly1 = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+    poly2 = Polygon([(1, 0), (2, 0), (2, 1), (1, 1)])
+
+    gdf1 = gpd.GeoDataFrame(geometry=[poly1], crs="EPSG:3067")
+    gdf2 = gpd.GeoDataFrame(geometry=[poly2], crs="EPSG:3067")
+
+    result = merge.dissolve_polygon_layers(input_gdfs=[gdf1, gdf2])
+
+    assert len(result) == 1
+    assert result.geometry.iloc[0].is_valid
+    assert result.crs.to_string() == "EPSG:3067"
+
+
+def test_dissolve_polygon_layers_rejects_invalid_geometry():
+    """Fails when input contains non-polygon geometries."""
+
+    point = Point(0, 0)
+    gdf = gpd.GeoDataFrame(geometry=[point], crs="EPSG:3067")
+
+    with pytest.raises(GeometryTypeError):
+        merge.dissolve_polygon_layers(input_gdfs=[gdf])
+
+
+def test_dissolve_polygon_layers_requires_valid_arguments():
+    """Throws ValueError when input is missing."""
+    with pytest.raises(ValueError, match="input"):
+        merge.dissolve_polygon_layers()  # no path, no layers, no gdfs

@@ -8,6 +8,8 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+import typer
 from geopandas import read_file
 from geopandas.testing import assert_geodataframe_equal
 from typer.testing import CliRunner
@@ -33,6 +35,12 @@ def test_geopackage_uri():
     )
     assert geopackage_uri('"/path/to/geopackage.gpkg|layer"').layer_name == "layer"
 
+    with pytest.raises(typer.BadParameter, match="Incorrectly formatted GeoPackageURI"):
+        assert (
+            geopackage_uri("/path/to/geopackage.gpkg||layer").file
+            == "/path/to/geopackage.gpkg"
+        )
+
 
 def test_clusters_to_centroids(testdata_path: Path):
     input_gpkg = testdata_path / "boulder_in_water.gpkg"
@@ -42,9 +50,12 @@ def test_clusters_to_centroids(testdata_path: Path):
 
     temp_dir = tempfile.TemporaryDirectory()
     output_geopackage_uri = f"{temp_dir.name}/output.gpkg"
+
     result = runner.invoke(
         app,
         [
+            # TODO: uncomment? after a new command is added to CLI
+            # "clusters-to-centroids",
             input_geopackage_uri,
             output_geopackage_uri,
             "--unique-id-column=kmtk_id",
