@@ -42,6 +42,10 @@ def geopackage_uri(value: str) -> GeoPackageURI:
         Parsed GeoPackage URI. If layer name could not be parsed, it will be
         None.
 
+    Raises:
+    ------
+        BadParameter: if string is incorrectly formatted
+
     """
     uri = GeoPackageURI(value, None)
 
@@ -52,7 +56,8 @@ def geopackage_uri(value: str) -> GeoPackageURI:
     if "|" in stripped:
         split = stripped.split("|")
         if len(split) != expected_split_parts:
-            return uri
+            msg = "Incorrectly formatted GeoPackageURI"
+            raise typer.BadParameter(msg)
 
         file = split[0]
         layer_name = split[1]
