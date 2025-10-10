@@ -6,9 +6,10 @@
 #  LICENSE file in the root directory of this source tree.
 
 import pytest
-import shapely
 from geopandas import gpd
-from shapely.geometry import Point
+from shapely import GeometryCollection, MultiPolygon, from_wkt, to_wkt
+from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import (
     GeometryOperationError,
@@ -21,31 +22,169 @@ from geogenalg.core.geometry import (
     extend_line_to_nearest,
     extract_interior_rings,
     lines_to_segments,
+    mean_z,
     move_to_point,
     rectangle_dimensions,
     scale_line_to_length,
 )
 
 
+@pytest.mark.parametrize(
+    ("geometry", "expected_mean"),
+    [
+        (Point(0, 0, 1.0), 1.0),
+        (MultiPoint([[0, 0, 0], [1.0, 1.0, 1.0]]), 0.5),
+        (LineString([[0, 0, 10.0], [1.0, 1.0, 24.0]]), 17.0),
+        (
+            MultiLineString(
+                [
+                    LineString(
+                        [
+                            [0, 0, 10.0],
+                            [1.0, 1.0, 24.0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [20.0, 40.0, 5.0],
+                            [4.0, 60.0, 2.0],
+                        ]
+                    ),
+                ]
+            ),
+            10.25,
+        ),
+        (
+            Polygon(
+                shell=[
+                    [0, 0, 4.0],
+                    [0, 2, 5.5],
+                    [2, 2, 6.5],
+                    [2, 0, 1.5],
+                ],
+                holes=[
+                    [
+                        [0.5, 0.5, 4.0],
+                        [0.5, 1, 1.0],
+                        [1, 1, 2.3],
+                        [1, 0.5, 0.5],
+                    ]
+                ],
+            ),
+            3.1625,
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[
+                            [0, 0, 0],
+                            [0, 2, 0],
+                            [2, 2, 0],
+                            [2, 0, 0],
+                        ],
+                        holes=[
+                            [
+                                [0.5, 0.5, 0],
+                                [0.5, 1, 0],
+                                [1, 1, 0],
+                                [1, 0.5, 0],
+                            ]
+                        ],
+                    ),
+                    Polygon(
+                        shell=[
+                            [0, 0, 1.0],
+                            [0, 2, 2.0],
+                            [2, 2, 3.0],
+                            [2, 0, 5.0],
+                        ],
+                        holes=[
+                            [
+                                [0.5, 0.5, 1.0],
+                                [0.5, 1, 9.0],
+                                [1, 1, 2.3],
+                                [1, 0.5, 4.5],
+                            ]
+                        ],
+                    ),
+                ]
+            ),
+            1.7375,
+        ),
+        (
+            Polygon(
+                shell=[
+                    [0, 0, 4.0],
+                    [0, 2, 5.5],
+                    [2, 2, 6.6],
+                    [2, 0, 1.0],
+                ],
+            ),
+            4.275,
+        ),
+        (MultiPoint([[0, 0, -999.999], [1.0, 1.0, 1.0]]), 1.0),
+    ],
+    ids=[
+        "point",
+        "multipoint",
+        "linestring",
+        "multilinestring",
+        "polygon",
+        "multipolygon",
+        "polygon, no hole",
+        "nodata value",
+    ],
+)
+def test_mean_z(geometry: BaseGeometry, expected_mean: float):
+    assert mean_z(geometry) == expected_mean
+
+
+@pytest.mark.parametrize(
+    ("geom"),
+    [
+        (Point(0, 0)),
+        (LineString([[0, 0], [0, 1]])),
+    ],
+    ids=[
+        "point",
+        "linestring",
+    ],
+)
+def test_mean_z_no_z_geometry(geom: BaseGeometry):
+    with pytest.raises(
+        GeometryTypeError, match="Geometry does not include z coordinate!"
+    ):
+        mean_z(geom)
+
+
+def test_mean_z_no_geometrycollection():
+    with pytest.raises(
+        GeometryTypeError,
+        match="mean z calculation not implemented for GeometryCollection",
+    ):
+        mean_z(GeometryCollection([Point(0, 0, 0), Point(0, 0, 1)]))
+
+
 def test_rectangle_dimensions():
-    rect = shapely.from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
+    rect = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
 
     assert rectangle_dimensions(rect).width == 1.0
     assert rectangle_dimensions(rect).height == 4.0
 
-    rect2 = shapely.from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 5, 1 0, 0 0))")
+    rect2 = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 5, 1 0, 0 0))")
     with pytest.raises(GeometryOperationError):
         rectangle_dimensions(rect2)
 
 
 def test_elongation():
-    rect = shapely.from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
+    rect = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
 
     assert elongation(rect) == 4.0
 
 
 def test_extract_interior_rings():
-    polygon_with_holes = shapely.from_wkt(
+    polygon_with_holes = from_wkt(
         """POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0),
         (2 3, 3 3, 3 2, 2 2, 2 3),
         (4 5, 5 5, 5 4, 4 4, 4 5),
@@ -68,7 +207,7 @@ def test_extract_interior_rings():
 
 
 def test_explode_line_to_segments():
-    line = shapely.from_wkt("LINESTRING (0 0, 0 1, 0 3, 0 6, 1 8, 2 9)")
+    line = from_wkt("LINESTRING (0 0, 0 1, 0 3, 0 6, 1 8, 2 9)")
 
     segments = explode_line(line)
 
@@ -84,9 +223,9 @@ def test_explode_line_to_segments():
 def test_lines_to_segments():
     lines = gpd.GeoSeries(
         [
-            shapely.from_wkt("LINESTRING (0 0, 0 1)"),
-            shapely.from_wkt("LINESTRING (10 0, 10 15)"),
-            shapely.from_wkt("LINESTRING (20 20, 21 21, 22 22, 23 23)"),
+            from_wkt("LINESTRING (0 0, 0 1)"),
+            from_wkt("LINESTRING (10 0, 10 15)"),
+            from_wkt("LINESTRING (20 20, 21 21, 22 22, 23 23)"),
         ]
     )
 
@@ -102,10 +241,10 @@ def test_lines_to_segments():
 
     invalid_series = gpd.GeoSeries(
         [
-            shapely.from_wkt("LINESTRING (0 0, 0 1)"),
-            shapely.from_wkt("LINESTRING (10 0, 10 15)"),
-            shapely.from_wkt("LINESTRING (20 20, 21 21, 22 22, 23 23)"),
-            shapely.from_wkt("POINT (10 10)"),
+            from_wkt("LINESTRING (0 0, 0 1)"),
+            from_wkt("LINESTRING (10 0, 10 15)"),
+            from_wkt("LINESTRING (20 20, 21 21, 22 22, 23 23)"),
+            from_wkt("POINT (10 10)"),
         ]
     )
 
@@ -114,16 +253,16 @@ def test_lines_to_segments():
 
 
 def test_scale_line_to_length():
-    line1 = shapely.from_wkt("LINESTRING (0 0, 0 4)")
+    line1 = from_wkt("LINESTRING (0 0, 0 4)")
     scaled_line1 = scale_line_to_length(line1, 4)
 
-    line2 = shapely.from_wkt("LINESTRING (10 10, 14 14)")
+    line2 = from_wkt("LINESTRING (10 10, 14 14)")
     scaled_line2 = scale_line_to_length(line2, 10)
 
-    line3 = shapely.from_wkt("LINESTRING (5 5, 3 -1)")
+    line3 = from_wkt("LINESTRING (5 5, 3 -1)")
     scaled_line3 = scale_line_to_length(line3, 13)
 
-    line4 = shapely.from_wkt("LINESTRING (0 0, 0 1, 1 1, 1 5, 1 7)")
+    line4 = from_wkt("LINESTRING (0 0, 0 1, 1 1, 1 5, 1 7)")
     scaled_line4 = scale_line_to_length(line4, 2)
 
     assert scaled_line1.length == 4
@@ -132,49 +271,49 @@ def test_scale_line_to_length():
     assert scaled_line4.length == 2
 
     # check with lower precision to help readability
-    assert shapely.to_wkt(scaled_line1, 3) == "LINESTRING (0 0, 0 4)"
-    assert shapely.to_wkt(scaled_line2, 3) == "LINESTRING (8.464 8.464, 15.536 15.536)"
-    assert shapely.to_wkt(scaled_line3, 3) == "LINESTRING (6.055 8.166, 1.945 -4.166)"
+    assert to_wkt(scaled_line1, 3) == "LINESTRING (0 0, 0 4)"
+    assert to_wkt(scaled_line2, 3) == "LINESTRING (8.464 8.464, 15.536 15.536)"
+    assert to_wkt(scaled_line3, 3) == "LINESTRING (6.055 8.166, 1.945 -4.166)"
     assert (
-        shapely.to_wkt(scaled_line4, 3)
+        to_wkt(scaled_line4, 3)
         == "LINESTRING (0.375 2.625, 0.375 2.875, 0.625 2.875, 0.625 3.875, 0.625 4.375)"
     )
 
 
 def test_move_to_point():
-    line = shapely.from_wkt("LINESTRING (10 10, 14 14, 16 16, 19 20)")
+    line = from_wkt("LINESTRING (10 10, 14 14, 16 16, 19 20)")
     moved_line = move_to_point(line, Point(0, 0))
 
-    point = shapely.from_wkt("POINT (10 200)")
+    point = from_wkt("POINT (10 200)")
     moved_point = move_to_point(point, Point(0, 0))
 
-    poly = shapely.from_wkt("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))")
+    poly = from_wkt("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))")
     moved_poly = move_to_point(poly, Point(0, 0))
 
-    multiline = shapely.from_wkt("MULTILINESTRING ((20 21, 21 24), (30 30, 31 31))")
+    multiline = from_wkt("MULTILINESTRING ((20 21, 21 24), (30 30, 31 31))")
     moved_multiline = move_to_point(multiline, Point(0, 0))
 
     assert (
-        shapely.to_wkt(moved_line, 3)
+        to_wkt(moved_line, 3)
         == "LINESTRING (-4.668 -4.854, -0.668 -0.854, 1.332 1.146, 4.332 5.146)"
     )
-    assert shapely.to_wkt(moved_point, 3) == "POINT (0 0)"
+    assert to_wkt(moved_point, 3) == "POINT (0 0)"
     assert (
-        shapely.to_wkt(moved_poly, 3)
+        to_wkt(moved_poly, 3)
         == "POLYGON ((-0.5 -0.5, -0.5 0.5, 0.5 0.5, 0.5 -0.5, -0.5 -0.5))"
     )
     assert (
-        shapely.to_wkt(moved_multiline, 3)
+        to_wkt(moved_multiline, 3)
         == "MULTILINESTRING ((-3.59 -3.972, -2.59 -0.972), (6.41 5.028, 7.41 6.028))"
     )
 
 
 def test_extend_line_to_nearest():
-    line = shapely.from_wkt("LINESTRING (0 0, 1 1)")
+    line = from_wkt("LINESTRING (0 0, 1 1)")
 
-    point = shapely.from_wkt("POINT (-10 -3)")
-    linestring = shapely.from_wkt("LINESTRING (10 10, 10 2)")
-    polygon = shapely.from_wkt("POLYGON ((0 2, 0 3, 2 3, 2 2, 0 2))")
+    point = from_wkt("POINT (-10 -3)")
+    linestring = from_wkt("LINESTRING (10 10, 10 2)")
+    polygon = from_wkt("POLYGON ((0 2, 0 3, 2 3, 2 2, 0 2))")
 
     extended_from_end1 = extend_line_to_nearest(line, point, LineExtendFrom.END)
     extended_from_end2 = extend_line_to_nearest(line, linestring, LineExtendFrom.END)

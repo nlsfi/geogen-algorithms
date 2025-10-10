@@ -8,10 +8,11 @@ centroids
 chaikin
 changelog
 concat
-coords
 const
+coords
 crs
 dataframe
+DBSCAN
 densify
 dest
 dtype
@@ -20,10 +21,13 @@ dy
 fid
 fids
 gdf
+gdfs
+geodataframe
 geogenalg
 geoms
 geopackage
 geopandas
+geoseries
 gpd
 hypot
 idx
@@ -31,6 +35,7 @@ landcover
 linalg
 linemerge
 loc
+nodata
 polygonize
 pygeoops
 rect
@@ -39,6 +44,7 @@ segmentized
 shapelysmooth
 simplifier
 sindex
+sklearn
 starmap
 tolist
 unary
@@ -47,4 +53,3 @@ visvalingam
 wkb
 wkt
 xy
-gdfs

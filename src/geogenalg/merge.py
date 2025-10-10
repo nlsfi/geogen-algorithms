@@ -14,6 +14,7 @@ from shapely.geometry import LineString, MultiLineString
 
 from geogenalg import attributes
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 def merge_connecting_lines_by_attribute(
@@ -103,7 +104,7 @@ def dissolve_and_inherit_attributes(
               polygon geometries.
 
     """
-    if not all(input_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])):
+    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
         msg = "Dissolve only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
     if input_gdf.empty:

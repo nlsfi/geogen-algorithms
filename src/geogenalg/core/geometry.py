@@ -8,6 +8,7 @@
 
 import math
 from enum import Enum
+from statistics import mean
 from typing import NamedTuple
 
 import shapely.ops
@@ -20,6 +21,7 @@ from shapely import (
     Polygon,
     affinity,
     count_coordinates,
+    get_coordinates,
     polygonize,
     shortest_line,
     union,
@@ -42,6 +44,49 @@ class LineExtendFrom(Enum):  # noqa: D101
 class Dimensions(NamedTuple):  # noqa: D101
     width: float
     height: float
+
+
+def mean_z(geom: BaseGeometry, nodata_value: float = -999.999) -> float:
+    """Calculate the mean of z values in a geometry's vertices.
+
+    Returns
+    -------
+        The calculated mean.
+
+    Raises
+    ------
+        GeometryTypeError: If geometry is a collection or does not have z values.
+
+    """
+    if not geom.has_z:
+        msg = "Geometry does not include z coordinate!"
+        raise GeometryTypeError(msg)
+
+    if geom.geom_type == "GeometryCollection":
+        msg = "mean z calculation not implemented for GeometryCollection"
+        raise GeometryTypeError(msg)
+
+    # shapely.get_coordinates doesn't work with polygons in this use case, since
+    # it also returns the bounding vertex for each ring in the polygon, which
+    # can skew the results especially if there are multiple interior rings.
+    if "Polygon" not in geom.geom_type:
+        z_values = [
+            float(coords[2])
+            for coords in get_coordinates(geom, include_z=True)
+            if coords[2] != nodata_value
+        ]
+    else:
+        # Turn polygon into to a (Multi)LineString and drop the last vertex(es).
+        boundary = geom.boundary
+
+        if boundary.geom_type == "LineString":
+            return mean_z(LineString(boundary.coords[:-1]))
+
+        return mean_z(
+            MultiLineString([LineString(line.coords[:-1]) for line in boundary.geoms])
+        )
+
+    return mean(z_values)
 
 
 def rectangle_dimensions(rect: Polygon) -> Dimensions:
