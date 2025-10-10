@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 from geopandas import GeoDataFrame, read_file
-from geopandas.testing import assert_geodataframe_equal
 from pandas import Series, concat
+from pandas.testing import assert_frame_equal
 from shapely import LineString, Point, box
 
 from geogenalg.application.generalize_clusters_to_centroids import (
@@ -60,7 +60,7 @@ def test_generalize_boulders_in_water(
 
     result = read_file(output_path, layer="result")
 
-    assert_geodataframe_equal(control, result)
+    assert_frame_equal(control, result)
 
 
 def test_invalid_geom_type() -> None:
@@ -132,7 +132,7 @@ def test_mixed_geom_types(testdata_path: Path) -> None:
     algorithm.execute(mixed, {"mask": mask_gdf}).to_file(output_path, layer="result")
     result = read_file(output_path, layer="result")
 
-    assert_geodataframe_equal(control, result)
+    assert_frame_equal(control, result)
 
 
 def test_no_mask(testdata_path: Path) -> None:
@@ -159,7 +159,7 @@ def test_no_mask(testdata_path: Path) -> None:
     algorithm.execute(points, {}).to_file(output_path, layer="result")
     result = read_file(output_path, layer="result")
 
-    assert_geodataframe_equal(control, result)
+    assert_frame_equal(control, result)
 
 
 def test_aggregation_functions(testdata_path: Path) -> None:
@@ -196,4 +196,4 @@ def test_aggregation_functions(testdata_path: Path) -> None:
     algorithm.execute(points, {}).to_file(output_path, layer="result")
     result = read_file(output_path, layer="result")
 
-    assert_geodataframe_equal(control, result)
+    assert_frame_equal(control, result)
