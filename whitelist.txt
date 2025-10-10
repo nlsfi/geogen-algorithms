@@ -35,6 +35,7 @@ landcover
 linalg
 linemerge
 loc
+nodata
 polygonize
 pygeoops
 rect
