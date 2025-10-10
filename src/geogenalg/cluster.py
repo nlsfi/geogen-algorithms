@@ -6,7 +6,6 @@
 #  LICENSE file in the root directory of this source tree.
 
 from collections.abc import Callable
-from statistics import mean
 from typing import Any
 
 from geopandas.geodataframe import GeoDataFrame
@@ -15,6 +14,7 @@ from shapely import MultiPoint, Point
 from sklearn.cluster import DBSCAN
 
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import mean_z
 
 
 def dbscan_cluster_ids(
@@ -123,8 +123,7 @@ def get_cluster_centroids(
         centroid = geom.centroid
 
         if geom.has_z:
-            mean_z = mean([part.z for part in geom.geoms])
-            centroid = Point(centroid.x, centroid.y, mean_z)
+            centroid = Point(centroid.x, centroid.y, mean_z(geom))
 
         return centroid
 

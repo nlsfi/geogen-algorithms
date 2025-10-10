@@ -18,6 +18,7 @@ from shapely import Point, Polygon, box
 from geogenalg.application import BaseAlgorithm
 from geogenalg.cluster import get_cluster_centroids
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import mean_z
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -49,8 +50,7 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             centroid = geom.centroid
 
             if geom.has_z:
-                # TODO: calculate z as mean of vertices' z?
-                centroid = Point(centroid.x, centroid.y, 0.0)
+                centroid = Point(centroid.x + 1, centroid.y, mean_z(geom))
 
             return centroid
 
@@ -97,15 +97,19 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             )
             raise GeometryTypeError(msg)
 
-        if reference_data.get("mask") is not None and not check_gdf_geometry_type(
-            reference_data["mask"],
-            [
-                "Polygon",
-                "MultiPolygon",
-            ],
-        ):
-            msg = "mask dataframe must only contain (Multi)Polygons"
-            raise GeometryTypeError(msg)
+        if "mask" in reference_data:
+            mask_gdf = reference_data["mask"]
+            if not check_gdf_geometry_type(mask_gdf, ["Polygon", "MultiPolygon"]):
+                msg = "mask dataframe must only contain (Multi)Polygons"
+                raise GeometryTypeError(msg)
+
+            mask_geom = mask_gdf.geometry.union_all()
+        else:
+            # Create a mask which will include all geometries. This is slightly
+            # less efficient, but makes this function more readable and less
+            # complex.
+            x_min, y_min, x_max, y_max = data.total_bounds
+            mask_geom = box(x_min, y_min, x_max, y_max)
 
         points, polygons = (
             data.loc[data.geometry.type == "Point"],
@@ -128,16 +132,6 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             )
 
             clusters_from_points[self.feature_type_column] = "centroid_from_point"
-
-        if reference_data.get("mask") is not None:
-            mask_gdf = reference_data["mask"]
-            mask_geom = mask_gdf.geometry.union_all()
-        else:
-            # Create a mask which will include all geometries. This is slightly
-            # less efficient, but makes this function more readable and less
-            # complex.
-            x_min, y_min, x_max, y_max = data.total_bounds
-            mask_geom = box(x_min, y_min, x_max, y_max)
 
         clusters_from_polygons = GeoDataFrame()
         if not polygons.empty:
