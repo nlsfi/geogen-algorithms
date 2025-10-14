@@ -205,7 +205,7 @@ def remove_small_holes(
         Args:
         ----
             geometry: A shapely Polygon or MultiPolygon geometry potentially containing
-                  interior rings
+                  interior rings.
 
         Returns:
         -------
@@ -228,9 +228,9 @@ def remove_small_holes(
 
         return geometry
 
-    input_gdf.geometry = input_gdf.geometry.apply(filter_holes)
-
-    return input_gdf
+    output_gdf = input_gdf.copy()
+    output_gdf.geometry = output_gdf.geometry.apply(filter_holes)
+    return output_gdf
 
 
 def reduce_nearby_points_by_selecting(
