@@ -20,7 +20,7 @@ from geogenalg.core.geometry import (
     elongation,
     explode_line,
     extend_line_to_nearest,
-    extract_interior_rings,
+    extract_interior_rings_gdf,
     lines_to_segments,
     mean_z,
     move_to_point,
@@ -183,7 +183,7 @@ def test_elongation():
     assert elongation(rect) == 4.0
 
 
-def test_extract_interior_rings():
+def test_extract_interior_rings_gdf():
     polygon_with_holes = from_wkt(
         """POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0),
         (2 3, 3 3, 3 2, 2 2, 2 3),
@@ -196,7 +196,7 @@ def test_extract_interior_rings():
         crs="EPSG:3857",
     )
 
-    extracted_holes = extract_interior_rings(gdf)
+    extracted_holes = extract_interior_rings_gdf(gdf)
 
     assert len(extracted_holes.index) == 3
     assert extracted_holes.crs == "EPSG:3857"
