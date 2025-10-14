@@ -9,7 +9,7 @@ import pytest
 from geopandas import GeoDataFrame, gpd
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
-from shapely import GeometryCollection, MultiPolygon, from_wkt, to_wkt
+from shapely import GeometryCollection, MultiPolygon, box, from_wkt, to_wkt
 from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
@@ -23,6 +23,7 @@ from geogenalg.core.geometry import (
     elongation,
     explode_line,
     extend_line_to_nearest,
+    extract_interior_rings,
     extract_interior_rings_gdf,
     lines_to_segments,
     mean_z,
@@ -30,6 +31,148 @@ from geogenalg.core.geometry import (
     rectangle_dimensions,
     scale_line_to_length,
 )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "expected_geometry"),
+    [
+        (
+            Polygon(
+                shell=[[0, 0, 4.0], [0, 2, 5.5], [2, 2, 6.5], [2, 0, 1.5]],
+                holes=[
+                    [
+                        [0.5, 0.5, 4.0],
+                        [0.5, 1, 1.0],
+                        [1, 1, 2.3],
+                        [1, 0.5, 0.5],
+                    ]
+                ],
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[
+                            [0.5, 0.5, 4.0],
+                            [0.5, 1, 1.0],
+                            [1, 1, 2.3],
+                            [1, 0.5, 0.5],
+                        ],
+                    )
+                ]
+            ),
+        ),
+        (
+            Polygon(
+                shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                holes=[
+                    [
+                        [0.5, 0.5],
+                        [0.5, 1],
+                        [1, 1],
+                        [1, 0.5],
+                    ],
+                    [
+                        [6, 6],
+                        [6, 8],
+                        [8, 8],
+                        [8, 6],
+                    ],
+                ],
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[
+                            [0.5, 0.5],
+                            [0.5, 1],
+                            [1, 1],
+                            [1, 0.5],
+                        ],
+                    ),
+                    Polygon(
+                        shell=[
+                            [6, 6],
+                            [6, 8],
+                            [8, 8],
+                            [8, 6],
+                        ],
+                    ),
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                        holes=[
+                            [[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                            [[6.5, 6.5], [6.5, 7.5], [7.5, 7.5], [7.5, 6.5]],
+                        ],
+                    )
+                ]
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                    ),
+                    Polygon(
+                        shell=[[6.5, 6.5], [6.5, 7.5], [7.5, 7.5], [7.5, 6.5]],
+                    ),
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                        holes=[
+                            [[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                        ],
+                    ),
+                    Polygon(
+                        shell=[[100, 100], [100, 110], [110, 110], [110, 100]],
+                        holes=[[[105, 105], [105, 106], [106, 106], [106, 105]]],
+                    ),
+                    box(-10, -10, -5, -5),
+                ]
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                    ),
+                    Polygon(
+                        shell=[[105, 105], [105, 106], [106, 106], [106, 105]],
+                    ),
+                ]
+            ),
+        ),
+        (
+            Polygon(),
+            MultiPolygon(),
+        ),
+        (
+            box(10, 10, 20, 20),
+            MultiPolygon(),
+        ),
+    ],
+    ids=[
+        "polygon, single ring",
+        "polygon, two rings",
+        "multipolygon, two rings",
+        "multipolygon, three parts",
+        "empty polygon",
+        "no rings",
+    ],
+)
+def test_extract_interior_rings(
+    input_geometry: Polygon | MultiPolygon,
+    expected_geometry: MultiPolygon,
+):
+    assert extract_interior_rings(input_geometry) == expected_geometry
 
 
 @pytest.mark.parametrize(
