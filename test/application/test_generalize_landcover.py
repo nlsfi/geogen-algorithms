@@ -11,10 +11,7 @@ from pathlib import Path
 import geopandas as gpd
 import geopandas.testing
 
-from geogenalg.application.generalize_landcover import (
-    AlgorithmOptions,
-    generalize_landcover,
-)
+from geogenalg.application.generalize_landcover import GeneralizeLandcover
 
 
 def test_generalize_landcover_50k(
@@ -30,7 +27,7 @@ def test_generalize_landcover_50k(
 
     input_gdf = gpd.read_file(source_path, layer="mtk_marshes")
 
-    options = AlgorithmOptions(
+    algorithm = GeneralizeLandcover(
         buffer_constant=20,
         simplification_tolerance=30,
         area_threshold=7500,
@@ -38,7 +35,7 @@ def test_generalize_landcover_50k(
         smoothing=True,
     )
 
-    result = generalize_landcover(input_gdf, options)
+    result = algorithm.execute(input_gdf)
 
     assert result is not None
 
