@@ -9,18 +9,15 @@ import geopandas as gpd
 from pandas.testing import assert_frame_equal
 from shapely import Point, equals_exact
 
-from geogenalg.application.generalize_points import (
-    AlgorithmOptions,
-    generalize_points,
-)
+from geogenalg.application.generalize_points import GeneralizePoints
 
 
 def test_generalize_points() -> None:
     """
-    Test generalize points algorithm
+    Test generalize points algorithm.
     """
 
-    options = AlgorithmOptions(
+    algorithm = GeneralizePoints(
         reduce_threshold=0.5,
         displace_threshold=3,
         displace_points_iterations=10,
@@ -47,7 +44,7 @@ def test_generalize_points() -> None:
         ],
     )
 
-    result_gdf = generalize_points(input_gdf, options)
+    result_gdf = algorithm.execute(input_gdf)
 
     expected_gdf = gpd.GeoDataFrame(
         {
