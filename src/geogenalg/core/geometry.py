@@ -92,10 +92,12 @@ def mean_z(geom: BaseGeometry, nodata_value: float = -999.999) -> float:
 def rectangle_dimensions(rect: Polygon) -> Dimensions:
     """Calculate the dimensions of a rectangular polygon.
 
-    Returns:
+    Returns
+    -------
         The width and height of a rectangular polygon.
 
-    Raises:
+    Raises
+    ------
         GeometryOperationError: If input polygon is invalid.
         InvalidGeometryError: If input polygon is not a rectangle.
 
@@ -127,11 +129,13 @@ def rectangle_dimensions(rect: Polygon) -> Dimensions:
 def elongation(polygon: Polygon) -> float:
     """Calculate the elongation of a polygon.
 
-    Returns:
+    Returns
+    -------
         The ratio of the height (longest side) to the width (shorter side)
         of its minimum bounding oriented envelope.
 
-    Raises:
+    Raises
+    ------
         TypeError: if created envelope is not of type polygon.
 
     """
@@ -147,10 +151,12 @@ def elongation(polygon: Polygon) -> float:
 def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Extract the interior rings of a polygon geodataframe.
 
-    Returns:
+    Returns
+    -------
         A new geodataframe containing the interior rings.
 
-    Raises:
+    Raises
+    ------
         GeometryTypeError: If geometries are not polygons or multipolygons.
 
     """
@@ -177,7 +183,8 @@ def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 def explode_line(line: LineString) -> list[LineString]:
     """Explode a line geometry to all its segments.
 
-    Returns:
+    Returns
+    -------
       All segments of a line geometry.
 
     """
@@ -189,11 +196,13 @@ def explode_line(line: LineString) -> list[LineString]:
 def lines_to_segments(lines: gpd.GeoSeries) -> gpd.GeoSeries:
     """Convert lines to segments.
 
-    Returns:
+    Returns
+    -------
         A GeoSeries of line geometries containing all line segments
         from the input GeoSeries.
 
-    Raises:
+    Raises
+    ------
         GeometryTypeError: if param `lines` contains other geometry
         types than lines.
 
@@ -214,11 +223,13 @@ def scale_line_to_length(
 ) -> LineString:
     """Scale line to given length.
 
-    Returns:
+    Returns
+    -------
         A version of the input geometry which has been scaled to the
         given length.
 
-    Raises:
+    Raises
+    ------
         ValueError: If param `geom` has no length.
         ValueError: If param `length` is less than or equal to 0.
 
@@ -242,7 +253,8 @@ def scale_line_to_length(
 def move_to_point(geom: BaseGeometry, point: Point) -> BaseGeometry:
     """Move geometry to given point position.
 
-    Returns:
+    Returns
+    -------
         A version of the input geometry which has been moved to the
         given point position.
 
@@ -261,12 +273,14 @@ def extend_line_to_nearest(
 ) -> LineString:
     """Extend line to nearest point.
 
-    Returns:
+    Returns
+    -------
         A version of the input line which has been extended to the
         nearest point of another geometry. The extension can be done from
         the end or start of the line, or alternatively both ends.
 
-    Raises:
+    Raises
+    ------
         GeometryOperationError: If invalid result got from line union or merge
         operations.
 
@@ -316,12 +330,14 @@ def extend_line_to_nearest(
 def point_on_line(line: LineString, distance: float) -> Point:
     """Get point along line.
 
-    Returns:
+    Returns
+    -------
         A point which is the given distance away and collinear to either
         the first or last segment of the input line. If distance is > 0 the point
         is calculated from the last segment and if < 0 the first segment.
 
-    Raises:
+    Raises
+    ------
         ValueError: If line does not have exactly 2 vertices.
 
     """
@@ -367,11 +383,13 @@ def extend_line_by(
 ) -> LineString:
     """Extend line by given distance.
 
-    Returns:
+    Returns
+    -------
         Version of the input line which has been extended by the given distance
         either from its start or end segment, or both.
 
-    Raises:
+    Raises
+    ------
         ValueError: if extend_from is less or equal than 0
 
     """
