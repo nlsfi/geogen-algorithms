@@ -44,7 +44,7 @@ class GeneralizeLandcover(BaseAlgorithm):
         Args:
         ----
             data: A GeoDataFrame containing the land cover polygons.
-            reference_data: Not used.
+            reference_data: Not used for this algorithm.
 
         Returns:
         -------
@@ -55,21 +55,20 @@ class GeneralizeLandcover(BaseAlgorithm):
             reference_data = {}
         result_gdf = data.copy()
 
+        def _buffer(gdf: gpd.GeoDataFrame, distance: float) -> None:
+            gdf.geometry = gdf.geometry.buffer(
+                distance, cap_style="square", join_style="bevel"
+            )
+
         # Create a buffer of size buffer_constant to close narrow gaps between polygons
-        result_gdf.geometry = result_gdf.geometry.buffer(
-            self.buffer_constant, cap_style="square", join_style="bevel"
-        )
+        _buffer(result_gdf, self.buffer_constant)
         result_gdf = result_gdf.dissolve(as_index=False)
 
         # Create a double negative buffer to remove narrow polygon parts
-        result_gdf.geometry = result_gdf.geometry.buffer(
-            -2 * self.buffer_constant, cap_style="square", join_style="bevel"
-        )
+        _buffer(result_gdf, -2 * self.buffer_constant)
 
         # Restore polygons to their original size with a positive buffer
-        result_gdf.geometry = result_gdf.geometry.buffer(
-            self.buffer_constant, cap_style="square", join_style="bevel"
-        )
+        _buffer(result_gdf, self.buffer_constant)
 
         result_gdf = result_gdf.dissolve(as_index=False)
         result_gdf = result_gdf.explode(index_parts=False)
@@ -81,9 +80,7 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         # Smooth the polygons if smoothing is wanted
         if self.smoothing:
-            geometries = list(result_gdf.geometry)
-            smoothed_geometries = [chaikin_smooth(geom) for geom in geometries]
-            result_gdf.geometry = smoothed_geometries
+            result_gdf.geometry = result_gdf.geometry.apply(chaikin_smooth)
 
         # Remove polygons smaller than the area_threshold
         result_gdf = selection.remove_small_polygons(result_gdf, self.area_threshold)
@@ -91,4 +88,5 @@ class GeneralizeLandcover(BaseAlgorithm):
         # Remove holes smaller than the hole_threshold and return
         result_gdf = selection.remove_small_holes(result_gdf, self.hole_threshold)
 
+        # Inherit attributes from source gdf
         return attributes.inherit_attributes(data, result_gdf)
