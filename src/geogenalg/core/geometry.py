@@ -50,6 +50,25 @@ class Dimensions(NamedTuple):  # noqa: D101
     height: float
 
 
+def extract_interior_rings(geometry: Polygon | MultiPolygon) -> MultiPolygon:
+    """Extract interior rings (holes) of a geometry as a new geometry.
+
+    Returns
+    -------
+        Interior rings as a MultiPolygon.
+
+    """
+    if isinstance(geometry, Polygon):
+        polygons = [Polygon(interior) for interior in geometry.interiors]
+    else:
+        polygons = []
+        for geom in geometry.geoms:
+            for interior in geom.interiors:
+                polygons.append(Polygon(interior))
+
+    return MultiPolygon(polygons)
+
+
 def mean_z(geom: BaseGeometry, nodata_value: float = -999.999) -> float:
     """Calculate the mean of z values in a geometry's vertices.
 
