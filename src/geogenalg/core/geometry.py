@@ -152,7 +152,7 @@ def elongation(polygon: Polygon) -> float:
     return dimensions.height / dimensions.width
 
 
-def extract_interior_rings(areas: GeoDataFrame) -> GeoDataFrame:
+def extract_interior_rings_gdf(areas: GeoDataFrame) -> GeoDataFrame:
     """Extract the interior rings of a polygon geodataframe.
 
     Returns
