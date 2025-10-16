@@ -26,6 +26,7 @@ from geogenalg.application.generalize_clusters_to_centroids import (
 from geogenalg.application.generalize_fences import GeneralizeFences
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.application.generalize_shoreline import GeneralizeShoreline
+from geogenalg.application.generalize_points import GeneralizePoints
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 GEOPACKAGE_URI_HELP = (
@@ -276,6 +277,7 @@ def build_app() -> None:
         "fences": GeneralizeFences,
         "landcover": GeneralizeLandcover,
         "shoreline": GeneralizeShoreline,
+        "points": GeneralizePoints,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
