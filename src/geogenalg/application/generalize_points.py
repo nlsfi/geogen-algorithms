@@ -6,8 +6,9 @@
 #  LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
+from typing import override
 
-import geopandas as gpd
+from geopandas import GeoDataFrame
 
 from geogenalg import cluster, displacement
 from geogenalg.application import BaseAlgorithm
@@ -35,11 +36,12 @@ class GeneralizePoints(BaseAlgorithm):
     cluster_members_column: str
     """Name of the column that lists the points included in each cluster."""
 
+    @override
     def execute(
         self,
-        data: gpd.GeoDataFrame,
-        reference_data: dict[str, gpd.GeoDataFrame] | None = None,
-    ) -> gpd.GeoDataFrame:
+        data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+    ) -> GeoDataFrame:
         """Execute algorithm.
 
         Args:
@@ -52,8 +54,6 @@ class GeneralizePoints(BaseAlgorithm):
             A GeoDataFrame containing the generalized points.
 
         """
-        if reference_data is None:
-            reference_data = {}
         clustered_points = cluster.reduce_nearby_points_by_clustering(
             data,
             self.reduce_threshold,
