@@ -28,9 +28,85 @@ from geogenalg.core.geometry import (
     lines_to_segments,
     mean_z,
     move_to_point,
+    perforate_polygon_with_gdf_exteriors,
     rectangle_dimensions,
     scale_line_to_length,
 )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "gdf", "expected_geometry"),
+    [
+        (
+            box(0, 0, 20, 20),
+            GeoDataFrame(
+                geometry=[
+                    box(5, 5, 6, 6),
+                    box(7, 7, 8, 8),
+                ],
+            ),
+            Polygon(
+                shell=[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]],
+                holes=[
+                    [[6, 5], [6, 6], [5, 6], [5, 5], [6, 5]],
+                    [[8, 7], [8, 8], [7, 8], [7, 7], [8, 7]],
+                ],
+            ),
+        ),
+        (
+            box(0, 0, 20, 20),
+            GeoDataFrame(
+                geometry=[
+                    # Feature within ring
+                    # Feature with ring
+                    Polygon(
+                        shell=[[1, 1], [1, 10], [10, 10], [10, 1], [1, 1]],
+                        holes=[[[2, 2], [2, 9], [9, 9], [9, 2], [2, 2]]],
+                    ),
+                    Polygon(
+                        shell=[[3, 3], [3, 8], [8, 8], [8, 3], [3, 3]],
+                        holes=[[[4, 4], [4, 7], [7, 7], [7, 4], [4, 4]]],
+                    ),
+                    ##
+                    # Another feature within ring
+                    # Feature with ring
+                    Polygon(
+                        shell=[[11, 11], [11, 19], [19, 19], [19, 11], [11, 11]],
+                        holes=[[[12, 12], [12, 18], [18, 18], [18, 12], [12, 12]]],
+                    ),
+                    # Feature within ring
+                    Polygon(
+                        shell=[[13, 13], [13, 17], [17, 17], [17, 13], [13, 13]],
+                        holes=[[[14, 14], [14, 16], [16, 16], [16, 14], [14, 14]]],
+                    ),
+                    ##
+                    # Regular standalone feature
+                    box(1, 11, 9, 19),
+                ],
+            ),
+            Polygon(
+                shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                holes=[
+                    [[1, 10], [1, 1], [10, 1], [10, 10], [1, 10]],
+                    [[1, 11], [9, 11], [9, 19], [1, 19], [1, 11]],
+                    [[19, 19], [11, 19], [11, 11], [19, 11], [19, 19]],
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "two exteriors",
+        "recursive features",
+    ],
+)
+def test_perforate_polygon_with_gdf_exteriors(
+    input_geometry: Polygon,
+    gdf: GeoDataFrame,
+    expected_geometry: Polygon,
+):
+    assert (
+        perforate_polygon_with_gdf_exteriors(input_geometry, gdf) == expected_geometry
+    )
 
 
 @pytest.mark.parametrize(

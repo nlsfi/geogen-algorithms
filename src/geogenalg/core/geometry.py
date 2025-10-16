@@ -50,6 +50,34 @@ class Dimensions(NamedTuple):  # noqa: D101
     height: float
 
 
+def perforate_polygon_with_gdf_exteriors(
+    geometry: Polygon,
+    gdf: GeoDataFrame,
+) -> Polygon:
+    """Add the exteriors of a polygon GeoDataFrame as holes to a Polygon.
+
+    The purpose of this function over a simple difference operation is to
+    handle cases where there are polygon(s) inside interior rings of the input
+    geometry and you need to add holes only for the exteriors. This is useful
+    f.e. for recursive islands and lakes. With difference, the result would be
+    a multipolygon with all the contained geometries as parts.
+
+    Args:
+    ----
+        geometry: A Polygon to which holes will be added
+        gdf: A GeoDataFrame whose geometry exteriors will be added as holes
+
+    Returns:
+    -------
+        A new Polygon with the holes added.
+
+    """
+    features_within_geom = gdf.geometry.loc[gdf.geometry.within(geometry)]
+    exteriors = features_within_geom.apply(lambda geom: Polygon(geom.exterior))
+
+    return geometry.difference(exteriors.union_all())
+
+
 def extract_interior_rings(geometry: Polygon | MultiPolygon) -> MultiPolygon:
     """Extract interior rings (holes) of a geometry as a new geometry.
 
