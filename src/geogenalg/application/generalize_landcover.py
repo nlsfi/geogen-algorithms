@@ -6,8 +6,9 @@
 #  LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
+from typing import override
 
-import geopandas as gpd
+from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
 
 from geogenalg import attributes, selection
@@ -34,11 +35,12 @@ class GeneralizeLandcover(BaseAlgorithm):
     smoothing: bool
     """If True, polygons will be smoothed."""
 
+    @override
     def execute(
         self,
-        data: gpd.GeoDataFrame,
-        reference_data: dict[str, gpd.GeoDataFrame] | None = None,
-    ) -> gpd.GeoDataFrame:
+        data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+    ) -> GeoDataFrame:
         """Execute algorithm.
 
         Args:
@@ -51,11 +53,9 @@ class GeneralizeLandcover(BaseAlgorithm):
             Generalized land cover polygons.
 
         """
-        if reference_data is None:
-            reference_data = {}
         result_gdf = data.copy()
 
-        def _buffer(gdf: gpd.GeoDataFrame, distance: float) -> None:
+        def _buffer(gdf: GeoDataFrame, distance: float) -> None:
             gdf.geometry = gdf.geometry.buffer(
                 distance, cap_style="square", join_style="bevel"
             )
