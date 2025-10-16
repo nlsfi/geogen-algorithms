@@ -5,6 +5,8 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+import math
+
 import pytest
 from geopandas import GeoDataFrame, gpd
 from pandas import DataFrame
@@ -399,10 +401,38 @@ def test_rectangle_dimensions():
         rectangle_dimensions(rect2)
 
 
-def test_elongation():
-    rect = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
-
-    assert elongation(rect) == 4.0
+@pytest.mark.parametrize(
+    ("polygon", "expected_elongation"),
+    [
+        (Polygon([[0, 0], [0, 4], [1, 4], [1, 0], [0, 0]]), 0.25),
+        (Polygon([[0, 0], [0, 2], [2, 2], [2, 0], [0, 0]]), 1.0),
+        (
+            Polygon(
+                [
+                    [0, 0],
+                    [2, 0],
+                    [2, 1],
+                    [4, 1],
+                    [4, -2],
+                    [2, -2],
+                    [2, -1],
+                    [0, -1],
+                    [0, 0],
+                ]
+            ),
+            0.75,
+        ),
+        (Polygon([[0, 0], [0, 19], [1, 19], [1, 0], [0, 0]]), 0.052631579),
+    ],
+    ids=[
+        "elongated",
+        "square",
+        "irregular shape",
+        "very elongated",
+    ],
+)
+def test_elongation(polygon: Polygon, expected_elongation: float):
+    assert math.isclose(elongation(polygon), expected_elongation, rel_tol=1e-08)
 
 
 def test_extract_interior_rings_gdf():

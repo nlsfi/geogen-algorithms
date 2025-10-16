@@ -174,7 +174,7 @@ def rectangle_dimensions(rect: Polygon) -> Dimensions:
 
     lengths = (point_1.distance(point_2), point_2.distance(point_3))
 
-    return Dimensions(min(lengths), max(lengths))
+    return Dimensions(width=min(lengths), height=max(lengths))
 
 
 def elongation(polygon: Polygon) -> float:
@@ -185,18 +185,11 @@ def elongation(polygon: Polygon) -> float:
         The ratio of the height (longest side) to the width (shorter side)
         of its minimum bounding oriented envelope.
 
-    Raises
-    ------
-        TypeError: if created envelope is not of type polygon.
-
     """
-    envelope: BaseGeometry = polygon.oriented_envelope
-    if not isinstance(envelope, Polygon):
-        msg = "Envelope is not a Polygon"
-        raise TypeError(msg)
+    envelope = polygon.oriented_envelope
 
     dimensions = rectangle_dimensions(envelope)
-    return dimensions.height / dimensions.width
+    return dimensions.width / dimensions.height
 
 
 def extract_interior_rings_gdf(areas: GeoDataFrame) -> GeoDataFrame:
