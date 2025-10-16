@@ -35,7 +35,7 @@ def test_generalize_landcover_50k(
         smoothing=True,
     )
 
-    result = algorithm.execute(input_gdf)
+    result = algorithm.execute(input_gdf, {})
 
     assert result is not None
 
