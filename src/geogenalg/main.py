@@ -24,6 +24,7 @@ from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
 from geogenalg.application.generalize_fences import GeneralizeFences
+from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 GEOPACKAGE_URI_HELP = (
@@ -369,6 +370,29 @@ def build_app() -> None:
         )
 
         app.command(help=alg.__doc__)(algorithm_command_function)
+
+
+@app.command()
+def landcover(
+    input_geopackage: GeoPackageArgument,
+    output_geopackage: GeoPackageArgument,
+    buffer_constant: Annotated[float, typer.Option()],
+    simplification_tolerance: Annotated[float, typer.Option()],
+    area_threshold: Annotated[float, typer.Option()],
+    hole_threshold: Annotated[float, typer.Option()],
+    smoothing: Annotated[bool, typer.Option()],
+) -> None:
+    """Execute Generalize landcover algorithm."""
+    algorithm = GeneralizeLandcover(
+        buffer_constant=buffer_constant,
+        simplification_tolerance=simplification_tolerance,
+        area_threshold=area_threshold,
+        hole_threshold=hole_threshold,
+        smoothing=smoothing,
+    )
+    in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
+    output = algorithm.execute(in_gdf, reference_data={})
+    output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 
 
 def main() -> None:
