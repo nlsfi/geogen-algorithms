@@ -6,8 +6,9 @@
 #  LICENSE file in the root directory of this source tree.
 import re
 
-import geopandas as gpd
 import pytest
+from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
 from pandas.testing import assert_frame_equal
 from shapely import equals_exact
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
@@ -17,32 +18,114 @@ from geogenalg.core.exceptions import GeometryTypeError
 
 
 @pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "width_threshold",
+        "elongation_threshold",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    Polygon(
+                        [[0, 0], [0, 4], [1, 4], [1, 0], [0, 0]]
+                    ),  # elongated enough, too wide
+                    Polygon(
+                        [[0, 0], [0, 0.5], [0.5, 0.5], [0.5, 0], [0, 0]]
+                    ),  # thin enough, not elongated enough
+                    Polygon(
+                        [[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]]
+                    ),  # not elongated enough, too wide
+                ],
+            ),
+            0.55,  # width_threshold
+            0.5,  # elongation_threshold
+            GeoDataFrame(
+                geometry=[
+                    Polygon([[0, 0], [0, 4], [1, 4], [1, 0], [0, 0]]),
+                    Polygon([[0, 0], [0, 0.5], [0.5, 0.5], [0.5, 0], [0, 0]]),
+                    Polygon([[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    Polygon(
+                        [[0, 0], [0, 4], [1, 4], [1, 0], [0, 0]]
+                    ),  # should exaggerate
+                    Polygon(
+                        [[0, 0], [0, 0.5], [0.5, 0.5], [0.5, 0], [0, 0]]
+                    ),  # not elongated enough
+                    Polygon(
+                        [[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]]
+                    ),  # too wide and not elongated enough
+                ],
+            ),
+            2,  # width_threshold
+            0.5,  # elongation_threshold
+            GeoDataFrame(
+                geometry=[
+                    Polygon([[-1, -1], [-1, 5], [2, 5], [2, -1], [-1, -1]]),
+                    Polygon([[0, 0], [0, 0.5], [0.5, 0.5], [0.5, 0], [0, 0]]),
+                    Polygon([[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "no exaggerations",
+        "one exaggerated",
+    ],
+)
+def test_exaggerate_thin_polygons(
+    input_gdf: GeoDataFrame,
+    width_threshold: float,
+    elongation_threshold: float,
+    expected_gdf: GeoDataFrame,
+):
+    result = exaggeration.exaggerate_thin_polygons(
+        input_gdf,
+        width_threshold,
+        elongation_threshold,
+        buffer_options=exaggeration.BufferOptions(
+            distance=1.0,
+            cap_style="square",
+            join_style="mitre",
+        ),
+    )
+
+    assert_geodataframe_equal(result, expected_gdf)
+
+
+@pytest.mark.parametrize(
     ("input_gdf", "threshold", "expected_gdf"),
     [
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1]},
                 geometry=[Polygon([(0, 0, 5), (0, 0.4, 5), (2, 0.4, 5), (2, 0, 5)])],
             ),
             1.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1]},
                 geometry=[Polygon([(0, 0, 5), (0, 0.4, 5), (2, 0.4, 5), (2, 0, 5)])],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [2]},
                 geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
             ),
             1.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [2]},
                 geometry=[Polygon()],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [3]},
                 geometry=[
                     MultiPolygon(
@@ -54,36 +137,36 @@ from geogenalg.core.exceptions import GeometryTypeError
                 ],
             ),
             1.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [3]},
                 geometry=[Polygon([(0, 0.4, 2), (2, 0.4, 3), (2, 0, 4), (0, 0, 1)])],
             ),
         ),
         (
-            gpd.GeoDataFrame(columns=["id", "geometry"], geometry=[]),
+            GeoDataFrame(columns=["id", "geometry"], geometry=[]),
             1.0,
-            gpd.GeoDataFrame(columns=["id", "geometry"], geometry=[]),
+            GeoDataFrame(columns=["id", "geometry"], geometry=[]),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [4], "name": ["test-area"]},
                 geometry=[Polygon([(0, 0), (0, 0.4), (3, 0.4), (3, 0)])],
             ),
             1.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [4], "name": ["test-area"]},
                 geometry=[Polygon([(0, 0), (0, 0.4), (3, 0.4), (3, 0)])],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [5]},
                 geometry=[
                     Polygon([(0, 0), (4, 0), (4, 2), (2.2, 2), (2.2, 0.4), (0, 0.4)])
                 ],
             ),
             0.5,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [5]},
                 geometry=[
                     Polygon(
@@ -98,7 +181,7 @@ from geogenalg.core.exceptions import GeometryTypeError
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [6]},
                 geometry=[
                     Polygon(
@@ -116,7 +199,7 @@ from geogenalg.core.exceptions import GeometryTypeError
                 ],
             ),
             1,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [6]},
                 geometry=[
                     MultiPolygon(
@@ -140,7 +223,7 @@ from geogenalg.core.exceptions import GeometryTypeError
     ],
 )
 def test_extract_narrow_polygon_parts(
-    input_gdf: gpd.GeoDataFrame, threshold: float, expected_gdf: gpd.GeoDataFrame
+    input_gdf: GeoDataFrame, threshold: float, expected_gdf: GeoDataFrame
 ):
     result_gdf = exaggeration.extract_narrow_polygon_parts(input_gdf, threshold)
 
@@ -164,7 +247,7 @@ def test_extract_narrow_polygon_parts(
 
 
 def test_extract_narrow_polygon_parts_raises_on_non_polygon_geometry():
-    invalid_gdf = gpd.GeoDataFrame(
+    invalid_gdf = GeoDataFrame(
         {"id": [1, 2, 3]},
         geometry=[
             Point(0, 0),

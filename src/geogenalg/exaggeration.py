@@ -6,15 +6,51 @@
 #  LICENSE file in the root directory of this source tree.
 
 
-import geopandas as gpd
+from dataclasses import dataclass
+from typing import Literal
+
+from geopandas import GeoDataFrame
+from shapely import BufferCapStyle, BufferJoinStyle, Polygon
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import elongation, rectangle_dimensions
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
+@dataclass
+class BufferOptions:
+    """Data class for passing options to buffer function."""
+
+    distance: float
+    quad_segs: int = 16  # noqa: SC200
+    cap_style: BufferCapStyle | Literal["round", "square", "flat"] = "round"
+    join_style: BufferJoinStyle | Literal["round", "mitre", "bevel"] = "round"
+    mitre_limit: float = 5
+    single_sided: bool = False
+    quadsegs: int | None = None  # noqa: SC200
+    resolution: int | None = None
+
+
+def _buffer_with_options(
+    geom: BaseGeometry,
+    options: BufferOptions,
+) -> Polygon:
+    return geom.buffer(
+        distance=options.distance,
+        quad_segs=options.quad_segs,  # noqa: SC200
+        cap_style=options.cap_style,
+        join_style=options.join_style,
+        mitre_limit=options.mitre_limit,
+        single_sided=options.single_sided,
+        quadsegs=options.quadsegs,  # noqa: SC200
+        resolution=options.resolution,
+    )
+
+
 def extract_narrow_polygon_parts(
-    input_gdf: gpd.GeoDataFrame, threshold: float
-) -> gpd.GeoDataFrame:
+    input_gdf: GeoDataFrame, threshold: float
+) -> GeoDataFrame:
     """Extract polygon parts narrower than the threshold.
 
     Args:
@@ -61,3 +97,43 @@ def extract_narrow_polygon_parts(
     ).buffer(0.1, cap_style="flat", join_style="mitre")
 
     return narrow_parts_gdf
+
+
+def exaggerate_thin_polygons(
+    input_gdf: GeoDataFrame,
+    width_threshold: float,
+    elongation_threshold: float,
+    *,
+    buffer_options: BufferOptions,
+) -> GeoDataFrame:
+    """Exaggerate polygon if it's considered thin.
+
+    If the polygon's oriented bounding box is under the width and elongation
+    threshold, it will be considered thin.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame containing polygon geometries.
+        width_threshold: maximum value for width for polygon to be considered thin
+        elongation_threshold: maximum value for elongation for polygon to be
+            considered thin
+        buffer_options: options to pass to buffer function
+
+    Returns:
+    -------
+        GeoDataFrame containing the input features with the thin polygons exaggerated.
+
+    """
+    modified = input_gdf.copy()
+
+    def process_polygon(geom: Polygon) -> Polygon:
+        width = rectangle_dimensions(geom.oriented_envelope).width
+
+        if elongation(geom) <= elongation_threshold and width <= width_threshold:
+            return _buffer_with_options(geom, buffer_options)
+
+        return geom
+
+    modified.geometry = modified.geometry.apply(process_polygon)
+
+    return modified
