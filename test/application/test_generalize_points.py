@@ -44,7 +44,7 @@ def test_generalize_points() -> None:
         ],
     )
 
-    result_gdf = algorithm.execute(input_gdf)
+    result_gdf = algorithm.execute(input_gdf, {})
 
     expected_gdf = gpd.GeoDataFrame(
         {
