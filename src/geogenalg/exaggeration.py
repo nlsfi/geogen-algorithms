@@ -22,29 +22,32 @@ from geogenalg.utility.validation import check_gdf_geometry_type
 class BufferOptions:
     """Data class for passing options to buffer function."""
 
-    distance: float
-    quad_segs: int = 16  # noqa: SC200
+    quad_segments: int = 16
     cap_style: BufferCapStyle | Literal["round", "square", "flat"] = "round"
     join_style: BufferJoinStyle | Literal["round", "mitre", "bevel"] = "round"
     mitre_limit: float = 5
     single_sided: bool = False
-    quadsegs: int | None = None  # noqa: SC200
-    resolution: int | None = None
 
 
-def _buffer_with_options(
+def buffer_with_options(
     geom: BaseGeometry,
+    distance: float,
     options: BufferOptions,
 ) -> Polygon:
+    """Buffer geometry with options from BufferOptions object.
+
+    Returns
+    -------
+        Buffered geometry.
+
+    """
     return geom.buffer(
-        distance=options.distance,
-        quad_segs=options.quad_segs,  # noqa: SC200
+        distance=distance,
+        quad_segs=options.quad_segments,  # noqa: SC200
         cap_style=options.cap_style,
         join_style=options.join_style,
         mitre_limit=options.mitre_limit,
         single_sided=options.single_sided,
-        quadsegs=options.quadsegs,  # noqa: SC200
-        resolution=options.resolution,
     )
 
 
@@ -103,8 +106,8 @@ def exaggerate_thin_polygons(
     input_gdf: GeoDataFrame,
     width_threshold: float,
     elongation_threshold: float,
-    *,
-    buffer_options: BufferOptions,
+    exaggerate_by: float,
+    buffer_options: BufferOptions | None = None,
 ) -> GeoDataFrame:
     """Exaggerate polygon if it's considered thin.
 
@@ -117,6 +120,7 @@ def exaggerate_thin_polygons(
         width_threshold: maximum value for width for polygon to be considered thin
         elongation_threshold: maximum value for elongation for polygon to be
             considered thin
+        exaggerate_by: buffer distance for exaggeration
         buffer_options: options to pass to buffer function
 
     Returns:
@@ -124,16 +128,19 @@ def exaggerate_thin_polygons(
         GeoDataFrame containing the input features with the thin polygons exaggerated.
 
     """
+    if buffer_options is None:
+        buffer_options = BufferOptions()
+
     modified = input_gdf.copy()
 
-    def process_polygon(geom: Polygon) -> Polygon:
+    def _process_polygon(geom: Polygon) -> Polygon:
         width = rectangle_dimensions(geom.oriented_envelope).width
 
         if elongation(geom) <= elongation_threshold and width <= width_threshold:
-            return _buffer_with_options(geom, buffer_options)
+            return buffer_with_options(geom, exaggerate_by, buffer_options)
 
         return geom
 
-    modified.geometry = modified.geometry.apply(process_polygon)
+    modified.geometry = modified.geometry.apply(_process_polygon)
 
     return modified
