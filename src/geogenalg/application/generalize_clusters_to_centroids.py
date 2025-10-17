@@ -15,13 +15,14 @@ from geopandas import GeoDataFrame
 from pandas import Series, concat
 from shapely import Point, Polygon, box
 
-from geogenalg.application import BaseAlgorithm
+from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.cluster import get_cluster_centroids
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import mean_z
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
+@supports_identity
 @dataclass(frozen=True)
 class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     """Reduces polygons and point clusters to single points."""
@@ -63,7 +64,7 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
 
         return gdf
 
-    def execute(
+    def _execute(
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
@@ -125,12 +126,15 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
                 aggregation_functions=self.aggregation_functions,
             )
 
-            clusters_from_points[self.identity_hash_column] = (
-                clusters_from_points.old_ids.apply(
-                    lambda ids: sha256("".join(sorted(ids)).encode()).hexdigest(),
-                )
+            # TODO: Base the identity generation on the original index values
+            # instead of a separate unique id column on the input data.
+            clusters_from_points = clusters_from_points.set_index(
+                clusters_from_points["old_ids"].apply(
+                    lambda ids: sha256(
+                        b"pointcluster" + "".join(sorted(ids)).encode()
+                    ).hexdigest(),
+                ),
             )
-
             clusters_from_points[self.feature_type_column] = "centroid_from_point"
 
         clusters_from_polygons = GeoDataFrame()

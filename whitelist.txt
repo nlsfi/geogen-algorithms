@@ -54,3 +54,5 @@ visvalingam
 wkb
 wkt
 xy
+alg
+inplace
