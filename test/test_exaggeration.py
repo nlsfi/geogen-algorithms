@@ -89,8 +89,8 @@ def test_exaggerate_thin_polygons(
         input_gdf,
         width_threshold,
         elongation_threshold,
+        1.0,
         buffer_options=exaggeration.BufferOptions(
-            distance=1.0,
             cap_style="square",
             join_style="mitre",
         ),
