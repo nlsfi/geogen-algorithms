@@ -26,20 +26,20 @@ from geogenalg.utility.validation import check_gdf_geometry_type
 class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     """Reduces polygons and point clusters to single points."""
 
-    """Points within this distance of each other will be clustered."""
     cluster_distance: float
-    """Polygons with area smaller than this will be turned into a point."""
+    """Points within this distance of each other will be clustered."""
     polygon_min_area: float
-    """Name of column containing a unique identifier of input features."""
+    """Polygons with area smaller than this will be turned into a point."""
     unique_id_column: str
-    """Name of column containing type of output feature."""
+    """Name of column containing a unique identifier of input features."""
     feature_type_column: str
+    """Name of column containing type of output feature."""
+    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
     """Dictionary containing keys corresponding to a column in a GeoDataFrame
     and a function which will aggregate the column's values when creating
     centroid from multiple points. If the function is given as a string, it
     must correspond to Pandas's aggregation function names. If no function is
     given "first" will be used by default."""
-    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
 
     def _process_polygons(
         self,
