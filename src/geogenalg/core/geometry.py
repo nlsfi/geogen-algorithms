@@ -6,7 +6,6 @@
 #  LICENSE file in the root directory of this source tree.
 
 
-import math
 from enum import Enum
 from statistics import mean
 from typing import NamedTuple
@@ -22,7 +21,6 @@ from shapely import (
     Point,
     Polygon,
     affinity,
-    count_coordinates,
     get_coordinates,
     polygonize,
     shortest_line,
@@ -140,33 +138,25 @@ def mean_z(geom: BaseGeometry, nodata_value: float = -999.999) -> float:
     return mean(z_values)
 
 
-def rectangle_dimensions(rect: Polygon) -> Dimensions:
-    """Calculate the dimensions of a rectangular polygon.
+def oriented_envelope_dimensions(geom: Polygon) -> Dimensions:
+    """Calculate the dimensions of a geometry from its oriented envelope.
 
     Returns
     -------
-        The width and height of a rectangular polygon.
+        The width and height of the oriented envelope.
 
     Raises
     ------
-        GeometryOperationError: If input polygon is invalid.
-        InvalidGeometryError: If input polygon is not a rectangle.
+        InvalidGeometryError: If input polygon is invalid.
 
     """
-    required_coords = 5
-    if count_coordinates(rect) != required_coords or not math.isclose(  # noqa: SC200
-        rect.area,
-        rect.oriented_envelope.area,
-        rel_tol=1e-06,  # noqa: SC200
-    ):
-        msg = f"Not a rectangle: {rect}"
-        raise GeometryOperationError(msg)
-
-    if not rect.is_valid:
+    if not geom.is_valid:
         msg = "Rectangle not valid"
         raise InvalidGeometryError(msg)
 
-    x, y = rect.exterior.coords.xy
+    envelope = geom.oriented_envelope
+
+    x, y = envelope.exterior.coords.xy
 
     point_1 = Point(x[0], y[0])
     point_2 = Point(x[1], y[1])
@@ -186,9 +176,7 @@ def elongation(polygon: Polygon) -> float:
         of its minimum bounding oriented envelope.
 
     """
-    envelope = polygon.oriented_envelope
-
-    dimensions = rectangle_dimensions(envelope)
+    dimensions = oriented_envelope_dimensions(polygon)
     return dimensions.width / dimensions.height
 
 

@@ -16,10 +16,10 @@ from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Pol
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import (
-    GeometryOperationError,
     GeometryTypeError,
 )
 from geogenalg.core.geometry import (
+    Dimensions,
     LineExtendFrom,
     assign_nearest_z,
     elongation,
@@ -30,8 +30,8 @@ from geogenalg.core.geometry import (
     lines_to_segments,
     mean_z,
     move_to_point,
+    oriented_envelope_dimensions,
     perforate_polygon_with_gdf_exteriors,
-    rectangle_dimensions,
     scale_line_to_length,
 )
 
@@ -390,15 +390,36 @@ def test_mean_z_no_geometrycollection():
         mean_z(GeometryCollection([Point(0, 0, 0), Point(0, 0, 1)]))
 
 
-def test_rectangle_dimensions():
-    rect = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
-
-    assert rectangle_dimensions(rect).width == 1.0
-    assert rectangle_dimensions(rect).height == 4.0
-
-    rect2 = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 5, 1 0, 0 0))")
-    with pytest.raises(GeometryOperationError):
-        rectangle_dimensions(rect2)
+@pytest.mark.parametrize(
+    ("geom", "expected_dimensions"),
+    [
+        (box(0, 0, 1, 1), Dimensions(width=1, height=1)),
+        (box(0, 1, 2, 2), Dimensions(width=1.0, height=2.0)),
+        (
+            Polygon(
+                [
+                    [0, 0],
+                    [2, 0],
+                    [2, 1],
+                    [4, 1],
+                    [4, -2],
+                    [2, -2],
+                    [2, -1],
+                    [0, -1],
+                    [0, 0],
+                ],
+            ),
+            Dimensions(width=3.0, height=4.0),
+        ),
+    ],
+    ids=[
+        "square",
+        "rectangle",
+        "irregular polygon",
+    ],
+)
+def test_oriented_envelope_dimensions(geom: Polygon, expected_dimensions: Dimensions):
+    assert oriented_envelope_dimensions(geom) == expected_dimensions
 
 
 @pytest.mark.parametrize(
