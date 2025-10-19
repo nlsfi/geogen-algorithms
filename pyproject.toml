@@ -182,6 +182,10 @@ geopandas = "gpd"
     "PLR0917", # too-many-positional-arguments
 ]
 
+"src/geogenalg/application/*" = [
+    "PLR0914", # too-many-locals
+]
+
 [tool.flake8]
 spellcheck-targets = "names"
 dictionaries = "en_US,python,technical,pandas"
