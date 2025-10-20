@@ -70,7 +70,7 @@ class GeneralizeFences(BaseAlgorithm):
         if "masts" not in reference_data:
             msg = (
                 "GeneralizeFences requires mast Point GeoDataFrame"
-                + "in reference_data with key 'masts'."
+                + " in reference_data with key 'masts'."
             )
             raise KeyError(msg)
         if not check_gdf_geometry_type(reference_data["masts"], ["Point"]):
