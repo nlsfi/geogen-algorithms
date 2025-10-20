@@ -226,6 +226,7 @@ branch = true
 source_pkgs = ["geogenalg"]
 # TODO: remove omit section when qgis dependencies removed/function refactored
 omit = [
+    "src/geogenalg/main.py",
     "src/geogenalg/application/generalize_lakes.py",
     "src/geogenalg/application/generalize_seas.py",
     "src/geogenalg/buffer/exaggerate_thin_parts.py",
