@@ -13,6 +13,8 @@ from shapelysmooth import chaikin_smooth
 
 from geogenalg import attributes, selection
 from geogenalg.application import BaseAlgorithm
+from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @dataclass(frozen=True)
@@ -52,7 +54,16 @@ class GeneralizeLandcover(BaseAlgorithm):
         -------
             Generalized land cover polygons.
 
+        Raises:
+        ------
+            GeometryTypeError: If data contains something other than polygon
+            geometries.
+
         """
+        if not check_gdf_geometry_type(data, ["Polygon"]):
+            msg = "GeneralizeLandcover works only with Polygon geometries."
+            raise GeometryTypeError(msg)
+
         result_gdf = data.copy()
 
         def _buffer(gdf: GeoDataFrame, distance: float) -> None:
