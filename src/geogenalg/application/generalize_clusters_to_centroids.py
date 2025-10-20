@@ -25,22 +25,34 @@ from geogenalg.utility.validation import check_gdf_geometry_type
 @supports_identity
 @dataclass(frozen=True)
 class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
-    """Reduces polygons and point clusters to single points."""
+    """Reduces polygons and point clusters to single points.
 
-    """Points within this distance of each other will be clustered."""
+    Input can be point and/or polygons for which centroids are possibly generated.
+
+    Reference data can be polygons, within which the centroids will be placed.
+
+    Output is generalized data, which contains the newly
+    created centroids and all input features which were not turned into
+    centroids. These can be distinguished by the value in the column of
+    the name set by the feature_type_column attribute.
+    """
+
     cluster_distance: float
-    """Polygons with area smaller than this will be turned into a point."""
+    """Points within this distance of each other will be clustered."""
     polygon_min_area: float
-    """Name of column containing a unique identifier of input features."""
+    """Polygons with area smaller than this will be turned into a point."""
     unique_id_column: str
-    """Name of column containing type of output feature."""
+    """Name of column containing a unique identifier of input features."""
     feature_type_column: str
+    """Name of column containing type of output feature."""
+    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
     """Dictionary containing keys corresponding to a column in a GeoDataFrame
     and a function which will aggregate the column's values when creating
     centroid from multiple points. If the function is given as a string, it
     must correspond to Pandas's aggregation function names. If no function is
     given "first" will be used by default."""
-    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
+    reference_key: str = "mask"
+    "Reference data key to use as a mask layer for centroid placement."
 
     def _process_polygons(
         self,
@@ -69,28 +81,6 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        """Execute algorithm.
-
-        Args:
-        ----
-            data: GeoDataFrame containing Points and/or Polygons.
-            reference_data: May contain a Polygon GeoDataFrame with the key
-                "mask". If so new centroids will not be created outside of its
-                features.
-
-        Returns:
-        -------
-            GeoDataFrame with generalized data, which contains the newly
-            created centroids and all input features which were not turned into
-            centroids. These can be distinguished by the value in the column of
-            the name set by the feature_type_column attribute.
-
-        Raises:
-        ------
-            GeometryTypeError: If data contains something other than point or
-            polygon geometries or mask data contains non-polygon geometries.
-
-        """
         if not check_gdf_geometry_type(data, ["Point", "Polygon"]):
             msg = (
                 "GeneralizePointClustersAndPolygonsToCentroids "
@@ -98,8 +88,8 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             )
             raise GeometryTypeError(msg)
 
-        if "mask" in reference_data:
-            mask_gdf = reference_data["mask"]
+        if self.reference_key in reference_data:
+            mask_gdf = reference_data[self.reference_key]
             if not check_gdf_geometry_type(mask_gdf, ["Polygon", "MultiPolygon"]):
                 msg = "mask dataframe must only contain (Multi)Polygons"
                 raise GeometryTypeError(msg)
