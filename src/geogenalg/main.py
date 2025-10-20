@@ -23,6 +23,7 @@ from geogenalg.application import BaseAlgorithm
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
+from geogenalg.application.generalize_fences import GeneralizeFences
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 GEOPACKAGE_URI_HELP = (
@@ -194,6 +195,14 @@ GeoPackageOption = Annotated[
     ),
 ]
 
+GeoPackageOptionMandatory = Annotated[
+    GeoPackageURI,
+    typer.Option(
+        parser=geopackage_uri,
+        help=GEOPACKAGE_URI_HELP,
+    ),
+]
+
 ReferenceGeoPackageList = Annotated[
     list[NamedGeoPackageURI],
     typer.Option(
@@ -270,6 +279,7 @@ def build_app() -> None:
     """
     commands_and_algs = {
         "clusters_to_centroids": GeneralizePointClustersAndPolygonsToCentroids,
+        "fences": GeneralizeFences,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
