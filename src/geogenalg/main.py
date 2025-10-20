@@ -13,6 +13,7 @@ from geopandas import read_file
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
+from geogenalg.application.generalize_points import GeneralizePoints
 
 
 class GeoPackageURI:
@@ -119,6 +120,30 @@ def clusters_to_centroids(
 
     in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
     output = algorithm.execute(in_gdf, reference_data=reference_data)
+    output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
+
+
+@app.command()
+def points(
+    input_geopackage: GeoPackageArgument,
+    output_geopackage: GeoPackageArgument,
+    reduce_threshold: Annotated[float, typer.Option()],
+    displace_threshold: Annotated[float, typer.Option()],
+    displace_points_iterations: Annotated[int, typer.Option()],
+    unique_key_column: Annotated[str, typer.Option()],
+    cluster_members_column: Annotated[str, typer.Option()],
+) -> None:
+    """Execute Generalize points algorithm."""
+    algorithm = GeneralizePoints(
+        reduce_threshold=reduce_threshold,
+        displace_threshold=displace_threshold,
+        displace_points_iterations=displace_points_iterations,
+        unique_key_column=unique_key_column,
+        cluster_members_column=cluster_members_column,
+    )
+
+    in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
+    output = algorithm.execute(in_gdf, reference_data={})
     output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 
 
