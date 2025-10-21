@@ -13,6 +13,7 @@ from geopandas import read_file
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
+from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 
 class GeoPackageURI:
@@ -106,7 +107,6 @@ def clusters_to_centroids(
     algorithm = GeneralizePointClustersAndPolygonsToCentroids(
         cluster_distance=cluster_distance,
         polygon_min_area=polygon_min_area,
-        unique_id_column=unique_id_column,
         feature_type_column=feature_type_column,
         aggregation_functions=None,
     )
@@ -117,7 +117,11 @@ def clusters_to_centroids(
     else:
         reference_data = {}
 
-    in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
+    in_gdf = read_gdf_from_file_and_set_index(
+        input_geopackage.file,
+        unique_id_column,
+        layer=input_geopackage.layer_name,
+    )
     output = algorithm.execute(in_gdf, reference_data=reference_data)
     output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 

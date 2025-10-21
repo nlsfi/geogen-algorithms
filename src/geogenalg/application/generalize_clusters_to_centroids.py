@@ -41,8 +41,6 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     """Points within this distance of each other will be clustered."""
     polygon_min_area: float
     """Polygons with area smaller than this will be turned into a point."""
-    unique_id_column: str
-    """Name of column containing a unique identifier of input features."""
     feature_type_column: str
     """Name of column containing type of output feature."""
     aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
@@ -88,6 +86,8 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             )
             raise GeometryTypeError(msg)
 
+        index_name = data.index.name
+
         if self.reference_key in reference_data:
             mask_gdf = reference_data[self.reference_key]
             if not check_gdf_geometry_type(mask_gdf, ["Polygon", "MultiPolygon"]):
@@ -112,12 +112,9 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             clusters_from_points = get_cluster_centroids(
                 points,
                 self.cluster_distance,
-                self.unique_id_column,
                 aggregation_functions=self.aggregation_functions,
             )
 
-            # TODO: Base the identity generation on the original index values
-            # instead of a separate unique id column on the input data.
             clusters_from_points = clusters_from_points.set_index(
                 clusters_from_points["old_ids"].apply(
                     lambda ids: sha256(
@@ -138,7 +135,7 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             ]
             ids_to_remove = list(chain.from_iterable(clusters_from_points["old_ids"]))
 
-            points = points.loc[~points[self.unique_id_column].isin(ids_to_remove)]
+            points = points.loc[~points.index.isin(ids_to_remove)]
             clusters_from_points = clusters_from_points.drop(
                 columns=["old_ids"],
                 axis=1,
@@ -153,6 +150,10 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
         points[self.feature_type_column] = "unchanged_point"
         polygons[self.feature_type_column] = "unchanged_polygon"
 
-        return GeoDataFrame(
+        result = GeoDataFrame(
             concat([clusters_from_points, clusters_from_polygons, points, polygons]),
         )
+
+        result.index.name = index_name
+
+        return result

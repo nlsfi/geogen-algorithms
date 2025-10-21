@@ -408,10 +408,11 @@ def test_get_cluster_centroids(
     aggregation_functions: dict[str, Callable | str] | None,
     expected_gdf: GeoDataFrame,
 ):
+    input_gdf = input_gdf.set_index(input_gdf["id"])
+
     result = cluster.get_cluster_centroids(
         input_gdf,
         cluster_distance,
-        "id",
         aggregation_functions=aggregation_functions,
     )
 
