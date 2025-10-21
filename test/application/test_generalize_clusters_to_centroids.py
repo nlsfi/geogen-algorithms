@@ -19,6 +19,9 @@ from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+
+UNIQUE_ID_COLUMN = "kmtk_id"
 
 
 @pytest.mark.parametrize(
@@ -41,24 +44,33 @@ def test_generalize_boulders_in_water(
     input_layer: str,
 ) -> None:
     input_path = testdata_path / gpkg_file
-    input_data = read_file(input_path, layer=input_layer)
+    input_data = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
+        layer=input_layer,
+    )
 
     temp_dir = tempfile.TemporaryDirectory()
     output_path = Path(temp_dir.name) / "output.gpkg"
 
     algorithm = GeneralizePointClustersAndPolygonsToCentroids(
         cluster_distance=30.0,
-        unique_id_column="kmtk_id",
         polygon_min_area=1000.0,
         feature_type_column="feature_type",
         aggregation_functions=None,
     )
 
-    control = read_file(input_path, layer="control")
+    control = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
+        layer="control",
+    )
     mask = read_file(input_path, layer="lake_part")
     algorithm.execute(input_data, {"mask": mask}).to_file(output_path, layer="result")
 
-    result = read_file(output_path, layer="result")
+    result = read_gdf_from_file_and_set_index(
+        output_path, UNIQUE_ID_COLUMN, layer="result"
+    )
 
     assert_frame_equal(control, result)
 
@@ -68,7 +80,6 @@ def test_invalid_geom_type() -> None:
 
     algorithm = GeneralizePointClustersAndPolygonsToCentroids(
         cluster_distance=30.0,
-        unique_id_column="kmtk_id",
         polygon_min_area=1000.0,
         feature_type_column="feature_type",
         aggregation_functions=None,
@@ -87,7 +98,6 @@ def test_invalid_mask_geom_type() -> None:
 
     algorithm = GeneralizePointClustersAndPolygonsToCentroids(
         cluster_distance=30.0,
-        unique_id_column="kmtk_id",
         polygon_min_area=1000.0,
         feature_type_column="feature_type",
         aggregation_functions=None,
@@ -105,12 +115,15 @@ def test_mixed_geom_types(testdata_path: Path) -> None:
     output_path = Path(temp_dir.name) / "output.gpkg"
 
     points_path = testdata_path / "boulder_in_water.gpkg"
-    points = read_file(
+
+    points = read_gdf_from_file_and_set_index(
         points_path,
+        UNIQUE_ID_COLUMN,
         layer="boulder_in_water",
     )
-    polygons = read_file(
+    polygons = read_gdf_from_file_and_set_index(
         testdata_path / "boulders_in_water.gpkg",
+        UNIQUE_ID_COLUMN,
         layer="boulders_in_water",
     )
 
@@ -120,17 +133,25 @@ def test_mixed_geom_types(testdata_path: Path) -> None:
 
     algorithm = GeneralizePointClustersAndPolygonsToCentroids(
         cluster_distance=30.0,
-        unique_id_column="kmtk_id",
         polygon_min_area=1000.0,
         feature_type_column="feature_type",
         aggregation_functions=None,
     )
 
     control_path = testdata_path / "boulders_in_water_mixed.gpkg"
-    control = read_file(control_path, layer="control")
+    control = read_gdf_from_file_and_set_index(
+        control_path,
+        UNIQUE_ID_COLUMN,
+        layer="control",
+    )
 
     algorithm.execute(mixed, {"mask": mask_gdf}).to_file(output_path, layer="result")
-    result = read_file(output_path, layer="result")
+
+    result = read_gdf_from_file_and_set_index(
+        output_path,
+        UNIQUE_ID_COLUMN,
+        layer="result",
+    )
 
     assert_frame_equal(control, result)
 
@@ -139,25 +160,31 @@ def test_no_mask(testdata_path: Path) -> None:
     temp_dir = tempfile.TemporaryDirectory()
     output_path = Path(temp_dir.name) / "output.gpkg"
 
-    points_path = testdata_path / "boulder_in_water.gpkg"
-    points = read_file(
-        points_path,
+    input_path = testdata_path / "boulder_in_water.gpkg"
+    input_data = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
         layer="boulder_in_water",
     )
 
     algorithm = GeneralizePointClustersAndPolygonsToCentroids(
         cluster_distance=30.0,
-        unique_id_column="kmtk_id",
         polygon_min_area=1000.0,
         feature_type_column="feature_type",
         aggregation_functions=None,
     )
 
-    control_path = testdata_path / "boulder_in_water.gpkg"
-    control = read_file(control_path, layer="control_no_mask")
+    control = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
+        layer="control_no_mask",
+    )
 
-    algorithm.execute(points, {}).to_file(output_path, layer="result")
-    result = read_file(output_path, layer="result")
+    algorithm.execute(input_data, {}).to_file(output_path, layer="result")
+
+    result = read_gdf_from_file_and_set_index(
+        output_path, UNIQUE_ID_COLUMN, layer="result"
+    )
 
     assert_frame_equal(control, result)
 
@@ -172,9 +199,10 @@ def test_aggregation_functions(testdata_path: Path) -> None:
     temp_dir = tempfile.TemporaryDirectory()
     output_path = Path(temp_dir.name) / "output.gpkg"
 
-    points_path = testdata_path / "boulder_in_water.gpkg"
-    points = read_file(
-        points_path,
+    input_path = testdata_path / "boulder_in_water.gpkg"
+    input_data = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
         layer="boulder_in_water",
     )
 
@@ -184,16 +212,21 @@ def test_aggregation_functions(testdata_path: Path) -> None:
 
     algorithm = GeneralizePointClustersAndPolygonsToCentroids(
         cluster_distance=30.0,
-        unique_id_column="kmtk_id",
         polygon_min_area=1000.0,
         feature_type_column="feature_type",
         aggregation_functions=aggregation_functions,
     )
 
-    control_path = testdata_path / "boulder_in_water.gpkg"
-    control = read_file(control_path, layer="control_aggfunc")
+    control = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
+        layer="control_aggfunc",
+    )
 
-    algorithm.execute(points, {}).to_file(output_path, layer="result")
-    result = read_file(output_path, layer="result")
+    algorithm.execute(input_data, {}).to_file(output_path, layer="result")
+
+    result = read_gdf_from_file_and_set_index(
+        output_path, UNIQUE_ID_COLUMN, layer="result"
+    )
 
     assert_frame_equal(control, result)
