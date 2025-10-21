@@ -14,6 +14,7 @@ from shapelysmooth import chaikin_smooth
 from geogenalg import attributes, selection
 from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -98,6 +99,9 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         # Remove holes smaller than the hole_threshold and return
         result_gdf = selection.remove_small_holes(result_gdf, self.hole_threshold)
+
+        # Assign nearst z values from source gdf
+        result_gdf = assign_nearest_z(data, result_gdf)
 
         # Inherit attributes from source gdf
         return attributes.inherit_attributes(data, result_gdf)
