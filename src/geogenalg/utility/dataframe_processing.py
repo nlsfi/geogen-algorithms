@@ -6,13 +6,42 @@
 #  LICENSE file in the root directory of this source tree.
 
 
-import geopandas as gpd
-import pandas as pd
+from pathlib import Path
+
+from geopandas import GeoDataFrame, read_file
+from pandas import concat
+
+
+def read_gdf_from_file_and_set_index(
+    file_name: str | Path,
+    unique_id_column: str,
+    *,
+    layer: str | None = None,
+) -> GeoDataFrame:
+    """Read GeoDataFrame from file and set its index to a given column.
+
+    Args:
+    ----
+        file_name: Path to dataset file to read into a GeoDataFrame.
+        unique_id_column: Column in the dataset containing unique identifiers.
+        layer: Allows optionally specifying layer if dataset contains multiple.
+
+    Returns:
+    -------
+        GeoDataFrame read from the file, with its index set to the column and
+        the index name set to the given column name.
+
+    """
+    gdf = read_file(file_name, layer=layer)
+    gdf = gdf.set_index(unique_id_column)
+    gdf.index.name = unique_id_column
+
+    return gdf
 
 
 def group_gdfs_by_geometry_type(
-    input_gdfs: list[gpd.GeoDataFrame],
-) -> dict[str, gpd.GeoDataFrame]:
+    input_gdfs: list[GeoDataFrame],
+) -> dict[str, GeoDataFrame]:
     """Group and merge GeoDataFeames by their geometry types.
 
     Args:
@@ -33,7 +62,7 @@ def group_gdfs_by_geometry_type(
     point_gdfs = []
 
     for input_gdf in input_gdfs:
-        if not isinstance(input_gdf, gpd.GeoDataFrame):
+        if not isinstance(input_gdf, GeoDataFrame):
             continue
         geom_types = input_gdf.geometry.geom_type.unique()
         if all(geom_type in {"Polygon", "MultiPolygon"} for geom_type in geom_types):
@@ -49,19 +78,19 @@ def group_gdfs_by_geometry_type(
     crs = next((gdf.crs for gdf in input_gdfs if not gdf.empty), None)
 
     polygon_gdf = (
-        gpd.GeoDataFrame(pd.concat(polygon_gdfs, ignore_index=True), crs=crs)
+        GeoDataFrame(concat(polygon_gdfs, ignore_index=True), crs=crs)
         if polygon_gdfs
-        else gpd.GeoDataFrame(geometry=[], crs=crs)
+        else GeoDataFrame(geometry=[], crs=crs)
     )
     line_gdf = (
-        gpd.GeoDataFrame(pd.concat(line_gdfs, ignore_index=True), crs=crs)
+        GeoDataFrame(concat(line_gdfs, ignore_index=True), crs=crs)
         if line_gdfs
-        else gpd.GeoDataFrame(geometry=[], crs=crs)
+        else GeoDataFrame(geometry=[], crs=crs)
     )
     point_gdf = (
-        gpd.GeoDataFrame(pd.concat(point_gdfs, ignore_index=True), crs=crs)
+        GeoDataFrame(concat(point_gdfs, ignore_index=True), crs=crs)
         if point_gdfs
-        else gpd.GeoDataFrame(geometry=[], crs=crs)
+        else GeoDataFrame(geometry=[], crs=crs)
     )
 
     return {
