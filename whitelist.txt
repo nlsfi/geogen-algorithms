@@ -39,6 +39,7 @@ linalg
 linemerge
 linestring
 loc
+multipolygon
 nodata
 polygonize
 pygeoops

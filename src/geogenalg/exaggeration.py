@@ -14,7 +14,7 @@ from shapely import BufferCapStyle, BufferJoinStyle, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import elongation, rectangle_dimensions
+from geogenalg.core.geometry import elongation, oriented_envelope_dimensions
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -134,7 +134,7 @@ def exaggerate_thin_polygons(
     modified = input_gdf.copy()
 
     def _process_polygon(geom: Polygon) -> Polygon:
-        width = rectangle_dimensions(geom.oriented_envelope).width
+        width = oriented_envelope_dimensions(geom).width
 
         if elongation(geom) <= elongation_threshold and width <= width_threshold:
             return buffer_with_options(geom, exaggerate_by, buffer_options)

@@ -31,7 +31,7 @@ from ..core.geometry import (  # noqa: TID252
     extract_interior_rings_gdf,
     lines_to_segments,
     move_to_point,
-    rectangle_dimensions,
+    oriented_envelope_dimensions,
     scale_line_to_length,
 )
 
@@ -79,7 +79,7 @@ def generalize_watercourse_areas(  # noqa: C901, PLR0913, PLR0915
 
     def exaggerate_thin_island(island: Polygon) -> Polygon:
         try:
-            width = rectangle_dimensions(island.oriented_envelope).width
+            width = oriented_envelope_dimensions(island.oriented_envelope).width
             if elongation(island) >= min_island_elongation and width < min_island_width:
                 return island.buffer(distance=exaggerate_island_by, quadsegs=2)  # noqa: SC200
         except GeometryOperationError:
