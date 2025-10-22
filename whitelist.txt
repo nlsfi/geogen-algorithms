@@ -1,6 +1,5 @@
 2d
 alg
-alg
 algs
 arctan2
 argmax
@@ -15,6 +14,7 @@ changelog
 cleandoc
 concat
 const
+coord
 coords
 crs
 dataframe
@@ -47,6 +47,7 @@ inplace
 landcover
 linalg
 linemerge
+linestring
 loc
 multipolygon
 nodata
@@ -61,6 +62,7 @@ sindex
 sklearn
 starmap
 tolist
+topo
 typer
 unary
 utils

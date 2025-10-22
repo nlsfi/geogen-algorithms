@@ -8,7 +8,8 @@
 import math
 
 import pytest
-from geopandas import GeoDataFrame, gpd
+from geopandas import GeoDataFrame, GeoSeries
+from geopandas.testing import assert_geoseries_equal
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 from shapely import GeometryCollection, MultiPolygon, box, from_wkt, to_wkt
@@ -22,11 +23,14 @@ from geogenalg.core.geometry import (
     Dimensions,
     LineExtendFrom,
     assign_nearest_z,
+    chaikin_smooth_keep_topology,
+    chaikin_smooth_skip_coords,
     elongation,
     explode_line,
     extend_line_to_nearest,
     extract_interior_rings,
     extract_interior_rings_gdf,
+    get_topological_points,
     lines_to_segments,
     mean_z,
     move_to_point,
@@ -34,6 +38,278 @@ from geogenalg.core.geometry import (
     perforate_polygon_with_gdf_exteriors,
     scale_line_to_length,
 )
+
+
+@pytest.mark.parametrize(
+    ("input_geoseries", "extra_skip_coords", "expected_geoseries"),
+    [
+        (
+            GeoSeries(),
+            [],
+            GeoSeries(),
+        ),
+        (
+            GeoSeries(
+                [
+                    box(0, 0, 2, 2),
+                    box(0, 2, 2, 4),
+                    box(0, 4, 2, 5),
+                ]
+            ),
+            None,
+            GeoSeries(
+                [
+                    Polygon(
+                        [
+                            [2, 0.5],
+                            [2, 2],
+                            [0, 2],
+                            [0, 0.5],
+                            [0.5, 0],
+                            [1.5, 0],
+                            [2, 0.5],
+                        ]
+                    ),
+                    box(0, 2, 2, 4),
+                    Polygon(
+                        [
+                            [2, 4],
+                            [2, 4.75],
+                            [1.5, 5],
+                            [0.5, 5],
+                            [0, 4.75],
+                            [0, 4],
+                            [2, 4],
+                        ]
+                    ),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "empty series",
+        "middle box not smoothed",
+    ],
+)
+def test_chaikin_smooth_keep_topology(
+    input_geoseries: GeoSeries,
+    extra_skip_coords: list[Point] | MultiPoint | None,
+    expected_geoseries: GeoSeries,
+):
+    assert_geoseries_equal(
+        chaikin_smooth_keep_topology(
+            input_geoseries,
+            1,
+            extra_skip_coords=extra_skip_coords,
+        ),
+        expected_geoseries,
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "skip_coords", "iterations", "expected_geometry"),
+    [
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 1],
+                    [1, 2],
+                ]
+            ),
+            [],
+            1,
+            LineString(
+                [
+                    [0, 0],
+                    [0.25, 0.25],
+                    [0.75, 0.75],
+                    [1, 1.25],
+                    [1, 1.75],
+                    [1, 2],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 1],
+                    [1, 2],
+                ]
+            ),
+            [Point(1, 1)],
+            1,
+            LineString(
+                [
+                    [0, 0],
+                    [0.25, 0.25],
+                    [1, 1],
+                    [1, 1.75],
+                    [1, 2],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 1],
+                    [1, 2],
+                ]
+            ),
+            [Point(1, 1)],
+            2,
+            LineString(
+                [
+                    [0, 0],
+                    [0.0625, 0.0625],
+                    [0.1875, 0.1875],
+                    [0.4375, 0.4375],
+                    [1, 1],
+                    [1, 1.5625],
+                    [1, 1.8125],
+                    [1, 1.9375],
+                    [1, 2],
+                ]
+            ),
+        ),
+        (
+            box(0, 0, 1, 1),
+            [],
+            1,
+            Polygon(
+                [
+                    [1, 0.25],
+                    [1, 0.75],
+                    [0.75, 1],
+                    [0.25, 1],
+                    [0, 0.75],
+                    [0, 0.25],
+                    [0.25, 0],
+                    [0.75, 0],
+                    [1, 0.25],
+                ]
+            ),
+        ),
+        (
+            box(0, 0, 1, 1),
+            [Point(0, 0)],
+            1,
+            Polygon(
+                [
+                    [1, 0.25],
+                    [1, 0.75],
+                    [0.75, 1],
+                    [0.25, 1],
+                    [0, 0.75],
+                    [0, 0],
+                    [0.75, 0],
+                    [1, 0.25],
+                ]
+            ),
+        ),
+        (
+            box(0, 0, 1, 1),
+            MultiPoint([Point(0, 0), Point(1, 1)]),
+            1,
+            Polygon(
+                [
+                    [1, 0.25],
+                    [1, 1],
+                    [0.25, 1],
+                    [0, 0.75],
+                    [0, 0],
+                    [0.75, 0],
+                    [1, 0.25],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "three point linestring, no skip",
+        "three point linestring, skip one",
+        "three point linestring, skip one, two iterations",
+        "square polygon, no skip",
+        "square polygon, skip one",
+        "square polygon, skip two",
+    ],
+)
+def test_chaikin_smooth_skip_coords(
+    input_geometry: LineString | Polygon,
+    skip_coords: list[Point] | MultiPoint,
+    iterations: int,
+    expected_geometry: LineString | Polygon,
+):
+    assert (
+        chaikin_smooth_skip_coords(
+            input_geometry,
+            skip_coords,
+            iterations=iterations,
+        )
+        == expected_geometry
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geoseries", "expected_points"),
+    [
+        (
+            GeoSeries(),
+            [],
+        ),
+        (
+            GeoSeries(Point(0, 0)),
+            [],
+        ),
+        (
+            GeoSeries(
+                [
+                    LineString([[0, 0], [0, 1]]),
+                    LineString([[0, 0], [0, -1]]),
+                ]
+            ),
+            [Point(0, 0)],
+        ),
+        (
+            GeoSeries(
+                [
+                    LineString([[0, 0], [0, 1]]),
+                    LineString([[0, 0], [0, -1]]),
+                    LineString([[0, 0], [-1, 0]]),
+                ]
+            ),
+            [Point(0, 0)],
+        ),
+        (
+            GeoSeries(
+                [
+                    box(0, 0, 2, 2),
+                    box(0, 2, 2, 4),
+                    box(0, 4, 2, 5),
+                ]
+            ),
+            [
+                Point(0, 2),
+                Point(0, 4),
+                Point(2, 2),
+                Point(2, 4),
+            ],
+        ),
+    ],
+    ids=[
+        "empty series",
+        "no points",
+        "two geoms, one shared point",
+        "three geoms, one shared point",
+        "polygons, many shared points",
+    ],
+)
+def test_get_topological_points(
+    input_geoseries: GeoSeries,
+    expected_points: list[Point],
+):
+    assert get_topological_points(input_geoseries) == expected_points
 
 
 @pytest.mark.parametrize(
@@ -464,7 +740,7 @@ def test_extract_interior_rings_gdf():
         (7 8, 8 8, 8 7, 7 7, 7 8))"""
     )
 
-    gdf = gpd.GeoDataFrame(
+    gdf = GeoDataFrame(
         geometry=[polygon_with_holes],
         crs="EPSG:3857",
     )
@@ -494,7 +770,7 @@ def test_explode_line_to_segments():
 
 
 def test_lines_to_segments():
-    lines = gpd.GeoSeries(
+    lines = GeoSeries(
         [
             from_wkt("LINESTRING (0 0, 0 1)"),
             from_wkt("LINESTRING (10 0, 10 15)"),
@@ -512,7 +788,7 @@ def test_lines_to_segments():
     assert segments[3].wkt == "LINESTRING (21 21, 22 22)"
     assert segments[4].wkt == "LINESTRING (22 22, 23 23)"
 
-    invalid_series = gpd.GeoSeries(
+    invalid_series = GeoSeries(
         [
             from_wkt("LINESTRING (0 0, 0 1)"),
             from_wkt("LINESTRING (10 0, 10 15)"),

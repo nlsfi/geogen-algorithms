@@ -21,6 +21,7 @@ from shapely import (
     Point,
     Polygon,
     affinity,
+    force_2d,
     get_coordinates,
     polygonize,
     shortest_line,
@@ -37,15 +38,206 @@ from geogenalg.core.exceptions import (
 )
 
 
-class LineExtendFrom(Enum):  # noqa: D101
+class LineExtendFrom(Enum):
+    """An enumeration describing from which end a linestring should be extended."""
+
     END = -1
     START = 0
     BOTH = 1
 
 
-class Dimensions(NamedTuple):  # noqa: D101
+class Dimensions(NamedTuple):
+    """Simple named tuple describing the dimensions of a rectangle."""
+
     width: float
     height: float
+
+
+def chaikin_smooth_skip_coords(
+    geom: LineString | Polygon,
+    skip_coords: list[Point] | MultiPoint,
+    *,
+    iterations: int = 1,
+) -> LineString | Polygon:
+    """Smooth input linestring or polygon.
+
+    This is an implementation of Chaikin's corner cutting line smoothing
+    algorithm, with the addition of being able to skip the smoothing of
+    specific points.
+
+    Args:
+    ----
+        geom: Geometry to smooth.
+        iterations: Number of iterations i.e. smoothing passes. Each pass
+            doubles the number of vertices (minus the skipped coordinates) i.e.
+            increase with caution, growth is exponential.
+        skip_coords: List of points to skip. If a corresponding coordinate exists
+            in the input geometry, it is guaranteed to remain unchanged.
+
+    Returns:
+    -------
+        Smoothed geometry.
+
+    Note:
+    ----
+        If skipping of coordinates is not required, prefer shapelysmooth's
+        function as it is likely to be more efficient.
+
+
+    """
+    if isinstance(skip_coords, MultiPoint):
+        skip_coords_ = [point.coords[0] for point in skip_coords.geoms]
+    else:
+        skip_coords_ = [point.coords[0] for point in skip_coords]
+
+    # TODO: allow processing 2.5D geometries and multigeometries?
+
+    def _process_coord_sequence(
+        seq: CoordinateSequence,
+        output: list[tuple[float, ...]],
+    ) -> list[tuple[float, ...]]:
+        for i in range(len(seq) - 1):
+            current_coord = seq[i]
+            next_coord = seq[i + 1]
+
+            current_x = current_coord[0]
+            current_y = current_coord[1]
+            next_x = next_coord[0]
+            next_y = next_coord[1]
+
+            q = ((0.75 * current_x + 0.25 * next_x), (0.75 * current_y + 0.25 * next_y))
+            r = ((0.25 * current_x + 0.75 * next_x), (0.25 * current_y + 0.75 * next_y))
+
+            if current_coord in skip_coords_:
+                output.append(current_coord)
+                if next_coord not in skip_coords_:
+                    output.append(r)
+                continue
+
+            output.append(q)
+
+            if next_coord not in skip_coords_:
+                output.append(r)
+
+        return output
+
+    def _process_linestring(geom: LineString) -> LineString:
+        coords = [geom.coords[0]]
+
+        processed_coords = _process_coord_sequence(geom.coords, coords)
+        processed_coords.append(geom.coords[-1])
+
+        return LineString(processed_coords)
+
+    def _process_polygon(geom: Polygon) -> Polygon:
+        exterior = _process_coord_sequence(geom.exterior.coords, [])
+        interiors = [
+            _process_coord_sequence(interior.coords, []) for interior in geom.interiors
+        ]
+
+        return Polygon(exterior, interiors)
+
+    process_function = (
+        _process_linestring if isinstance(geom, LineString) else _process_polygon
+    )
+
+    result = geom
+    for _ in range(iterations):
+        result = process_function(result)
+
+    return result
+
+
+def get_topological_points(geoseries: GeoSeries) -> list[Point]:
+    """Find all topological points in a GeoSeries.
+
+    Topological point referring to a point which is shared by two or more
+    geometries in the GeoSeries.
+
+    Args:
+    ----
+        geoseries: The GeoSeries to find topological points in.
+
+    Returns:
+    -------
+        List of all the topological points (if any).
+
+    Raises:
+    ------
+        GeometryOperationError: If union could not be performed on unique points
+        in the GeoSeries.
+
+    """
+    if geoseries.empty:
+        return []
+
+    unique_points = geoseries.force_2d().extract_unique_points().union_all()
+
+    if isinstance(unique_points, Point):
+        unique_points = MultiPoint([unique_points])
+
+    if not isinstance(unique_points, MultiPoint):
+        msg = "Unique points not a Point or a MultiPoint"
+        raise GeometryOperationError(msg)
+
+    # TODO: maybe there's a faster way to do this
+    topo_points: list[Point] = []
+    for point in unique_points.geoms:
+        intersections = geoseries.intersects(point)
+
+        # If there are more than 1 intersections
+        if len(intersections.loc[intersections]) > 1:
+            topo_points.append(point)
+
+    return topo_points
+
+
+def chaikin_smooth_keep_topology(
+    geoseries: GeoSeries,
+    iterations: int = 3,
+    *,
+    extra_skip_coords: list[Point] | MultiPoint | None,
+) -> GeoSeries:
+    """Apply smoothing algorithm while keeping topological points unchanged.
+
+    Args:
+    ----
+        geoseries: GeoSeries to be smoothed.
+        iterations: Number of smoothing passes, increase for a smoother result.
+            Note that each pass roughly doubles the number of vertices, so
+            growth will be exponential. Anything above 6-7 is unlikely to
+            produce cartographically meaningful differences and therefore
+            unnecessarily increase vertex count.
+        extra_skip_coords: Any additional coordinates in addition to
+            topological points which should not be smoothed.
+
+    Returns:
+    -------
+        GeoSeries with smoothed geometries, with shared topological points
+        unchanged.
+
+    Note:
+    ----
+        If the input has 3D geometries, they will be changed to 2D geometries.
+
+    """
+    copy = geoseries.copy()
+
+    skipped_coords = get_topological_points(copy)
+
+    if isinstance(extra_skip_coords, MultiPoint):
+        extra_skip_coords = list(extra_skip_coords.geoms)
+
+    if extra_skip_coords is not None:
+        skipped_coords += extra_skip_coords
+
+    return copy.apply(
+        lambda geom: chaikin_smooth_skip_coords(
+            force_2d(geom),
+            iterations=iterations,
+            skip_coords=skipped_coords,
+        ),
+    )
 
 
 def perforate_polygon_with_gdf_exteriors(
