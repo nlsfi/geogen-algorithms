@@ -103,7 +103,7 @@ def supports_identity(algorithm_class: _Alg) -> _Alg:  # noqa: UP047, bump min p
       the same input data.
 
     An algorithm that processes single features only without any clustering etc. can
-    preserve the original index hashes and still be configured as supports identity.
+    preserve the original indexes and still be configured as supports identity.
 
     For example a clustering algorithm may base its hash generation on each clusters
     sorted input hashes, and a splitting algorithm may base its hash generation on each
