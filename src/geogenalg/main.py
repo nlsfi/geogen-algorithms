@@ -13,6 +13,7 @@ from geopandas import read_file
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
+from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 
@@ -114,6 +115,52 @@ def clusters_to_centroids(
     if mask_data is not None:
         mask_gdf = read_file(mask_data.file, layer=mask_data.layer_name)
         reference_data = {"mask": mask_gdf}
+    else:
+        reference_data = {}
+
+    in_gdf = read_gdf_from_file_and_set_index(
+        input_geopackage.file,
+        unique_id_column,
+        layer=input_geopackage.layer_name,
+    )
+    output = algorithm.execute(in_gdf, reference_data=reference_data)
+    output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
+
+
+@app.command()
+def water_areas(
+    input_geopackage: GeoPackageArgument,
+    output_geopackage: GeoPackageArgument,
+    unique_id_column: Annotated[str, typer.Option()],
+    shoreline_data: GeoPackageOption = None,
+    min_area: float = 4000.0,
+    min_island_area: float = 100.0,
+    max_simplify_tolerance: float = 10.0,
+    thin_section_width: float = 20.0,
+    thin_section_min_size: float = 200.0,
+    thin_section_exaggerate_by: float = 3.0,
+    island_min_width: float = 185.0,
+    island_min_elongation: float = 0.25,
+    island_exaggerate_by: float = 3.0,
+    smoothing_passes: int = 3,
+) -> None:
+    """Execute Generalize Lakes algorithm."""
+    algorithm = GeneralizeWaterAreas(
+        min_area=min_area,
+        min_island_area=min_island_area,
+        max_simplify_tolerance=max_simplify_tolerance,
+        thin_section_width=thin_section_width,
+        thin_section_min_size=thin_section_min_size,
+        thin_section_exaggerate_by=thin_section_exaggerate_by,
+        island_min_width=island_min_width,
+        island_min_elongation=island_min_elongation,
+        island_exaggerate_by=island_exaggerate_by,
+        smoothing_passes=smoothing_passes,
+    )
+
+    if shoreline_data is not None:
+        shoreline_gdf = read_file(shoreline_data.file, layer=shoreline_data.layer_name)
+        reference_data = {algorithm.reference_key: shoreline_gdf}
     else:
         reference_data = {}
 

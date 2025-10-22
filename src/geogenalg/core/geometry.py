@@ -6,44 +6,283 @@
 #  LICENSE file in the root directory of this source tree.
 
 
-import math
 from enum import Enum
 from statistics import mean
 from typing import NamedTuple
 
 import shapely.ops
-from geopandas import gpd
+from geopandas import GeoDataFrame, GeoSeries
 from shapely import (
     LineString,
     MultiLineString,
     MultiPoint,
+    MultiPolygon,
     Point,
     Polygon,
     affinity,
-    count_coordinates,
+    force_2d,
     get_coordinates,
     polygonize,
     shortest_line,
     union,
 )
+from shapely.coords import CoordinateSequence
 from shapely.geometry.base import BaseGeometry
 
-from ..core.exceptions import (  # noqa: TID252
+from geogenalg.core.exceptions import (
     GeometryOperationError,
     GeometryTypeError,
     InvalidGeometryError,
 )
 
 
-class LineExtendFrom(Enum):  # noqa: D101
+class LineExtendFrom(Enum):
+    """An enumeration describing from which end a linestring should be extended."""
+
     END = -1
     START = 0
     BOTH = 1
 
 
-class Dimensions(NamedTuple):  # noqa: D101
+class Dimensions(NamedTuple):
+    """Simple named tuple describing the dimensions of a rectangle."""
+
     width: float
     height: float
+
+
+def chaikin_smooth_skip_coords(
+    geom: LineString | Polygon,
+    skip_coords: list[Point] | MultiPoint,
+    *,
+    iterations: int = 1,
+) -> LineString | Polygon:
+    """Smooth input linestring or polygon.
+
+    This is an implementation of Chaikin's corner cutting line smoothing
+    algorithm, with the addition of being able to skip the smoothing of
+    specific points.
+
+    Args:
+    ----
+        geom: Geometry to smooth.
+        iterations: Number of iterations i.e. smoothing passes. Each pass
+            doubles the number of vertices (minus the skipped coordinates) i.e.
+            increase with caution, growth is exponential.
+        skip_coords: List of points to skip. If a corresponding coordinate exists
+            in the input geometry, it is guaranteed to remain unchanged.
+
+    Returns:
+    -------
+        Smoothed geometry.
+
+    Note:
+    ----
+        If skipping of coordinates is not required, prefer shapelysmooth's
+        function as it is likely to be more efficient.
+
+
+    """
+    if isinstance(skip_coords, MultiPoint):
+        skip_coords_ = [point.coords[0] for point in skip_coords.geoms]
+    else:
+        skip_coords_ = [point.coords[0] for point in skip_coords]
+
+    # TODO: allow processing 2.5D geometries and multigeometries?
+
+    def _process_coord_sequence(
+        seq: CoordinateSequence,
+        output: list[tuple[float, ...]],
+    ) -> list[tuple[float, ...]]:
+        for i in range(len(seq) - 1):
+            current_coord = seq[i]
+            next_coord = seq[i + 1]
+
+            current_x = current_coord[0]
+            current_y = current_coord[1]
+            next_x = next_coord[0]
+            next_y = next_coord[1]
+
+            q = ((0.75 * current_x + 0.25 * next_x), (0.75 * current_y + 0.25 * next_y))
+            r = ((0.25 * current_x + 0.75 * next_x), (0.25 * current_y + 0.75 * next_y))
+
+            if current_coord in skip_coords_:
+                output.append(current_coord)
+                if next_coord not in skip_coords_:
+                    output.append(r)
+                continue
+
+            output.append(q)
+
+            if next_coord not in skip_coords_:
+                output.append(r)
+
+        return output
+
+    def _process_linestring(geom: LineString) -> LineString:
+        coords = [geom.coords[0]]
+
+        processed_coords = _process_coord_sequence(geom.coords, coords)
+        processed_coords.append(geom.coords[-1])
+
+        return LineString(processed_coords)
+
+    def _process_polygon(geom: Polygon) -> Polygon:
+        exterior = _process_coord_sequence(geom.exterior.coords, [])
+        interiors = [
+            _process_coord_sequence(interior.coords, []) for interior in geom.interiors
+        ]
+
+        return Polygon(exterior, interiors)
+
+    process_function = (
+        _process_linestring if isinstance(geom, LineString) else _process_polygon
+    )
+
+    result = geom
+    for _ in range(iterations):
+        result = process_function(result)
+
+    return result
+
+
+def get_topological_points(geoseries: GeoSeries) -> list[Point]:
+    """Find all topological points in a GeoSeries.
+
+    Topological point referring to a point which is shared by two or more
+    geometries in the GeoSeries.
+
+    Args:
+    ----
+        geoseries: The GeoSeries to find topological points in.
+
+    Returns:
+    -------
+        List of all the topological points (if any).
+
+    Raises:
+    ------
+        GeometryOperationError: If union could not be performed on unique points
+        in the GeoSeries.
+
+    """
+    if geoseries.empty:
+        return []
+
+    unique_points = geoseries.force_2d().extract_unique_points().union_all()
+
+    if isinstance(unique_points, Point):
+        unique_points = MultiPoint([unique_points])
+
+    if not isinstance(unique_points, MultiPoint):
+        msg = "Unique points not a Point or a MultiPoint"
+        raise GeometryOperationError(msg)
+
+    # TODO: maybe there's a faster way to do this
+    topo_points: list[Point] = []
+    for point in unique_points.geoms:
+        intersections = geoseries.intersects(point)
+
+        # If there are more than 1 intersections
+        if len(intersections.loc[intersections]) > 1:
+            topo_points.append(point)
+
+    return topo_points
+
+
+def chaikin_smooth_keep_topology(
+    geoseries: GeoSeries,
+    iterations: int = 3,
+    *,
+    extra_skip_coords: list[Point] | MultiPoint | None,
+) -> GeoSeries:
+    """Apply smoothing algorithm while keeping topological points unchanged.
+
+    Args:
+    ----
+        geoseries: GeoSeries to be smoothed.
+        iterations: Number of smoothing passes, increase for a smoother result.
+            Note that each pass roughly doubles the number of vertices, so
+            growth will be exponential. Anything above 6-7 is unlikely to
+            produce cartographically meaningful differences and therefore
+            unnecessarily increase vertex count.
+        extra_skip_coords: Any additional coordinates in addition to
+            topological points which should not be smoothed.
+
+    Returns:
+    -------
+        GeoSeries with smoothed geometries, with shared topological points
+        unchanged.
+
+    Note:
+    ----
+        If the input has 3D geometries, they will be changed to 2D geometries.
+
+    """
+    copy = geoseries.copy()
+
+    skipped_coords = get_topological_points(copy)
+
+    if isinstance(extra_skip_coords, MultiPoint):
+        extra_skip_coords = list(extra_skip_coords.geoms)
+
+    if extra_skip_coords is not None:
+        skipped_coords += extra_skip_coords
+
+    return copy.apply(
+        lambda geom: chaikin_smooth_skip_coords(
+            force_2d(geom),
+            iterations=iterations,
+            skip_coords=skipped_coords,
+        ),
+    )
+
+
+def perforate_polygon_with_gdf_exteriors(
+    geometry: Polygon,
+    gdf: GeoDataFrame,
+) -> Polygon:
+    """Add the exteriors of a polygon GeoDataFrame as holes to a Polygon.
+
+    The purpose of this function over a simple difference operation is to
+    handle cases where there are polygon(s) inside interior rings of the input
+    geometry and you need to add holes only for the exteriors. This is useful
+    f.e. for recursive islands and lakes. With difference, the result would be
+    a multipolygon with all the contained geometries as parts.
+
+    Args:
+    ----
+        geometry: A Polygon to which holes will be added
+        gdf: A GeoDataFrame whose geometry exteriors will be added as holes
+
+    Returns:
+    -------
+        A new Polygon with the holes added.
+
+    """
+    features_within_geom = gdf.geometry.loc[gdf.geometry.within(geometry)]
+    exteriors = features_within_geom.apply(lambda geom: Polygon(geom.exterior))
+
+    return geometry.difference(exteriors.union_all())
+
+
+def extract_interior_rings(geometry: Polygon | MultiPolygon) -> MultiPolygon:
+    """Extract interior rings (holes) of a geometry as a new geometry.
+
+    Returns
+    -------
+        Interior rings as a MultiPolygon.
+
+    """
+    if isinstance(geometry, Polygon):
+        polygons = [Polygon(interior) for interior in geometry.interiors]
+    else:
+        polygons = []
+        for geom in geometry.geoms:
+            for interior in geom.interiors:
+                polygons.append(Polygon(interior))
+
+    return MultiPolygon(polygons)
 
 
 def mean_z(geom: BaseGeometry, nodata_value: float = -999.999) -> float:
@@ -89,31 +328,25 @@ def mean_z(geom: BaseGeometry, nodata_value: float = -999.999) -> float:
     return mean(z_values)
 
 
-def rectangle_dimensions(rect: Polygon) -> Dimensions:
-    """Calculate the dimensions of a rectangular polygon.
+def oriented_envelope_dimensions(geom: Polygon) -> Dimensions:
+    """Calculate the dimensions of a geometry from its oriented envelope.
 
-    Returns:
-        The width and height of a rectangular polygon.
+    Returns
+    -------
+        The width and height of the oriented envelope.
 
-    Raises:
-        GeometryOperationError: If input polygon is invalid.
-        InvalidGeometryError: If input polygon is not a rectangle.
+    Raises
+    ------
+        InvalidGeometryError: If input polygon is invalid.
 
     """
-    required_coords = 5
-    if count_coordinates(rect) != required_coords or not math.isclose(  # noqa: SC200
-        rect.area,
-        rect.oriented_envelope.area,
-        rel_tol=1e-06,  # noqa: SC200
-    ):
-        msg = f"Not a rectangle: {rect}"
-        raise GeometryOperationError(msg)
-
-    if not rect.is_valid:
+    if not geom.is_valid:
         msg = "Rectangle not valid"
         raise InvalidGeometryError(msg)
 
-    x, y = rect.exterior.coords.xy
+    envelope = geom.oriented_envelope
+
+    x, y = envelope.exterior.coords.xy
 
     point_1 = Point(x[0], y[0])
     point_2 = Point(x[1], y[1])
@@ -121,36 +354,31 @@ def rectangle_dimensions(rect: Polygon) -> Dimensions:
 
     lengths = (point_1.distance(point_2), point_2.distance(point_3))
 
-    return Dimensions(min(lengths), max(lengths))
+    return Dimensions(width=min(lengths), height=max(lengths))
 
 
 def elongation(polygon: Polygon) -> float:
     """Calculate the elongation of a polygon.
 
-    Returns:
+    Returns
+    -------
         The ratio of the height (longest side) to the width (shorter side)
         of its minimum bounding oriented envelope.
 
-    Raises:
-        TypeError: if created envelope is not of type polygon.
-
     """
-    envelope: BaseGeometry = polygon.oriented_envelope
-    if not isinstance(envelope, Polygon):
-        msg = "Envelope is not a Polygon"
-        raise TypeError(msg)
-
-    dimensions = rectangle_dimensions(envelope)
-    return dimensions.height / dimensions.width
+    dimensions = oriented_envelope_dimensions(polygon)
+    return dimensions.width / dimensions.height
 
 
-def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def extract_interior_rings_gdf(areas: GeoDataFrame) -> GeoDataFrame:
     """Extract the interior rings of a polygon geodataframe.
 
-    Returns:
+    Returns
+    -------
         A new geodataframe containing the interior rings.
 
-    Raises:
+    Raises
+    ------
         GeometryTypeError: If geometries are not polygons or multipolygons.
 
     """
@@ -177,7 +405,8 @@ def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 def explode_line(line: LineString) -> list[LineString]:
     """Explode a line geometry to all its segments.
 
-    Returns:
+    Returns
+    -------
       All segments of a line geometry.
 
     """
@@ -186,14 +415,16 @@ def explode_line(line: LineString) -> list[LineString]:
     ]
 
 
-def lines_to_segments(lines: gpd.GeoSeries) -> gpd.GeoSeries:
+def lines_to_segments(lines: GeoSeries) -> GeoSeries:
     """Convert lines to segments.
 
-    Returns:
+    Returns
+    -------
         A GeoSeries of line geometries containing all line segments
         from the input GeoSeries.
 
-    Raises:
+    Raises
+    ------
         GeometryTypeError: if param `lines` contains other geometry
         types than lines.
 
@@ -202,7 +433,7 @@ def lines_to_segments(lines: gpd.GeoSeries) -> gpd.GeoSeries:
         msg = "All geometries must be LineStrings."
         raise GeometryTypeError(msg)
 
-    return gpd.GeoSeries(
+    return GeoSeries(
         [segment for line in lines for segment in explode_line(line)],
         crs=lines.crs,
     )
@@ -214,11 +445,13 @@ def scale_line_to_length(
 ) -> LineString:
     """Scale line to given length.
 
-    Returns:
+    Returns
+    -------
         A version of the input geometry which has been scaled to the
         given length.
 
-    Raises:
+    Raises
+    ------
         ValueError: If param `geom` has no length.
         ValueError: If param `length` is less than or equal to 0.
 
@@ -242,7 +475,8 @@ def scale_line_to_length(
 def move_to_point(geom: BaseGeometry, point: Point) -> BaseGeometry:
     """Move geometry to given point position.
 
-    Returns:
+    Returns
+    -------
         A version of the input geometry which has been moved to the
         given point position.
 
@@ -261,12 +495,14 @@ def extend_line_to_nearest(
 ) -> LineString:
     """Extend line to nearest point.
 
-    Returns:
+    Returns
+    -------
         A version of the input line which has been extended to the
         nearest point of another geometry. The extension can be done from
         the end or start of the line, or alternatively both ends.
 
-    Raises:
+    Raises
+    ------
         GeometryOperationError: If invalid result got from line union or merge
         operations.
 
@@ -316,12 +552,14 @@ def extend_line_to_nearest(
 def point_on_line(line: LineString, distance: float) -> Point:
     """Get point along line.
 
-    Returns:
+    Returns
+    -------
         A point which is the given distance away and collinear to either
         the first or last segment of the input line. If distance is > 0 the point
         is calculated from the last segment and if < 0 the first segment.
 
-    Raises:
+    Raises
+    ------
         ValueError: If line does not have exactly 2 vertices.
 
     """
@@ -367,11 +605,13 @@ def extend_line_by(
 ) -> LineString:
     """Extend line by given distance.
 
-    Returns:
+    Returns
+    -------
         Version of the input line which has been extended by the given distance
         either from its start or end segment, or both.
 
-    Raises:
+    Raises
+    ------
         ValueError: if extend_from is less or equal than 0
 
     """

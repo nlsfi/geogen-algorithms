@@ -5,28 +5,525 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+import math
+
 import pytest
-from geopandas import gpd
-from shapely import GeometryCollection, MultiPolygon, from_wkt, to_wkt
+from geopandas import GeoDataFrame, GeoSeries
+from geopandas.testing import assert_geoseries_equal
+from shapely import GeometryCollection, MultiPolygon, box, from_wkt, to_wkt
 from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import (
-    GeometryOperationError,
     GeometryTypeError,
 )
 from geogenalg.core.geometry import (
+    Dimensions,
     LineExtendFrom,
+    chaikin_smooth_keep_topology,
+    chaikin_smooth_skip_coords,
     elongation,
     explode_line,
     extend_line_to_nearest,
     extract_interior_rings,
+    extract_interior_rings_gdf,
+    get_topological_points,
     lines_to_segments,
     mean_z,
     move_to_point,
-    rectangle_dimensions,
+    oriented_envelope_dimensions,
+    perforate_polygon_with_gdf_exteriors,
     scale_line_to_length,
 )
+
+
+@pytest.mark.parametrize(
+    ("input_geoseries", "extra_skip_coords", "expected_geoseries"),
+    [
+        (
+            GeoSeries(),
+            [],
+            GeoSeries(),
+        ),
+        (
+            GeoSeries(
+                [
+                    box(0, 0, 2, 2),
+                    box(0, 2, 2, 4),
+                    box(0, 4, 2, 5),
+                ]
+            ),
+            None,
+            GeoSeries(
+                [
+                    Polygon(
+                        [
+                            [2, 0.5],
+                            [2, 2],
+                            [0, 2],
+                            [0, 0.5],
+                            [0.5, 0],
+                            [1.5, 0],
+                            [2, 0.5],
+                        ]
+                    ),
+                    box(0, 2, 2, 4),
+                    Polygon(
+                        [
+                            [2, 4],
+                            [2, 4.75],
+                            [1.5, 5],
+                            [0.5, 5],
+                            [0, 4.75],
+                            [0, 4],
+                            [2, 4],
+                        ]
+                    ),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "empty series",
+        "middle box not smoothed",
+    ],
+)
+def test_chaikin_smooth_keep_topology(
+    input_geoseries: GeoSeries,
+    extra_skip_coords: list[Point] | MultiPoint | None,
+    expected_geoseries: GeoSeries,
+):
+    assert_geoseries_equal(
+        chaikin_smooth_keep_topology(
+            input_geoseries,
+            1,
+            extra_skip_coords=extra_skip_coords,
+        ),
+        expected_geoseries,
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "skip_coords", "iterations", "expected_geometry"),
+    [
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 1],
+                    [1, 2],
+                ]
+            ),
+            [],
+            1,
+            LineString(
+                [
+                    [0, 0],
+                    [0.25, 0.25],
+                    [0.75, 0.75],
+                    [1, 1.25],
+                    [1, 1.75],
+                    [1, 2],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 1],
+                    [1, 2],
+                ]
+            ),
+            [Point(1, 1)],
+            1,
+            LineString(
+                [
+                    [0, 0],
+                    [0.25, 0.25],
+                    [1, 1],
+                    [1, 1.75],
+                    [1, 2],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 1],
+                    [1, 2],
+                ]
+            ),
+            [Point(1, 1)],
+            2,
+            LineString(
+                [
+                    [0, 0],
+                    [0.0625, 0.0625],
+                    [0.1875, 0.1875],
+                    [0.4375, 0.4375],
+                    [1, 1],
+                    [1, 1.5625],
+                    [1, 1.8125],
+                    [1, 1.9375],
+                    [1, 2],
+                ]
+            ),
+        ),
+        (
+            box(0, 0, 1, 1),
+            [],
+            1,
+            Polygon(
+                [
+                    [1, 0.25],
+                    [1, 0.75],
+                    [0.75, 1],
+                    [0.25, 1],
+                    [0, 0.75],
+                    [0, 0.25],
+                    [0.25, 0],
+                    [0.75, 0],
+                    [1, 0.25],
+                ]
+            ),
+        ),
+        (
+            box(0, 0, 1, 1),
+            [Point(0, 0)],
+            1,
+            Polygon(
+                [
+                    [1, 0.25],
+                    [1, 0.75],
+                    [0.75, 1],
+                    [0.25, 1],
+                    [0, 0.75],
+                    [0, 0],
+                    [0.75, 0],
+                    [1, 0.25],
+                ]
+            ),
+        ),
+        (
+            box(0, 0, 1, 1),
+            MultiPoint([Point(0, 0), Point(1, 1)]),
+            1,
+            Polygon(
+                [
+                    [1, 0.25],
+                    [1, 1],
+                    [0.25, 1],
+                    [0, 0.75],
+                    [0, 0],
+                    [0.75, 0],
+                    [1, 0.25],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "three point linestring, no skip",
+        "three point linestring, skip one",
+        "three point linestring, skip one, two iterations",
+        "square polygon, no skip",
+        "square polygon, skip one",
+        "square polygon, skip two",
+    ],
+)
+def test_chaikin_smooth_skip_coords(
+    input_geometry: LineString | Polygon,
+    skip_coords: list[Point] | MultiPoint,
+    iterations: int,
+    expected_geometry: LineString | Polygon,
+):
+    assert (
+        chaikin_smooth_skip_coords(
+            input_geometry,
+            skip_coords,
+            iterations=iterations,
+        )
+        == expected_geometry
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geoseries", "expected_points"),
+    [
+        (
+            GeoSeries(),
+            [],
+        ),
+        (
+            GeoSeries(Point(0, 0)),
+            [],
+        ),
+        (
+            GeoSeries(
+                [
+                    LineString([[0, 0], [0, 1]]),
+                    LineString([[0, 0], [0, -1]]),
+                ]
+            ),
+            [Point(0, 0)],
+        ),
+        (
+            GeoSeries(
+                [
+                    LineString([[0, 0], [0, 1]]),
+                    LineString([[0, 0], [0, -1]]),
+                    LineString([[0, 0], [-1, 0]]),
+                ]
+            ),
+            [Point(0, 0)],
+        ),
+        (
+            GeoSeries(
+                [
+                    box(0, 0, 2, 2),
+                    box(0, 2, 2, 4),
+                    box(0, 4, 2, 5),
+                ]
+            ),
+            [
+                Point(0, 2),
+                Point(0, 4),
+                Point(2, 2),
+                Point(2, 4),
+            ],
+        ),
+    ],
+    ids=[
+        "empty series",
+        "no points",
+        "two geoms, one shared point",
+        "three geoms, one shared point",
+        "polygons, many shared points",
+    ],
+)
+def test_get_topological_points(
+    input_geoseries: GeoSeries,
+    expected_points: list[Point],
+):
+    assert get_topological_points(input_geoseries) == expected_points
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "gdf", "expected_geometry"),
+    [
+        (
+            box(0, 0, 20, 20),
+            GeoDataFrame(
+                geometry=[
+                    box(5, 5, 6, 6),
+                    box(7, 7, 8, 8),
+                ],
+            ),
+            Polygon(
+                shell=[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]],
+                holes=[
+                    [[6, 5], [6, 6], [5, 6], [5, 5], [6, 5]],
+                    [[8, 7], [8, 8], [7, 8], [7, 7], [8, 7]],
+                ],
+            ),
+        ),
+        (
+            box(0, 0, 20, 20),
+            GeoDataFrame(
+                geometry=[
+                    # Feature within ring
+                    # Feature with ring
+                    Polygon(
+                        shell=[[1, 1], [1, 10], [10, 10], [10, 1], [1, 1]],
+                        holes=[[[2, 2], [2, 9], [9, 9], [9, 2], [2, 2]]],
+                    ),
+                    Polygon(
+                        shell=[[3, 3], [3, 8], [8, 8], [8, 3], [3, 3]],
+                        holes=[[[4, 4], [4, 7], [7, 7], [7, 4], [4, 4]]],
+                    ),
+                    ##
+                    # Another feature within ring
+                    # Feature with ring
+                    Polygon(
+                        shell=[[11, 11], [11, 19], [19, 19], [19, 11], [11, 11]],
+                        holes=[[[12, 12], [12, 18], [18, 18], [18, 12], [12, 12]]],
+                    ),
+                    # Feature within ring
+                    Polygon(
+                        shell=[[13, 13], [13, 17], [17, 17], [17, 13], [13, 13]],
+                        holes=[[[14, 14], [14, 16], [16, 16], [16, 14], [14, 14]]],
+                    ),
+                    ##
+                    # Regular standalone feature
+                    box(1, 11, 9, 19),
+                ],
+            ),
+            Polygon(
+                shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                holes=[
+                    [[1, 10], [1, 1], [10, 1], [10, 10], [1, 10]],
+                    [[1, 11], [9, 11], [9, 19], [1, 19], [1, 11]],
+                    [[19, 19], [11, 19], [11, 11], [19, 11], [19, 19]],
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "two exteriors",
+        "recursive features",
+    ],
+)
+def test_perforate_polygon_with_gdf_exteriors(
+    input_geometry: Polygon,
+    gdf: GeoDataFrame,
+    expected_geometry: Polygon,
+):
+    assert (
+        perforate_polygon_with_gdf_exteriors(input_geometry, gdf) == expected_geometry
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "expected_geometry"),
+    [
+        (
+            Polygon(
+                shell=[[0, 0, 4.0], [0, 2, 5.5], [2, 2, 6.5], [2, 0, 1.5]],
+                holes=[
+                    [
+                        [0.5, 0.5, 4.0],
+                        [0.5, 1, 1.0],
+                        [1, 1, 2.3],
+                        [1, 0.5, 0.5],
+                    ]
+                ],
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[
+                            [0.5, 0.5, 4.0],
+                            [0.5, 1, 1.0],
+                            [1, 1, 2.3],
+                            [1, 0.5, 0.5],
+                        ],
+                    )
+                ]
+            ),
+        ),
+        (
+            Polygon(
+                shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                holes=[
+                    [
+                        [0.5, 0.5],
+                        [0.5, 1],
+                        [1, 1],
+                        [1, 0.5],
+                    ],
+                    [
+                        [6, 6],
+                        [6, 8],
+                        [8, 8],
+                        [8, 6],
+                    ],
+                ],
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[
+                            [0.5, 0.5],
+                            [0.5, 1],
+                            [1, 1],
+                            [1, 0.5],
+                        ],
+                    ),
+                    Polygon(
+                        shell=[
+                            [6, 6],
+                            [6, 8],
+                            [8, 8],
+                            [8, 6],
+                        ],
+                    ),
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                        holes=[
+                            [[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                            [[6.5, 6.5], [6.5, 7.5], [7.5, 7.5], [7.5, 6.5]],
+                        ],
+                    )
+                ]
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                    ),
+                    Polygon(
+                        shell=[[6.5, 6.5], [6.5, 7.5], [7.5, 7.5], [7.5, 6.5]],
+                    ),
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                        holes=[
+                            [[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                        ],
+                    ),
+                    Polygon(
+                        shell=[[100, 100], [100, 110], [110, 110], [110, 100]],
+                        holes=[[[105, 105], [105, 106], [106, 106], [106, 105]]],
+                    ),
+                    box(-10, -10, -5, -5),
+                ]
+            ),
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=[[0.5, 0.5], [0.5, 1], [1, 1], [1, 0.5]],
+                    ),
+                    Polygon(
+                        shell=[[105, 105], [105, 106], [106, 106], [106, 105]],
+                    ),
+                ]
+            ),
+        ),
+        (
+            Polygon(),
+            MultiPolygon(),
+        ),
+        (
+            box(10, 10, 20, 20),
+            MultiPolygon(),
+        ),
+    ],
+    ids=[
+        "polygon, single ring",
+        "polygon, two rings",
+        "multipolygon, two rings",
+        "multipolygon, three parts",
+        "empty polygon",
+        "no rings",
+    ],
+)
+def test_extract_interior_rings(
+    input_geometry: Polygon | MultiPolygon,
+    expected_geometry: MultiPolygon,
+):
+    assert extract_interior_rings(input_geometry) == expected_geometry
 
 
 @pytest.mark.parametrize(
@@ -166,24 +663,73 @@ def test_mean_z_no_geometrycollection():
         mean_z(GeometryCollection([Point(0, 0, 0), Point(0, 0, 1)]))
 
 
-def test_rectangle_dimensions():
-    rect = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
+@pytest.mark.parametrize(
+    ("geom", "expected_dimensions"),
+    [
+        (box(0, 0, 1, 1), Dimensions(width=1, height=1)),
+        (box(0, 1, 2, 2), Dimensions(width=1.0, height=2.0)),
+        (
+            Polygon(
+                [
+                    [0, 0],
+                    [2, 0],
+                    [2, 1],
+                    [4, 1],
+                    [4, -2],
+                    [2, -2],
+                    [2, -1],
+                    [0, -1],
+                    [0, 0],
+                ],
+            ),
+            Dimensions(width=3.0, height=4.0),
+        ),
+    ],
+    ids=[
+        "square",
+        "rectangle",
+        "irregular polygon",
+    ],
+)
+def test_oriented_envelope_dimensions(geom: Polygon, expected_dimensions: Dimensions):
+    assert oriented_envelope_dimensions(geom) == expected_dimensions
 
-    assert rectangle_dimensions(rect).width == 1.0
-    assert rectangle_dimensions(rect).height == 4.0
 
-    rect2 = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 5, 1 0, 0 0))")
-    with pytest.raises(GeometryOperationError):
-        rectangle_dimensions(rect2)
+@pytest.mark.parametrize(
+    ("polygon", "expected_elongation"),
+    [
+        (Polygon([[0, 0], [0, 4], [1, 4], [1, 0], [0, 0]]), 0.25),
+        (Polygon([[0, 0], [0, 2], [2, 2], [2, 0], [0, 0]]), 1.0),
+        (
+            Polygon(
+                [
+                    [0, 0],
+                    [2, 0],
+                    [2, 1],
+                    [4, 1],
+                    [4, -2],
+                    [2, -2],
+                    [2, -1],
+                    [0, -1],
+                    [0, 0],
+                ]
+            ),
+            0.75,
+        ),
+        (Polygon([[0, 0], [0, 19], [1, 19], [1, 0], [0, 0]]), 0.052631579),
+    ],
+    ids=[
+        "elongated",
+        "square",
+        "irregular shape",
+        "very elongated",
+    ],
+)
+def test_elongation(polygon: Polygon, expected_elongation: float):
+    assert math.isclose(elongation(polygon), expected_elongation, rel_tol=1e-08)
 
 
-def test_elongation():
-    rect = from_wkt("POLYGON ((0 0, 0 4, 1 4, 1 0, 0 0))")
-
-    assert elongation(rect) == 4.0
-
-
-def test_extract_interior_rings():
+def test_extract_interior_rings_gdf():
     polygon_with_holes = from_wkt(
         """POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0),
         (2 3, 3 3, 3 2, 2 2, 2 3),
@@ -191,12 +737,12 @@ def test_extract_interior_rings():
         (7 8, 8 8, 8 7, 7 7, 7 8))"""
     )
 
-    gdf = gpd.GeoDataFrame(
+    gdf = GeoDataFrame(
         geometry=[polygon_with_holes],
         crs="EPSG:3857",
     )
 
-    extracted_holes = extract_interior_rings(gdf)
+    extracted_holes = extract_interior_rings_gdf(gdf)
 
     assert len(extracted_holes.index) == 3
     assert extracted_holes.crs == "EPSG:3857"
@@ -221,7 +767,7 @@ def test_explode_line_to_segments():
 
 
 def test_lines_to_segments():
-    lines = gpd.GeoSeries(
+    lines = GeoSeries(
         [
             from_wkt("LINESTRING (0 0, 0 1)"),
             from_wkt("LINESTRING (10 0, 10 15)"),
@@ -239,7 +785,7 @@ def test_lines_to_segments():
     assert segments[3].wkt == "LINESTRING (21 21, 22 22)"
     assert segments[4].wkt == "LINESTRING (22 22, 23 23)"
 
-    invalid_series = gpd.GeoSeries(
+    invalid_series = GeoSeries(
         [
             from_wkt("LINESTRING (0 0, 0 1)"),
             from_wkt("LINESTRING (10 0, 10 15)"),

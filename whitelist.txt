@@ -1,4 +1,5 @@
 2d
+alg
 arctan2
 argmax
 bbox
@@ -9,6 +10,7 @@ chaikin
 changelog
 concat
 const
+coord
 coords
 crs
 dataframe
@@ -31,10 +33,13 @@ geoseries
 gpd
 hypot
 idx
+inplace
 landcover
 linalg
 linemerge
+linestring
 loc
+multipolygon
 nodata
 polygonize
 pygeoops
@@ -47,6 +52,7 @@ sindex
 sklearn
 starmap
 tolist
+topo
 typer
 unary
 utils
@@ -54,5 +60,3 @@ visvalingam
 wkb
 wkt
 xy
-alg
-inplace
