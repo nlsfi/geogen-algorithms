@@ -17,16 +17,6 @@ from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.core.exceptions import GeometryTypeError
 
 
-def _instantiate_algorithm() -> GeneralizeLandcover:
-    return GeneralizeLandcover(
-        buffer_constant=20,
-        simplification_tolerance=30,
-        area_threshold=7500,
-        hole_threshold=5000,
-        smoothing=True,
-    )
-
-
 def test_generalize_landcover_50k(
     testdata_path: Path,
 ) -> None:
@@ -40,7 +30,13 @@ def test_generalize_landcover_50k(
 
     input_gdf = read_file(source_path, layer="mtk_marshes")
 
-    algorithm = _instantiate_algorithm()
+    algorithm = GeneralizeLandcover(
+        buffer_constant=20,
+        simplification_tolerance=30,
+        area_threshold=7500,
+        hole_threshold=5000,
+        smoothing=True,
+    )
 
     result = algorithm.execute(input_gdf, {})
 
@@ -66,7 +62,13 @@ def test_generalize_landcover_50k(
 def test_generalize_landcover_invalid_geometry_type() -> None:
     gdf = GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
 
-    algorithm = _instantiate_algorithm()
+    algorithm = GeneralizeLandcover(
+        buffer_constant=20,
+        simplification_tolerance=30,
+        area_threshold=7500,
+        hole_threshold=5000,
+        smoothing=True,
+    )
 
     with pytest.raises(
         GeometryTypeError,
