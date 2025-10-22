@@ -11,12 +11,14 @@ from enum import Enum
 from statistics import mean
 from typing import NamedTuple
 
-import shapely.ops
-from geopandas import gpd
+from geopandas import GeoDataFrame, GeoSeries
+from numpy import ndarray, vstack  # noqa: SC200
+from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
     LineString,
     MultiLineString,
     MultiPoint,
+    MultiPolygon,
     Point,
     Polygon,
     affinity,
@@ -26,9 +28,11 @@ from shapely import (
     shortest_line,
     union,
 )
+from shapely.coords import CoordinateSequence
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import linemerge
 
-from ..core.exceptions import (  # noqa: TID252
+from geogenalg.core.exceptions import (
     GeometryOperationError,
     GeometryTypeError,
     InvalidGeometryError,
@@ -144,7 +148,7 @@ def elongation(polygon: Polygon) -> float:
     return dimensions.height / dimensions.width
 
 
-def extract_interior_rings(areas: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def extract_interior_rings(areas: GeoDataFrame) -> GeoDataFrame:
     """Extract the interior rings of a polygon geodataframe.
 
     Returns:
@@ -186,7 +190,7 @@ def explode_line(line: LineString) -> list[LineString]:
     ]
 
 
-def lines_to_segments(lines: gpd.GeoSeries) -> gpd.GeoSeries:
+def lines_to_segments(lines: GeoSeries) -> GeoSeries:
     """Convert lines to segments.
 
     Returns:
@@ -202,7 +206,7 @@ def lines_to_segments(lines: gpd.GeoSeries) -> gpd.GeoSeries:
         msg = "All geometries must be LineStrings."
         raise GeometryTypeError(msg)
 
-    return gpd.GeoSeries(
+    return GeoSeries(
         [segment for line in lines for segment in explode_line(line)],
         crs=lines.crs,
     )
@@ -304,7 +308,7 @@ def extend_line_to_nearest(
         msg = f"Union result was not a MultiLineString {combined.wkt}"
         raise GeometryOperationError(msg)
 
-    merged = shapely.ops.linemerge(combined)
+    merged = linemerge(combined)
 
     if not isinstance(merged, LineString):
         msg = f"Merge result was not a LineString: {merged}"
@@ -400,3 +404,121 @@ def extend_line_by(
     multi_point = MultiPoint((point_1, point_2))
 
     return extend_line_to_nearest(line, multi_point, extend_from)
+
+
+def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
+    geometry: BaseGeometry,
+    kd_tree: KDTree,  # noqa: SC200
+    source_z: ndarray,  # noqa: SC200
+) -> BaseGeometry:
+    """Create new geometry using nearest Z and given KDTree.
+
+    This function is meant to be used by `assign_nearest_z`.
+
+    Works for Polygon, LineString, and Point geometries and their
+    multi versions.
+
+    Args:
+    ----
+        geometry: Geometry to attach Z value to.
+        kd_tree: KDTree created from XY coordinates. `source_z`
+            should be from same dataset.
+        source_z: Array of Z values.
+
+    Returns:
+    -------
+        New geometry that matches input `geometry` with nearest Z
+        value added from `source_z`.
+
+    """
+    if geometry is None or geometry.is_empty:
+        return geometry
+
+    def _coords_with_z(coords: CoordinateSequence) -> list[tuple[float, float, float]]:
+        _, idx = kd_tree.query(coords)  # noqa: SC200
+        z_values = source_z[idx]
+        return [(x, y, float(z)) for (x, y), z in zip(coords, z_values, strict=True)]
+
+    def _polygon_with_z(polygon: Polygon) -> Polygon:
+        exterior_with_z = _coords_with_z(polygon.exterior.coords)
+        interiors_with_z = [_coords_with_z(ring.coords) for ring in polygon.interiors]
+        return Polygon(shell=exterior_with_z, holes=interiors_with_z)
+
+    if geometry.geom_type == "Polygon":
+        return _polygon_with_z(geometry)
+
+    if geometry.geom_type == "MultiPolygon":
+        return MultiPolygon(_polygon_with_z(polygon) for polygon in geometry.geoms)
+
+    if geometry.geom_type == "LineString":
+        return LineString(_coords_with_z(geometry.coords))
+
+    if geometry.geom_type == "MultiLineString":
+        return MultiLineString(
+            [LineString(_coords_with_z(line.coords)) for line in geometry.geoms]
+        )
+
+    if geometry.geom_type == "Point":
+        return Point(_coords_with_z(geometry.coords)[0])
+
+    if geometry.geom_type == "MultiPoint":
+        return MultiPoint(
+            [Point(_coords_with_z(point.coords)[0]) for point in geometry.geoms]
+        )
+
+    return geometry
+
+
+def assign_nearest_z(
+    source_gdf: GeoDataFrame, target_gdf: GeoDataFrame
+) -> GeoDataFrame:
+    """Copy nearest Z values from source to target geometries.
+
+    Attaches Z values to all geometries in `target_gdf` by
+    finding nearest vertex in the source geometries and using
+    its Z value. Uses KDTree from SciPy to perform the lookup.
+
+    Works for Polygon, LineString, and Point geometries and their
+    multi versions.
+
+    Args:
+    ----
+        source_gdf: GeoDataFrame with Z values.
+        target_gdf: GeoDataFrame without Z values to upgrade.
+
+    Returns:
+    -------
+        A copy of `target_gdf` with Z values or the input `target_gdf`
+        if no Z values where found in `source_gdf`.
+
+    """
+    # No Z values, return unchanged
+    if not any(geom.has_z for geom in source_gdf.geometry if geom is not None):
+        return target_gdf
+
+    # Find all coordinates
+    coords_list = []
+    for geom in source_gdf.geometry:
+        if geom is None or geom.is_empty:
+            continue
+        arr = get_coordinates(geom, include_z=True)
+        # Check that coordinates are 3D
+        if arr.shape[1] == 3:  # noqa: PLR2004
+            coords_list.append(arr)
+
+    # Return unchanged if no 3D coordinates were found
+    if not coords_list:
+        return target_gdf
+
+    source_coords = vstack(coords_list)  # noqa: SC200
+
+    # Build KD-tree
+    kd_tree = KDTree(source_coords[:, :2])  # noqa: SC200
+    source_z = source_coords[:, 2]
+
+    # Create output
+    result_gdf = target_gdf.copy()
+    result_gdf.geometry = result_gdf.geometry.apply(
+        lambda geom: _geometry_with_z_from_kd_tree(geom, kd_tree, source_z)  # noqa: SC200
+    )
+    return result_gdf
