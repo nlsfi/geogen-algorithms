@@ -83,6 +83,11 @@ class BaseAlgorithm(ABC):
 
         data.to_file(output_path, layer=layer_name)
 
+    @staticmethod
+    @abstractmethod
+    def command() -> str:
+        """Return command name to be used in the CLI."""
+
 
 _Alg = TypeVar("_Alg", bound=type[BaseAlgorithm])
 
