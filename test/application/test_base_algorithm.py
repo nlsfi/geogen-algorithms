@@ -18,6 +18,10 @@ def test_index_reset_without_identity_support():
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
 
+        @staticmethod
+        def command():  # noqa: ANN205
+            return ""
+
     input_data = GeoDataFrame(
         {
             "a": [1, 2, 3],
@@ -39,6 +43,10 @@ def test_index_not_reset_with_identity_support():
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
 
+        @staticmethod
+        def command():  # noqa: ANN205
+            return ""
+
     input_data = GeoDataFrame(
         {
             "a": [1, 2, 3],
@@ -59,6 +67,10 @@ def test_input_index_converted_to_strings_for_algorithm_use():
     class MockAlg(BaseAlgorithm):
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
+
+        @staticmethod
+        def command():  # noqa: ANN205
+            return ""
 
     input_data = GeoDataFrame(
         {
