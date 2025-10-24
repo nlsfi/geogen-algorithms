@@ -37,13 +37,13 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     the name set by the feature_type_column attribute.
     """
 
-    cluster_distance: float
+    cluster_distance: float = 30.0
     """Points within this distance of each other will be clustered."""
-    polygon_min_area: float
+    polygon_min_area: float = 4000.0
     """Polygons with area smaller than this will be turned into a point."""
-    feature_type_column: str
+    feature_type_column: str = "feature_type"
     """Name of column containing type of output feature."""
-    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None
+    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None = None
     """Dictionary containing keys corresponding to a column in a GeoDataFrame
     and a function which will aggregate the column's values when creating
     centroid from multiple points. If the function is given as a string, it

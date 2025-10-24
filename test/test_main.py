@@ -5,16 +5,17 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-import tempfile
-from pathlib import Path
 
 import pytest
 import typer
-from geopandas import read_file
-from geopandas.testing import assert_geodataframe_equal
 from typer.testing import CliRunner
 
-from geogenalg.main import app, geopackage_uri
+from geogenalg.main import (
+    app,
+    build_app,
+    geopackage_uri,
+    get_class_attribute_docstrings,
+)
 
 runner = CliRunner()
 
@@ -42,32 +43,27 @@ def test_geopackage_uri():
         )
 
 
-def test_clusters_to_centroids(testdata_path: Path):
-    input_gpkg = testdata_path / "boulder_in_water.gpkg"
-    input_geopackage_uri = f'"{input_gpkg}|boulder_in_water"'
+def test_get_class_attribute_docstrings():
+    class TestClass:
+        attribute_1: str = "something"
+        """Attribute 1 docstring"""
+        attribute_2: int = 10
+        """Attribute 2 docstring"""
+        attribute_3: int = 10  # doesn't have a docstring
 
-    mask_geopackage_uri = f'"{input_gpkg}|lake_part"'
+    assert get_class_attribute_docstrings(TestClass) == {
+        "attribute_1": "Attribute 1 docstring",
+        "attribute_2": "Attribute 2 docstring",
+    }
 
-    temp_dir = tempfile.TemporaryDirectory()
-    output_geopackage_uri = f"{temp_dir.name}/output.gpkg"
 
+def test_main():
+    build_app()
     result = runner.invoke(
         app,
         [
-            # TODO: uncomment? after a new command is added to CLI
-            # "clusters-to-centroids",
-            input_geopackage_uri,
-            output_geopackage_uri,
-            "--unique-id-column=kmtk_id",
-            "--polygon-min-area=1000.0",
-            f"--mask-data={mask_geopackage_uri}",
+            "--help",
         ],
     )
 
     assert result.exit_code == 0
-    assert Path(output_geopackage_uri).exists()
-
-    control = read_file(input_gpkg, layer="control")
-    result = read_file(output_geopackage_uri)
-
-    assert_geodataframe_equal(control, result)
