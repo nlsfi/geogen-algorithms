@@ -15,7 +15,8 @@ from types import FunctionType
 from typing import Annotated, Any, cast
 
 import typer
-from geopandas import read_file
+from geopandas import GeoDataFrame, read_file
+from pandas import concat
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.application.generalize_clusters_to_centroids import (
@@ -27,7 +28,6 @@ GEOPACKAGE_URI_HELP = (
     "Path to a GeoPackage, with layer name optionally specified, "
     + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg|my_layer_name"'
 )
-REFERENCE_KEY_ATTRIBUTE_NAME = "reference_key"
 
 
 @dataclass(frozen=True)
@@ -189,7 +189,21 @@ GeoPackageOption = Annotated[
     GeoPackageURI | None,
     typer.Option(
         parser=geopackage_uri,
-        help=(GEOPACKAGE_URI_HELP),
+        help=GEOPACKAGE_URI_HELP,
+    ),
+]
+
+ReferenceGeoPackageList = Annotated[
+    list[NamedGeoPackageURI],
+    typer.Option(
+        parser=named_geopackage_uri,
+        help=(
+            'Reference data as name and GeoPackageURI. Examples: "--ref=name:data.gpkg"'
+            + '--ref=name:data.gpkg@layer". You can specify the option multiple times. '
+            + "These will be used as reference data in the algorithm. The name should "
+            + "correspond to a reference key. If multiple datasets with the same name "
+            + "are specified, they will be combined."
+        ),
     ),
 ]
 
@@ -204,27 +218,24 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
         output_geopackage = cast("GeoPackageArgument", args.pop("output_geopackage"))
         unique_id_column = cast("str", args.pop("unique_id_column"))
 
-        try:
-            reference_data_key = algorithm.reference_key
-        except AttributeError:
-            reference_data_key = None
-        except:
-            raise
+        reference_options = cast("list[NamedGeoPackageURI]", args.pop("ref"))
 
-        if reference_data_key is not None:
-            reference_data_option = cast(
-                "GeoPackageOption", args.pop(reference_data_key)
+        reference_data: dict[str, GeoDataFrame] = {}
+        for reference in reference_options:
+            reference_gdf = read_file(
+                reference.uri.file,
+                layer=reference.uri.layer_name,
             )
 
-            if reference_data_option is not None:
-                reference_gdf = read_file(
-                    reference_data_option.file, layer=reference_data_option.layer_name
-                )
-                reference_data = {reference_data_key: reference_gdf}
+            if reference.name not in reference_data:
+                reference_data[reference.name] = reference_gdf
             else:
-                reference_data = {}
-        else:
-            reference_data = {}
+                reference_data[reference.name] = concat(
+                    [
+                        reference_data[reference.name],
+                        reference_gdf,
+                    ]
+                )
 
         instance = algorithm(**kwargs)
 
@@ -258,7 +269,6 @@ def build_app() -> None:
     """
     commands_and_algs = {
         "clusters_to_centroids": GeneralizePointClustersAndPolygonsToCentroids,
-        "something_else": GeneralizePointClustersAndPolygonsToCentroids,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -294,6 +304,12 @@ def build_app() -> None:
                         ),
                     ),
                 ],
+            ),
+            Parameter(
+                name="ref",
+                default=[],
+                kind=Parameter.POSITIONAL_OR_KEYWORD,
+                annotation=ReferenceGeoPackageList,
             ),
         ]
 
@@ -331,15 +347,10 @@ def build_app() -> None:
 
             field_name = field
 
-            if field == "reference_key":
-                field_name = default
-                type_annotation = GeoPackageOption
-                default = None
-            else:
-                type_annotation = Annotated[
-                    type_annotation,
-                    typer.Option(help=docstring),
-                ]
+            type_annotation = Annotated[
+                type_annotation,
+                typer.Option(help=docstring),
+            ]
 
             parameters.append(
                 Parameter(
