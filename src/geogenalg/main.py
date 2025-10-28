@@ -7,6 +7,7 @@
 
 import os
 from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
+from dataclasses import dataclass
 from inspect import Parameter, cleandoc, getfullargspec, getsource, signature
 from itertools import pairwise
 from textwrap import dedent
@@ -29,6 +30,7 @@ GEOPACKAGE_URI_HELP = (
 REFERENCE_KEY_ATTRIBUTE_NAME = "reference_key"
 
 
+@dataclass(frozen=True)
 class GeoPackageURI:
     """Custom input type for CLI.
 
@@ -38,10 +40,17 @@ class GeoPackageURI:
     file: str
     layer_name: str | None
 
-    def __init__(self, file: str, layer_name: str | None) -> None:
-        """Set attributes."""
-        self.file = file
-        self.layer_name = layer_name
+
+@dataclass(frozen=True)
+class NamedGeoPackageURI:
+    """Custom input type for CLI.
+
+    Allows specifying a GeoPackageURI by name, to be used as reference data in
+    algorithms.
+    """
+
+    name: str
+    uri: GeoPackageURI
 
 
 def geopackage_uri(value: str) -> GeoPackageURI:
@@ -67,18 +76,57 @@ def geopackage_uri(value: str) -> GeoPackageURI:
 
     stripped = value.strip("\"'")
 
-    if "|" in stripped:
-        split = stripped.split("|")
-        if len(split) != expected_split_parts:
-            msg = "Incorrectly formatted GeoPackageURI"
-            raise typer.BadParameter(msg)
+    accepted_file_layer_delimiters = ("|", "@")
 
-        file = split[0]
-        layer_name = split[1]
-        uri.file = file
-        uri.layer_name = layer_name
+    if all(delimiter in stripped for delimiter in accepted_file_layer_delimiters):
+        msg = "Incorrectly formatted GeoPackageURI"
+        raise typer.BadParameter(msg)
+
+    for delimiter in accepted_file_layer_delimiters:
+        if delimiter in stripped:
+            split = stripped.split(delimiter)
+            if len(split) != expected_split_parts:
+                msg = "Incorrectly formatted GeoPackageURI"
+                raise typer.BadParameter(msg)
+
+            file = split[0]
+            layer_name = split[1]
+
+            return GeoPackageURI(file=file, layer_name=layer_name)
 
     return uri
+
+
+def named_geopackage_uri(value: str) -> NamedGeoPackageURI:
+    """Parse string into NamedGeoPackageURI.
+
+    Args:
+    ----
+        value: string to parse
+
+    Returns:
+    -------
+        Parsed NamedGeoPackageURI
+
+    Raises:
+    ------
+        BadParameter: if string is incorrectly formatted
+
+    """
+    name_uri_delimiter = ":"
+    expected_split_parts = 2
+
+    split = value.split(name_uri_delimiter)
+
+    name = split[0]
+
+    if len(split) != expected_split_parts or not name:
+        msg = "Incorrectly formatted NamedGeoPackageURI"
+        raise typer.BadParameter(msg)
+
+    uri = geopackage_uri(split[1])
+
+    return NamedGeoPackageURI(name=name, uri=uri)
 
 
 def get_class_attribute_docstrings(cls: type[Any]) -> dict[str, str]:
