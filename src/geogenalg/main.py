@@ -5,6 +5,7 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+import os
 from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
 from inspect import Parameter, cleandoc, getfullargspec, getsource, signature
 from itertools import pairwise
@@ -179,11 +180,14 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
 
         instance = algorithm(**kwargs)
 
-        in_gdf = read_gdf_from_file_and_set_index(
-            input_geopackage.file,
-            unique_id_column,
-            layer=input_geopackage.layer_name,
-        )
+        if unique_id_column is not None:
+            in_gdf = read_gdf_from_file_and_set_index(
+                input_geopackage.file,
+                unique_id_column,
+                layer=input_geopackage.layer_name,
+            )
+        else:
+            in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
 
         output = instance.execute(in_gdf, reference_data=reference_data)
         output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
@@ -215,6 +219,8 @@ def build_app() -> None:
 
         function_signature = signature(algorithm_command_function)
 
+        unique_id_column = os.environ.get("GEOGENALG_UNIQUE_ID_COLUMN")
+
         parameters = [
             Parameter(
                 name="input_geopackage",
@@ -226,11 +232,20 @@ def build_app() -> None:
                 kind=Parameter.POSITIONAL_OR_KEYWORD,
                 annotation=GeoPackageArgument,
             ),
-            # TODO: make unique_id_column optional?
             Parameter(
                 name="unique_id_column",
                 kind=Parameter.POSITIONAL_OR_KEYWORD,
-                annotation=Annotated[str, typer.Option()],
+                default=unique_id_column,
+                annotation=Annotated[
+                    str | None,
+                    typer.Option(
+                        help=(
+                            "Column containing unique id for features. If specified, "
+                            + "the column will be used as an index. May also be set as "
+                            + "environment variable GEOGENALG_UNIQUE_ID_COLUMN."
+                        ),
+                    ),
+                ],
             ),
         ]
 
