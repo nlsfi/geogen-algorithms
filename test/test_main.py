@@ -11,36 +11,108 @@ import typer
 from typer.testing import CliRunner
 
 from geogenalg.main import (
+    GeoPackageURI,
+    NamedGeoPackageURI,
     app,
     build_app,
     geopackage_uri,
     get_class_attribute_docstrings,
+    named_geopackage_uri,
 )
 
 runner = CliRunner()
 
 
-def test_geopackage_uri():
-    assert geopackage_uri("/path/to/geopackage.gpkg").file == "/path/to/geopackage.gpkg"
-    assert geopackage_uri("/path/to/geopackage.gpkg").layer_name is None
+@pytest.mark.parametrize(
+    ("input_string", "expected"),
+    [
+        (
+            "/path/to/geopackage.gpkg",
+            GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name=None),
+        ),
+        (
+            "/path/to/geopackage.gpkg|layer",
+            GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name="layer"),
+        ),
+        (
+            '"/path/to/geopackage.gpkg|layer"',
+            GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name="layer"),
+        ),
+    ],
+    ids=[
+        "no layer",
+        "with layer",
+        "quotes",
+    ],
+)
+def test_geopackage_uri(input_string: str, expected: GeoPackageURI):
+    assert geopackage_uri(input_string) == expected
 
-    assert (
-        geopackage_uri("/path/to/geopackage.gpkg|layer").file
-        == "/path/to/geopackage.gpkg"
-    )
-    assert geopackage_uri("/path/to/geopackage.gpkg|layer").layer_name == "layer"
 
-    assert (
-        geopackage_uri('"/path/to/geopackage.gpkg|layer"').file
-        == "/path/to/geopackage.gpkg"
-    )
-    assert geopackage_uri('"/path/to/geopackage.gpkg|layer"').layer_name == "layer"
-
+@pytest.mark.parametrize(
+    ("input_string"),
+    [
+        ("data.gpkg||layer"),
+        ("data.gpk|g|layer"),
+        ("data.gpkg|la@yer"),
+    ],
+)
+def test_geopackage_uri_raises(input_string: str):
     with pytest.raises(typer.BadParameter, match="Incorrectly formatted GeoPackageURI"):
-        assert (
-            geopackage_uri("/path/to/geopackage.gpkg||layer").file
-            == "/path/to/geopackage.gpkg"
-        )
+        geopackage_uri(input_string)
+
+
+@pytest.mark.parametrize(
+    ("input_string", "expected"),
+    [
+        (
+            "mask:data.gpkg",
+            NamedGeoPackageURI(
+                "mask",
+                GeoPackageURI(file="data.gpkg", layer_name=None),
+            ),
+        ),
+        (
+            "mask:data.gpkg|layer",
+            NamedGeoPackageURI(
+                "mask",
+                GeoPackageURI(file="data.gpkg", layer_name="layer"),
+            ),
+        ),
+        (
+            "reference:data.gpkg@layer",
+            NamedGeoPackageURI(
+                "reference",
+                GeoPackageURI(file="data.gpkg", layer_name="layer"),
+            ),
+        ),
+    ],
+    ids=[
+        "no layer",
+        "with layer",
+        "@ delimiter",
+    ],
+)
+def test_named_geopackage_uri(input_string: str, expected: NamedGeoPackageURI):
+    assert named_geopackage_uri(input_string) == expected
+
+
+@pytest.mark.parametrize(
+    ("input_string"),
+    [
+        ("data.gpkg|layer"),
+        (":data.gpkg|layer"),
+    ],
+    ids=[
+        "no name",
+        "empty name",
+    ],
+)
+def test_named_geopackage_uri_raises(input_string: str):
+    with pytest.raises(
+        typer.BadParameter, match="Incorrectly formatted NamedGeoPackageURI"
+    ):
+        named_geopackage_uri(input_string)
 
 
 def test_get_class_attribute_docstrings():
