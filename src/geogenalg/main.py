@@ -22,6 +22,7 @@ from geogenalg.application import BaseAlgorithm
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
+from geogenalg.application.generalize_fences import GeneralizeFences
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 GEOPACKAGE_URI_HELP = (
@@ -190,6 +191,17 @@ GeoPackageOption = Annotated[
     typer.Option(
         parser=geopackage_uri,
         help=GEOPACKAGE_URI_HELP,
+    ),
+]
+
+GeoPackageOptionMandatory = Annotated[
+    GeoPackageURI,
+    typer.Option(
+        parser=geopackage_uri,
+        help=(
+            "Path to a GeoPackage, with layer name optionally specified, "
+            + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg|my_layer_name"'
+        ),
     ),
 ]
 
@@ -369,6 +381,38 @@ def build_app() -> None:
         )
 
         app.command(help=alg.__doc__)(algorithm_command_function)
+
+
+@app.command()
+def fences(
+    input_geopackage: GeoPackageArgument,
+    output_geopackage: GeoPackageArgument,
+    masts_data: GeoPackageOptionMandatory,
+    closing_fence_area_threshold: Annotated[float, typer.Option()],
+    closing_fence_area_with_mast_threshold: Annotated[float, typer.Option()],
+    fence_length_threshold: Annotated[float, typer.Option()],
+    fence_length_threshold_in_closed_area: Annotated[float, typer.Option()],
+    simplification_tolerance: Annotated[float, typer.Option()],
+    gap_threshold: Annotated[float, typer.Option()],
+    attribute_for_line_merge: Annotated[str, typer.Option()],
+) -> None:
+    """Execute Generalize point clusters and polygons to centroids algorithm."""
+    algorithm = GeneralizeFences(
+        closing_fence_area_threshold=closing_fence_area_threshold,
+        closing_fence_area_with_mast_threshold=closing_fence_area_with_mast_threshold,
+        fence_length_threshold=fence_length_threshold,
+        fence_length_threshold_in_closed_area=fence_length_threshold_in_closed_area,
+        simplification_tolerance=simplification_tolerance,
+        gap_threshold=gap_threshold,
+        attribute_for_line_merge=attribute_for_line_merge,
+    )
+
+    masts_gdf = read_file(masts_data.file, layer=masts_data.layer_name)
+    reference_data = {"masts": masts_gdf}
+
+    in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
+    output = algorithm.execute(in_gdf, reference_data=reference_data)
+    output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 
 
 def main() -> None:
