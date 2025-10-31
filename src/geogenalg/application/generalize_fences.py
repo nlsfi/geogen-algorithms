@@ -20,7 +20,13 @@ from geogenalg.utility.validation import check_gdf_geometry_type
 
 @dataclass(frozen=True)
 class GeneralizeFences(BaseAlgorithm):
-    """Generalize the LineString layer representing fences."""
+    """Generalize lines representing fences.
+
+    Reference data should contain a Point GeoDataFrame with the key
+    "masts".
+
+    Output contains the generalized line fences.
+    """
 
     closing_fence_area_threshold: float
     """Minimum area for a fence-enclosed region."""
@@ -38,7 +44,7 @@ class GeneralizeFences(BaseAlgorithm):
     """Name of the attribute to determine which line features can be merged."""
 
     @override
-    def execute(
+    def _execute(
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
