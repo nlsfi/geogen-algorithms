@@ -195,14 +195,6 @@ GeoPackageOption = Annotated[
     ),
 ]
 
-GeoPackageOptionMandatory = Annotated[
-    GeoPackageURI,
-    typer.Option(
-        parser=geopackage_uri,
-        help=GEOPACKAGE_URI_HELP,
-    ),
-]
-
 ReferenceGeoPackageList = Annotated[
     list[NamedGeoPackageURI],
     typer.Option(

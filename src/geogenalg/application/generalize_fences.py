@@ -20,25 +20,40 @@ from geogenalg.utility.validation import check_gdf_geometry_type
 
 @dataclass(frozen=True)
 class GeneralizeFences(BaseAlgorithm):
-    """Generalize the LineString layer representing fences."""
+    """Generalize lines representing fences.
 
-    closing_fence_area_threshold: float
+    Reference data should contain a Point GeoDataFrame with the key
+    "masts".
+
+    Output contains the generalized line fences.
+
+    The algorithm does the following steps:
+    - Merges line segments
+    - Adds helper lines to close small gaps between lines
+    - Removes short lines within large enough enclosed areas
+    - Removes surrounding lines of small enough enclosed areas
+    - Removes close enough lines surrounding a mast
+    - Removes all short lines
+    - Simplifies all lines
+    """
+
+    closing_fence_area_threshold: float = 2000.0
     """Minimum area for a fence-enclosed region."""
-    closing_fence_area_with_mast_threshold: float
+    closing_fence_area_with_mast_threshold: float = 8000.0
     """Minimum area for a fence-enclosed region containing a mast."""
-    fence_length_threshold: float
+    fence_length_threshold: float = 80.0
     """Minimum length for a fence line."""
-    fence_length_threshold_in_closed_area: float
+    fence_length_threshold_in_closed_area: float = 300.0
     """Minimum length for a fence line within a closed area."""
-    simplification_tolerance: float
+    simplification_tolerance: float = 4.0
     """Tolerance used for geometry simplification."""
-    gap_threshold: float
+    gap_threshold: float = 25.0
     """Maximum gap between two fence lines to be connected with a helper line."""
-    attribute_for_line_merge: str
+    attribute_for_line_merge: str = "kohdeluokka"
     """Name of the attribute to determine which line features can be merged."""
 
     @override
-    def execute(
+    def _execute(
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
@@ -61,7 +76,8 @@ class GeneralizeFences(BaseAlgorithm):
                 GeoDataFrame with key "masts" in `reference_data` contains
                 non-point geometries.
             KeyError: If `reference_data` does not contain data with key
-                "masts".
+                "masts" or input data does not have specified
+                `attribute_for_line_merge`.
 
         """
         if not check_gdf_geometry_type(data, ["LineString"]):
@@ -76,6 +92,12 @@ class GeneralizeFences(BaseAlgorithm):
         if not check_gdf_geometry_type(reference_data["masts"], ["Point"]):
             msg = "Masts data should be a Point GeoDataFrame."
             raise GeometryTypeError(msg)
+        if self.attribute_for_line_merge not in data.columns:
+            msg = (
+                "Specified `attribute_for_line_merge` "
+                + f"({self.attribute_for_line_merge}) not found in input GeoDataFrame."
+            )
+            raise KeyError(msg)
 
         result_gdf = data.copy()
 
