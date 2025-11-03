@@ -9,12 +9,15 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
-from geopandas import GeoDataFrame, read_file
+from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 from shapely import Point
 
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+
+UNIQUE_ID_COLUMN = "mtk_id"
 
 
 def test_generalize_landcover_50k(
@@ -23,12 +26,15 @@ def test_generalize_landcover_50k(
     """
     Test generalizing landcover with cultivated land class
     """
-    source_path = testdata_path / "marshes_small_area.gpkg"
+    input_path = testdata_path / "marshes_small_area.gpkg"
+    input_data = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
+        layer="mtk_marshes",
+    )
 
     temp_dir = TemporaryDirectory()
-    output_path = temp_dir.name + "/generalized_marshes.gpkg"
-
-    input_gdf = read_file(source_path, layer="mtk_marshes")
+    output_path = Path(temp_dir.name) / "generalized_marshes.gpkg"
 
     algorithm = GeneralizeLandcover(
         buffer_constant=20,
@@ -37,16 +43,14 @@ def test_generalize_landcover_50k(
         hole_threshold=5000,
         smoothing=True,
     )
+    algorithm.execute(input_data, {}).to_file(output_path, layer="marshes_50k")
+    result_marshes = read_gdf_from_file_and_set_index(
+        output_path, "index", layer="marshes_50k"
+    )
 
-    result = algorithm.execute(input_gdf, {})
-
-    assert result is not None
-
-    result.to_file(output_path, layer="marshes_50k")
-
-    control_marshes: GeoDataFrame = read_file(source_path, layer="generalized_marshes")
-
-    result_marshes = read_file(output_path, layer="marshes_50k")
+    control_marshes: GeoDataFrame = read_gdf_from_file_and_set_index(
+        input_path, UNIQUE_ID_COLUMN, layer="generalized_marshes"
+    )
 
     control_marshes = control_marshes.sort_values("geometry").reset_index(drop=True)
     result_marshes = result_marshes.sort_values("geometry").reset_index(drop=True)
