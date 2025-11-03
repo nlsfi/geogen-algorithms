@@ -7,6 +7,7 @@
 
 import os
 from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
+from collections.abc import Callable
 from dataclasses import dataclass
 from inspect import Parameter, cleandoc, getfullargspec, getsource, signature
 from itertools import pairwise
@@ -16,7 +17,7 @@ from typing import Annotated, Any, cast
 
 import typer
 from geopandas import GeoDataFrame, read_file
-from pandas import concat
+from pandas import Series, concat
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.application.generalize_clusters_to_centroids import (
@@ -313,18 +314,19 @@ def build_app() -> None:
             ),
         ]
 
-        # TODO: add types into this as needed
-        supported_type_hints = (
-            float,
-            int,
-            str,
-        )
+        # This should include any parameter types which are unnecessary/too
+        # complex to support entering in the CLI.
+        ignored_types_for_cli = (dict[str, Callable[[Series], Any] | str] | None,)
         argspec = getfullargspec(alg)
 
         fields = argspec.args
 
         if len(fields) < 1 and fields[0] != "self":
             msg = "improper arguments found in class"
+            raise ValueError(msg)
+
+        if argspec.defaults is None:
+            msg = "no default values found"
             raise ValueError(msg)
 
         fields = fields[1:]
@@ -334,14 +336,10 @@ def build_app() -> None:
         for i, field in enumerate(fields):
             type_annotation = argspec.annotations.get(field)
 
-            if type_annotation not in supported_type_hints:
+            if type_annotation in ignored_types_for_cli:
                 continue
 
             docstring = docstrings[field]
-
-            if argspec.defaults is None:
-                msg = "no default values found"
-                raise ValueError(msg)
 
             default = argspec.defaults[i]
 
