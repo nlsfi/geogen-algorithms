@@ -6,10 +6,12 @@
 #  LICENSE file in the root directory of this source tree.
 
 import geopandas as gpd
+import pytest
 from pandas.testing import assert_frame_equal
-from shapely import Point, equals_exact
+from shapely import LineString, Point, equals_exact
 
 from geogenalg.application.generalize_points import GeneralizePoints
+from geogenalg.core.exceptions import GeometryTypeError
 
 
 def test_generalize_points() -> None:
@@ -91,3 +93,28 @@ def test_generalize_points() -> None:
     result_attrs = result_gdf.drop(columns="geometry").reset_index(drop=True)
     expected_attrs = expected_gdf.drop(columns="geometry").reset_index(drop=True)
     assert_frame_equal(result_attrs, expected_attrs)
+
+
+def test_generalize_points_invalid_geometry_type():
+    algorithm = GeneralizePoints(
+        reduce_threshold=0.5,
+        displace_threshold=3,
+        displace_points_iterations=10,
+        unique_key_column="id",
+        cluster_members_column="cluster_members",
+    )
+
+    input_data = gpd.GeoDataFrame(
+        {
+            "id": [1, 2],
+        },
+        geometry=[
+            LineString([Point(0.5, 0.5), Point(1.0, 1.0)]),
+            LineString([Point(2.0, 2.0), Point(2.5, 2.5)]),
+        ],
+    )
+
+    with pytest.raises(
+        GeometryTypeError, match=r"GeneralizePoints works only with Point geometries."
+    ):
+        algorithm.execute(input_data, {})
