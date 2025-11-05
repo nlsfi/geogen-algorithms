@@ -54,10 +54,10 @@ class GeneralizeShoreline(BaseAlgorithm):
             if not check_gdf_geometry_type(
                 water_areas_gdf, ["Polygon", "MultiPolygon"]
             ):
-                msg = "generalized water areas must be polygons"
+                msg = "Reference data must contain only (Multi)Polygons."
                 raise GeometryTypeError(msg)
         else:
-            msg = "generalized water area dataset required"
+            msg = "Reference data is mandatory."
             raise MissingReferenceError(msg)
 
         new_shoreline = water_areas_gdf.geometry.boundary.to_frame()
