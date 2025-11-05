@@ -27,7 +27,8 @@ class GeneralizeShoreline(BaseAlgorithm):
     Matches the division into features of the original shoreline and inherits
     the original attributes.
 
-    Requires a line dataset passed as reference data.
+    Requires a polygon dataset (generalized water areas) passed as reference
+    data.
     """
 
     buffer_distance: float = 7.5
@@ -44,6 +45,16 @@ class GeneralizeShoreline(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
+        """Execute algorithm.
+
+        Raises:
+            GeometryTypeError: If input GeoDataFrames have incorrect geometry types.
+            MissingReferenceError: If reference data is not found.
+
+        Returns:
+            New shoreline extracted from generalized water areas.
+
+        """
         if not check_gdf_geometry_type(data, ["LineString"]):
             msg = "Input data must contain only LineStrings."
             raise GeometryTypeError(msg)
