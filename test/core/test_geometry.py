@@ -6,7 +6,9 @@
 #  LICENSE file in the root directory of this source tree.
 
 import pytest
-from geopandas import gpd
+from geopandas import GeoDataFrame, gpd
+from pandas import DataFrame
+from pandas.testing import assert_frame_equal
 from shapely import GeometryCollection, MultiPolygon, from_wkt, to_wkt
 from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
 from shapely.geometry.base import BaseGeometry
@@ -17,6 +19,7 @@ from geogenalg.core.exceptions import (
 )
 from geogenalg.core.geometry import (
     LineExtendFrom,
+    assign_nearest_z,
     elongation,
     explode_line,
     extend_line_to_nearest,
@@ -340,3 +343,149 @@ def test_extend_line_to_nearest():
     assert extended_from_both1.wkt == "LINESTRING (-10 -3, 0 0, 1 1, -10 -3)"
     assert extended_from_both2.wkt == "LINESTRING (0 0, 1 1, 10 2, 0 0)"
     assert extended_from_both3.wkt == "LINESTRING (0 2, 0 0, 1 1, 1 2)"
+
+
+@pytest.fixture
+def assign_nearest_z_source_gdf() -> GeoDataFrame:
+    # Corner points of a 3x3 square
+    src_points = [
+        Point(0.0, 0.0, 1.0),
+        Point(3.0, 0.0, 2.0),
+        Point(3.0, 3.0, 3.0),
+        Point(0.0, 3.0, 4.0),
+    ]
+    return GeoDataFrame({"id": [1, 2, 3, 4]}, geometry=src_points)
+
+
+def _coords_df(gdf: GeoDataFrame, include_z: bool = True) -> DataFrame:
+    return gdf.get_coordinates(include_z=include_z)
+
+
+def test_assign_nearest_z_points_overwrite(assign_nearest_z_source_gdf: GeoDataFrame):
+    # Define Z for some points to test that pre-existing Zs don't matter
+    target_points = [
+        Point(1.0, 1.0, 0.0),
+        Point(2.0, 1.0, 0.0),
+        Point(2.0, 2.0),
+        Point(1.0, 2.0),
+    ]
+    target = GeoDataFrame({"id": [1, 2, 3, 4]}, geometry=target_points)
+
+    expected_points = [
+        Point(1.0, 1.0, 1.0),
+        Point(2.0, 1.0, 2.0),
+        Point(2.0, 2.0, 3.0),
+        Point(1.0, 2.0, 4.0),
+    ]
+    expected = GeoDataFrame({"id": [1, 2, 3, 4]}, geometry=expected_points)
+
+    out = assign_nearest_z(assign_nearest_z_source_gdf, target, overwrite_z=True)
+    assert_frame_equal(_coords_df(out), _coords_df(expected))
+
+
+def test_assign_nearest_z_points_add_only(assign_nearest_z_source_gdf: GeoDataFrame):
+    # Define Z for some points to test that pre-existing Zs don't matter
+    target_points = [
+        Point(1.0, 1.0, 0.0),
+        Point(2.0, 1.0, 0.0),
+        Point(2.0, 2.0),
+        Point(1.0, 2.0),
+    ]
+    target = GeoDataFrame({"id": [1, 2, 3, 4]}, geometry=target_points)
+
+    expected_points = [
+        Point(1.0, 1.0, 0.0),
+        Point(2.0, 1.0, 0.0),
+        Point(2.0, 2.0, 3.0),
+        Point(1.0, 2.0, 4.0),
+    ]
+    expected = GeoDataFrame({"id": [1, 2, 3, 4]}, geometry=expected_points)
+
+    out = assign_nearest_z(assign_nearest_z_source_gdf, target, overwrite_z=False)
+    assert_frame_equal(_coords_df(out), _coords_df(expected))
+
+
+def test_assign_nearest_z_linestrings_overwrite(
+    assign_nearest_z_source_gdf: GeoDataFrame,
+):
+    target_lines = [
+        LineString([Point(1.0, 1.0, 0.0), Point(2.0, 1.0, 0.0)]),
+        LineString([Point(2.0, 2.0), Point(1.0, 2.0)]),
+    ]
+    target = GeoDataFrame({"id": [1, 2]}, geometry=target_lines)
+
+    expected_lines = [
+        LineString([(1.0, 1.0, 1.0), (2.0, 1.0, 2.0)]),
+        LineString([(2.0, 2.0, 3.0), (1.0, 2.0, 4.0)]),
+    ]
+    expected = GeoDataFrame({"id": [1, 2]}, geometry=expected_lines)
+
+    out = assign_nearest_z(assign_nearest_z_source_gdf, target, overwrite_z=True)
+    assert_frame_equal(_coords_df(out), _coords_df(expected))
+
+
+def test_assign_nearest_z_linestrings_add_only(
+    assign_nearest_z_source_gdf: GeoDataFrame,
+):
+    target_lines = [
+        LineString([(1.0, 1.0), (2.0, 1.0)]),
+        LineString([(2.0, 2.0), (1.0, 2.0)]),
+    ]
+    target = GeoDataFrame({"id": [1, 2]}, geometry=target_lines)
+
+    expected_lines = [
+        LineString([(1.0, 1.0, 1.0), (2.0, 1.0, 2.0)]),
+        LineString([(2.0, 2.0, 3.0), (1.0, 2.0, 4.0)]),
+    ]
+    expected = GeoDataFrame({"id": [1, 2]}, geometry=expected_lines)
+
+    out = assign_nearest_z(assign_nearest_z_source_gdf, target, overwrite_z=False)
+    assert_frame_equal(_coords_df(out), _coords_df(expected))
+
+
+def test_assign_nearest_z_polygon_add_only(assign_nearest_z_source_gdf: GeoDataFrame):
+    target_polygon = Polygon(
+        [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+    )
+    target = GeoDataFrame({"id": [1]}, geometry=[target_polygon])
+
+    expected_polygon = Polygon(
+        [
+            (1.0, 1.0, 1.0),
+            (2.0, 1.0, 2.0),
+            (2.0, 2.0, 3.0),
+            (1.0, 2.0, 4.0),
+            (1.0, 1.0, 1.0),
+        ]
+    )
+    expected = GeoDataFrame({"id": [1]}, geometry=[expected_polygon])
+
+    out = assign_nearest_z(assign_nearest_z_source_gdf, target, overwrite_z=False)
+    assert_frame_equal(_coords_df(out), _coords_df(expected))
+
+
+def test_assign_nearest_z_polygon_overwrite(assign_nearest_z_source_gdf: GeoDataFrame):
+    target_polygon = Polygon(
+        [
+            (1.0, 1.0, 0.0),
+            (2.0, 1.0, 0.0),
+            (2.0, 2.0, 0.0),
+            (1.0, 2.0, 0.0),
+            (1.0, 1.0, 0.0),
+        ]
+    )
+    target = GeoDataFrame({"id": [1]}, geometry=[target_polygon])
+
+    expected_polygon = Polygon(
+        [
+            (1.0, 1.0, 1.0),
+            (2.0, 1.0, 2.0),
+            (2.0, 2.0, 3.0),
+            (1.0, 2.0, 4.0),
+            (1.0, 1.0, 1.0),
+        ]
+    )
+    expected = GeoDataFrame({"id": [1]}, geometry=[expected_polygon])
+
+    out = assign_nearest_z(assign_nearest_z_source_gdf, target, overwrite_z=True)
+    assert_frame_equal(_coords_df(out), _coords_df(expected))
