@@ -12,7 +12,7 @@ from statistics import mean
 from typing import NamedTuple
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import ndarray, vstack  # noqa: SC200
+from numpy import column_stack, ndarray, vstack  # noqa: SC200
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
     LineString,
@@ -435,9 +435,13 @@ def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
         return geometry
 
     def _coords_with_z(coords: CoordinateSequence) -> list[tuple[float, float, float]]:
-        _, idx = kd_tree.query(coords)  # noqa: SC200
+        x_values, y_values = coords.xy  # Ignore possible pre-existing Z
+        _, idx = kd_tree.query(column_stack((x_values, y_values)))  # noqa: SC200
         z_values = source_z[idx]
-        return [(x, y, float(z)) for (x, y), z in zip(coords, z_values, strict=True)]
+        return [
+            (x, y, float(z))
+            for x, y, z in zip(x_values, y_values, z_values, strict=True)
+        ]
 
     def _polygon_with_z(polygon: Polygon) -> Polygon:
         exterior_with_z = _coords_with_z(polygon.exterior.coords)
@@ -470,7 +474,9 @@ def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
 
 
 def assign_nearest_z(
-    source_gdf: GeoDataFrame, target_gdf: GeoDataFrame
+    source_gdf: GeoDataFrame,
+    target_gdf: GeoDataFrame,
+    overwrite_z: bool = False,  # noqa: FBT001, FBT002
 ) -> GeoDataFrame:
     """Copy nearest Z values from source to target geometries.
 
@@ -485,6 +491,8 @@ def assign_nearest_z(
     ----
         source_gdf: GeoDataFrame with Z values.
         target_gdf: GeoDataFrame without Z values to upgrade.
+        overwrite_z: Whether to overwrite possible Z values in
+            target_gdf geometries.
 
     Returns:
     -------
@@ -520,5 +528,7 @@ def assign_nearest_z(
     result_gdf = target_gdf.copy()
     result_gdf.geometry = result_gdf.geometry.apply(
         lambda geom: _geometry_with_z_from_kd_tree(geom, kd_tree, source_z)  # noqa: SC200
+        if (overwrite_z or not geom.has_z)
+        else geom
     )
     return result_gdf
