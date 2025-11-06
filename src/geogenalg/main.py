@@ -273,6 +273,7 @@ def build_app() -> None:
     commands_and_algs = {
         "clusters_to_centroids": GeneralizePointClustersAndPolygonsToCentroids,
         "fences": GeneralizeFences,
+        "landcover": GeneralizeLandcover,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -370,29 +371,6 @@ def build_app() -> None:
         )
 
         app.command(help=alg.__doc__)(algorithm_command_function)
-
-
-@app.command()
-def landcover(
-    input_geopackage: GeoPackageArgument,
-    output_geopackage: GeoPackageArgument,
-    buffer_constant: Annotated[float, typer.Option()],
-    simplification_tolerance: Annotated[float, typer.Option()],
-    area_threshold: Annotated[float, typer.Option()],
-    hole_threshold: Annotated[float, typer.Option()],
-    smoothing: Annotated[bool, typer.Option()],
-) -> None:
-    """Execute Generalize landcover algorithm."""
-    algorithm = GeneralizeLandcover(
-        buffer_constant=buffer_constant,
-        simplification_tolerance=simplification_tolerance,
-        area_threshold=area_threshold,
-        hole_threshold=hole_threshold,
-        smoothing=smoothing,
-    )
-    in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
-    output = algorithm.execute(in_gdf, reference_data={})
-    output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 
 
 def main() -> None:
