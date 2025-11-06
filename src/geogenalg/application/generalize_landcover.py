@@ -30,7 +30,7 @@ class GeneralizeLandcover(BaseAlgorithm):
 
     Output is a GeoDataFrame with generalized land cover polygons.
 
-    This algorithm performs the following steps to generalize landcover polygons:
+    The algorithm does the following steps:
     - Merges polygons with narrow gaps by buffering geometries
     - Removes narrow polygon parts by negatively buffering geometries
     - Simplifies polygons using `simplification_tolerance`
@@ -39,15 +39,15 @@ class GeneralizeLandcover(BaseAlgorithm):
     - Removes holes with area under given `hole_threshold`
     """
 
-    buffer_constant: float
+    buffer_constant: float = 10.0
     """Constant used for buffering polygons."""
-    simplification_tolerance: float
+    simplification_tolerance: float = 5.0
     """Tolerance used for geometry simplification."""
-    area_threshold: float
+    area_threshold: float = 2500.0
     """Minimum polygon area to retain."""
-    hole_threshold: float
+    hole_threshold: float = 2500.0
     """Minimum area of holes to retain."""
-    smoothing: bool
+    smoothing: bool = False
     """If True, polygons will be smoothed."""
 
     def _execute(
