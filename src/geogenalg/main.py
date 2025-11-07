@@ -9,7 +9,7 @@ import os
 from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
 from collections.abc import Callable
 from dataclasses import dataclass
-from inspect import Parameter, cleandoc, getfullargspec, getsource, signature
+from inspect import Parameter, cleandoc, getfullargspec, getmro, getsource, signature
 from itertools import pairwise
 from textwrap import dedent
 from types import FunctionType
@@ -182,6 +182,31 @@ def get_class_attribute_docstrings(cls: type[Any]) -> dict[str, str]:
     return out
 
 
+def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str, str]:
+    """Get docstrings of a BaseAlgorithm subclass, including parent algorithm classes.
+
+    Returns
+    -------
+        Dictionary containing docstring for each attribute found in class.
+
+    """
+    output = get_class_attribute_docstrings(cls)
+    base_classes = getmro(cls)
+    for base_class in base_classes:
+        if not issubclass(base_class, BaseAlgorithm):
+            continue
+
+        if base_class == BaseAlgorithm:
+            continue
+
+        if base_class == cls:
+            continue
+
+        output |= get_class_attribute_docstrings(base_class)
+
+    return output
+
+
 GeoPackageArgument = Annotated[
     GeoPackageURI,
     typer.Argument(
@@ -339,7 +364,7 @@ def build_app() -> None:
 
         fields = fields[1:]
 
-        docstrings = get_class_attribute_docstrings(alg)
+        docstrings = get_basealgorithm_attribute_docstrings(alg)
 
         for i, field in enumerate(fields):
             type_annotation = argspec.annotations.get(field)

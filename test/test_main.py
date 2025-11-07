@@ -7,14 +7,17 @@
 
 import pytest
 import typer
+from pygeoops import GeoDataFrame
 from typer.testing import CliRunner
 
+from geogenalg.application import BaseAlgorithm
 from geogenalg.main import (
     GeoPackageURI,
     NamedGeoPackageURI,
     app,
     build_app,
     geopackage_uri,
+    get_basealgorithm_attribute_docstrings,
     get_class_attribute_docstrings,
     named_geopackage_uri,
 )
@@ -125,6 +128,31 @@ def test_get_class_attribute_docstrings():
     assert get_class_attribute_docstrings(TestClass) == {
         "attribute_1": "Attribute 1 docstring",
         "attribute_2": "Attribute 2 docstring",
+    }
+
+
+def test_get_basealgorithm_docstrings():
+    class MockAlgParent(BaseAlgorithm):
+        parent_attribute: str = "something"
+        """Parent attribute."""
+
+        def _execute(
+            self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
+        ) -> GeoDataFrame:
+            pass
+
+    class MockAlgSubclass(MockAlgParent):
+        subclass_attribute: str = "something"
+        """Subclass attribute."""
+
+        def _execute(
+            self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
+        ) -> GeoDataFrame:
+            pass
+
+    assert get_basealgorithm_attribute_docstrings(MockAlgSubclass) == {
+        "parent_attribute": "Parent attribute.",
+        "subclass_attribute": "Subclass attribute.",
     }
 
 
