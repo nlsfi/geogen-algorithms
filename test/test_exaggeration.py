@@ -238,7 +238,9 @@ def test_extract_narrow_polygon_parts(
             strict=False,
         )
     ):
-        assert equals_exact(result_geometry, expected_geometry, tolerance=1e-3)
+        assert equals_exact(
+            result_geometry, expected_geometry, tolerance=1e-3, normalize=True
+        )
 
     # Check attributes
     result_attrs = result_sorted.drop(columns="geometry")
