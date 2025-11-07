@@ -29,12 +29,12 @@ dynamic = [
 ]
 dependencies = [
     "cartagen>=1.0.2",
-    "geopandas==1.0.1",
+    "geopandas==1.1.1",
     "matplotlib==3.9.2",
     "networkx==3.4.2",
     "pygeoops==0.4.0",
     "scikit-learn==1.6.1",
-    "shapely==2.0.6",
+    "shapely==2.1.2",
     "shapelysmooth==0.2.1",
     "simplification==0.7.13",
     "typer>=0.19.2",
@@ -190,11 +190,6 @@ select = ["SC"]
 per-file-ignores = ["test/*:SC200"]
 # TODO: remove exclude section when qgis dependencies removed/function refactored
 exclude = """
-    src/geogenalg/application/generalize_lakes.py
-    src/geogenalg/application/generalize_seas.py
-    src/geogenalg/buffer/exaggerate_thin_parts.py
-    src/geogenalg/buffer/generalize_islands.py
-    src/geogenalg/core/extract_interior_rings.py
     src/geogenalg/application/remove_short_watercourses.py
     src/geogenalg/application/remove_dense_watercourses.py
     src/geogenalg/application/generalize_watercourses_50k.py
@@ -228,11 +223,6 @@ source_pkgs = ["geogenalg"]
 # TODO: remove omit section when qgis dependencies removed/function refactored
 omit = [
     "src/geogenalg/main.py",
-    "src/geogenalg/application/generalize_lakes.py",
-    "src/geogenalg/application/generalize_seas.py",
-    "src/geogenalg/buffer/exaggerate_thin_parts.py",
-    "src/geogenalg/buffer/generalize_islands.py",
-    "src/geogenalg/core/extract_interior_rings.py",
     "src/geogenalg/application/remove_short_watercourses.py",
     "src/geogenalg/application/remove_dense_watercourses.py",
     "src/geogenalg/application/generalize_watercourses_50k.py",
