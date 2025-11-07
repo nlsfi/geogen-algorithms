@@ -5,6 +5,7 @@ algs
 arctan2
 argmax
 argspec
+basealgorithm
 bbox
 cartagen
 centroid
@@ -37,6 +38,7 @@ geopackage
 geopandas
 geoseries
 getfullargspec
+getmro
 getsource
 gpd
 hypot
