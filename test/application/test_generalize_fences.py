@@ -63,15 +63,7 @@ def test_generalize_fences_50k(testdata_path: Path) -> None:
 def test_generalize_fences_50k_invalid_geometry_type() -> None:
     input_data = GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
 
-    algorithm = GeneralizeFences(
-        closing_fence_area_threshold=2000,
-        closing_fence_area_with_mast_threshold=8000,
-        fence_length_threshold=80,
-        fence_length_threshold_in_closed_area=300,
-        simplification_tolerance=4,
-        gap_threshold=25,
-        attribute_for_line_merge="kohdeluokka",
-    )
+    algorithm = GeneralizeFences()
 
     with pytest.raises(
         GeometryTypeError,
@@ -88,15 +80,7 @@ def test_generalize_fences_50k_missing_masts_data(testdata_path: Path) -> None:
         layer="mtk_fences",
     )
 
-    algorithm = GeneralizeFences(
-        closing_fence_area_threshold=2000,
-        closing_fence_area_with_mast_threshold=8000,
-        fence_length_threshold=80,
-        fence_length_threshold_in_closed_area=300,
-        simplification_tolerance=4,
-        gap_threshold=25,
-        attribute_for_line_merge="kohdeluokka",
-    )
+    algorithm = GeneralizeFences()
 
     with pytest.raises(
         KeyError,
@@ -116,15 +100,7 @@ def test_generalize_fences_50k_invalid_geometry_type_masts(testdata_path: Path) 
         {"id": [1]}, geometry=[LineString((Point(0, 0), Point(1, 0)))]
     )
 
-    algorithm = GeneralizeFences(
-        closing_fence_area_threshold=2000,
-        closing_fence_area_with_mast_threshold=8000,
-        fence_length_threshold=80,
-        fence_length_threshold_in_closed_area=300,
-        simplification_tolerance=4,
-        gap_threshold=25,
-        attribute_for_line_merge="kohdeluokka",
-    )
+    algorithm = GeneralizeFences()
 
     with pytest.raises(
         GeometryTypeError, match=r"Masts data should be a Point GeoDataFrame."
