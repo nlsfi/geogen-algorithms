@@ -5,13 +5,18 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-import tempfile
+import re
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+import pytest
 from geopandas import read_file
 from pandas.testing import assert_frame_equal
+from pygeoops import GeoDataFrame
+from shapely import Point, box
 
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
+from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 UNIQUE_ID_COLUMN = "kmtk_id"
@@ -25,7 +30,7 @@ def test_generalize_lakes(testdata_path: Path):
         layer="lake_part",
     )
 
-    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir = TemporaryDirectory()
     output_path = Path(temp_dir.name) / "output.gpkg"
 
     algorithm = GeneralizeWaterAreas(
@@ -66,7 +71,7 @@ def test_generalize_sea(testdata_path: Path):
 
     shoreline = read_file(input_path, layer="shoreline")
 
-    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir = TemporaryDirectory()
     output_path = Path(temp_dir.name) / "output.gpkg"
 
     algorithm = GeneralizeWaterAreas(
@@ -97,3 +102,26 @@ def test_generalize_sea(testdata_path: Path):
     )
 
     assert_frame_equal(control, result)
+
+
+def test_invalid_geom_type() -> None:
+    gdf = GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
+
+    with pytest.raises(
+        GeometryTypeError,
+        match=re.escape("Input data must only contain Polygons."),
+    ):
+        GeneralizeWaterAreas().execute(data=gdf, reference_data={})
+
+
+def test_invalid_shoreline_geom_type() -> None:
+    gdf = GeoDataFrame({"id": [1]}, geometry=[box(0, 0, 1, 1)])
+    reference_gdf = GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
+
+    with pytest.raises(
+        GeometryTypeError,
+        match=re.escape("Reference data must only contain LineStrings."),
+    ):
+        GeneralizeWaterAreas().execute(
+            data=gdf, reference_data={"shoreline": reference_gdf}
+        )
