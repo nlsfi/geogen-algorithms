@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 class GeneralizeShoreline(BaseAlgorithm):
     """Extracts new shorelines from generalized water areas.
 
-    Matches the division into features of the original shoreline and inherits
-    the original attributes.
+    Converts generalized water areas to linestrings and divides them into features,
+    matching the original shoreline linestrings and their attributes.
 
     Requires a polygon dataset (generalized water areas) passed as reference
     data.
