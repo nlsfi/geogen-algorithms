@@ -15,6 +15,7 @@ from pandas import concat
 from geogenalg import continuity, merge, selection
 from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -173,4 +174,5 @@ class GeneralizeFences(BaseAlgorithm):
             self.simplification_tolerance
         )
 
-        return result_gdf
+        # Assign nearst z values from source gdf
+        return assign_nearest_z(data, result_gdf)
