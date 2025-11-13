@@ -7,8 +7,8 @@
 
 from itertools import chain
 
-import geopandas as gpd
-import pandas as pd
+from geopandas import GeoDataFrame
+from pandas import Series, concat
 from shapely import line_merge
 from shapely.geometry import LineString, MultiLineString
 
@@ -18,8 +18,8 @@ from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 def merge_connecting_lines_by_attribute(
-    input_gdf: gpd.GeoDataFrame, attribute: str
-) -> gpd.GeoDataFrame:
+    input_gdf: GeoDataFrame, attribute: str
+) -> GeoDataFrame:
     """Merge LineStrings in the GeoDataFrame by a given attribute.
 
     Args:
@@ -71,18 +71,18 @@ def merge_connecting_lines_by_attribute(
             [{**properties, input_gdf.geometry.name: line} for line in merged_lines]
         )
 
-    result_gdf = gpd.GeoDataFrame(merged_records, crs=input_gdf.crs)
+    result_gdf = GeoDataFrame(merged_records, crs=input_gdf.crs)
 
     # Assign attributes to merged lines by mapping back to one of the source lines
     return attributes.inherit_attributes(input_gdf, result_gdf)
 
 
 def dissolve_and_inherit_attributes(
-    input_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
     by_column: str,
     unique_key_column: str,
     dissolve_members_column: str = "dissolve_members",
-) -> gpd.GeoDataFrame:
+) -> GeoDataFrame:
     """Dissolve polygons and inherit attributes from a representative original polygon.
 
     Args:
@@ -114,18 +114,18 @@ def dissolve_and_inherit_attributes(
     # ensures resulting geometries are valid before further processing.
     input_gdf.geometry = input_gdf.buffer(0)
 
-    dissolved_gdf: gpd.GeoDataFrame = (
+    dissolved_gdf: GeoDataFrame = (
         input_gdf.dissolve(by=by_column).explode(index_parts=True).reset_index()
     )
 
-    dissolved_polygons_gdfs: list[gpd.GeoDataFrame] = []
+    dissolved_polygons_gdfs: list[GeoDataFrame] = []
 
     for _, dissolved_row in dissolved_gdf.iterrows():
         dissolved_geom = dissolved_row.geometry
         group_value = dissolved_row[by_column]
 
         # Only intersect polygons from the same group
-        intersecting_polygons_gdf: gpd.GeoDataFrame = input_gdf[
+        intersecting_polygons_gdf: GeoDataFrame = input_gdf[
             (input_gdf[by_column] == group_value)
             & (input_gdf.geometry.intersects(dissolved_geom))
         ].copy()
@@ -135,7 +135,7 @@ def dissolve_and_inherit_attributes(
 
         # TODO: Add feature to choose how the representative point is selected
         min_id = intersecting_polygons_gdf[unique_key_column].min()
-        representative_polygon_gdf: gpd.GeoDataFrame = (
+        representative_polygon_gdf: GeoDataFrame = (
             intersecting_polygons_gdf.loc[
                 intersecting_polygons_gdf[unique_key_column] == min_id
             ]
@@ -163,15 +163,15 @@ def dissolve_and_inherit_attributes(
         representative_polygon_gdf.geometry = [dissolved_geom]
         dissolved_polygons_gdfs.append(representative_polygon_gdf)
 
-    return pd.concat(dissolved_polygons_gdfs).reset_index(drop=True)
+    return concat(dissolved_polygons_gdfs).reset_index(drop=True)
 
 
 def _merge_dissolve_members_column(
-    intersecting_polygons_gdf: gpd.GeoDataFrame,
+    intersecting_polygons_gdf: GeoDataFrame,
     dissolve_members_column: str,
-    dissolved_row: pd.Series,
+    dissolved_row: Series,
     unique_key_column: str,
-    representative_polygon_gdf: gpd.GeoDataFrame,
+    representative_polygon_gdf: GeoDataFrame,
 ) -> None:
     """List all dissolve member keys into the dissolve_members_column."""
     existing_members = (
