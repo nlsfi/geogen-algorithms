@@ -105,22 +105,23 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
         gdf = data.copy()
 
-        thin_sections = (
-            extract_narrow_polygon_parts(gdf, self.thin_section_width)
-            .explode(index_parts=True)
-            .geometry
-        )
-        thin_sections = thin_sections.loc[
-            thin_sections.geometry.area > self.thin_section_min_size
-        ].buffer(self.thin_section_exaggerate_by)
+        if self.thin_section_exaggerate_by != 0.0:
+            thin_sections = (
+                extract_narrow_polygon_parts(gdf, self.thin_section_width)
+                .explode(index_parts=True)
+                .geometry
+            )
+            thin_sections = thin_sections.loc[
+                thin_sections.geometry.area > self.thin_section_min_size
+            ].buffer(self.thin_section_exaggerate_by)
 
-        def add_exaggerated_parts(geom: Polygon) -> Polygon:
-            intersecting_geoms = thin_sections.loc[
-                thin_sections.geometry.intersects(geom)
-            ].union_all()
-            return geom.union(intersecting_geoms)
+            def add_exaggerated_parts(geom: Polygon) -> Polygon:
+                intersecting_geoms = thin_sections.loc[
+                    thin_sections.geometry.intersects(geom)
+                ].union_all()
+                return geom.union(intersecting_geoms)
 
-        gdf.geometry = gdf.geometry.apply(add_exaggerated_parts)
+            gdf.geometry = gdf.geometry.apply(add_exaggerated_parts)
 
         # Extract from unary union to catch islands which are between lake parts
         islands_geom = extract_interior_rings(gdf.union_all())
@@ -137,12 +138,13 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             lambda geom: perforate_polygon_with_gdf_exteriors(geom, gdf)
         )
 
-        islands = exaggerate_thin_polygons(
-            islands,
-            self.island_min_width,
-            self.island_min_elongation,
-            self.island_exaggerate_by,
-        )
+        if self.island_exaggerate_by != 0.0:
+            islands = exaggerate_thin_polygons(
+                islands,
+                self.island_min_width,
+                self.island_min_elongation,
+                self.island_exaggerate_by,
+            )
 
         gdf.geometry = gdf.geometry.simplify_coverage(
             self.area_simplification_tolerance,
