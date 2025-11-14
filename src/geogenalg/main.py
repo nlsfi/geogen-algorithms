@@ -28,6 +28,9 @@ from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.application.generalize_points import GeneralizePoints
 from geogenalg.application.generalize_shoreline import GeneralizeShoreline
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
+from geogenalg.application.generalize_watercourse_areas import (
+    GeneralizeWaterCourseAreas,
+)
 from geogenalg.application.remove_overlap import RemoveOverlap
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
@@ -307,6 +310,7 @@ def build_app() -> None:
         "points": GeneralizePoints,
         "water_areas": GeneralizeWaterAreas,
         "remove_overlap": RemoveOverlap,
+        "watercourse_areas": GeneralizeWaterCourseAreas,
     }
 
     for cli_command_name, alg in commands_and_algs.items():

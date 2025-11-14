@@ -6,15 +6,24 @@
 #  LICENSE file in the root directory of this source tree.
 
 import math
+from collections.abc import Callable
 
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
-from shapely import GeometryCollection, MultiPolygon, box, from_wkt, to_wkt
+from shapely import (
+    GeometryCollection,
+    MultiPolygon,
+    box,
+    from_wkt,
+    length,
+    to_wkt,
+    unary_union,
+)
 from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
-from shapely.geometry.base import BaseGeometry
+from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 
 from geogenalg.core.exceptions import (
     GeometryTypeError,
@@ -23,6 +32,7 @@ from geogenalg.core.geometry import (
     Dimensions,
     LineExtendFrom,
     assign_nearest_z,
+    centerline_length,
     chaikin_smooth_keep_topology,
     chaikin_smooth_skip_coords,
     elongation,
@@ -31,11 +41,14 @@ from geogenalg.core.geometry import (
     extract_interior_rings,
     extract_interior_rings_gdf,
     get_topological_points,
+    largest_part,
     lines_to_segments,
     mean_z,
     move_to_point,
     oriented_envelope_dimensions,
     perforate_polygon_with_gdf_exteriors,
+    remove_line_segments_at_wide_sections,
+    remove_small_parts,
     scale_line_to_length,
 )
 
@@ -755,18 +768,53 @@ def test_extract_interior_rings_gdf():
     assert extracted_holes.iloc[2].geometry.wkt == "POLYGON ((7 8, 8 8, 8 7, 7 7, 7 8))"
 
 
-def test_explode_line_to_segments():
-    line = from_wkt("LINESTRING (0 0, 0 1, 0 3, 0 6, 1 8, 2 9)")
-
-    segments = explode_line(line)
-
-    assert len(segments) == 5
-
-    assert segments[0].wkt == "LINESTRING (0 0, 0 1)"
-    assert segments[1].wkt == "LINESTRING (0 1, 0 3)"
-    assert segments[2].wkt == "LINESTRING (0 3, 0 6)"
-    assert segments[3].wkt == "LINESTRING (0 6, 1 8)"
-    assert segments[4].wkt == "LINESTRING (1 8, 2 9)"
+@pytest.mark.parametrize(
+    ("input_line", "expected_line"),
+    [
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 0],
+                    [2, 0],
+                    [3, 0],
+                ]
+            ),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ]
+            ),
+        ),
+        (
+            MultiLineString(
+                [
+                    LineString([[0, 0], [1, 0], [2, 0]]),
+                    LineString([[4, 4], [5, 4], [6, 4]]),
+                ]
+            ),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[4, 4], [5, 4]]),
+                    LineString([[5, 4], [6, 4]]),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "single linestring",
+        "multilinestring",
+    ],
+)
+def test_explode_line(
+    input_line: LineString | MultiLineString,
+    expected_line: MultiLineString,
+):
+    assert explode_line(input_line) == expected_line
 
 
 def test_lines_to_segments():
@@ -1035,3 +1083,278 @@ def test_assign_nearest_z_polygon_overwrite(assign_nearest_z_source_gdf: GeoData
 
     out = assign_nearest_z(assign_nearest_z_source_gdf, target, overwrite_z=True)
     assert_frame_equal(_coords_df(out), _coords_df(expected))
+
+
+@pytest.mark.parametrize(
+    ("input_polygon", "expected_length", "exterior_only"),
+    [
+        (box(0, 0, 10, 200), 190.0, False),
+        (box(0, 0, 10, 200), 190.0, True),
+        (
+            Polygon(
+                shell=[
+                    [0, 0],
+                    [10, 0],
+                    [10, 200],
+                    [0, 200],
+                    [0, 0],
+                ],
+                holes=[
+                    [
+                        [1, 1],
+                        [9, 1],
+                        [9, 199],
+                        [1, 199],
+                        [1, 1],
+                    ]
+                ],
+            ),
+            416.0,
+            False,
+        ),
+        (
+            Polygon(
+                shell=[
+                    [0, 0],
+                    [10, 0],
+                    [10, 200],
+                    [0, 200],
+                    [0, 0],
+                ],
+                holes=[
+                    [
+                        [1, 1],
+                        [9, 1],
+                        [9, 199],
+                        [1, 199],
+                        [1, 1],
+                    ]
+                ],
+            ),
+            190.0,
+            True,
+        ),
+    ],
+    ids=[
+        "polygon, no holes, no exterior only",
+        "polygon, no holes, exterior only",
+        "polygon, holes, no exterior only",
+        "polygon, holes, exterior only",
+    ],
+)
+def test_centerline_length(
+    input_polygon: Polygon,
+    expected_length: float,
+    exterior_only: bool,
+):
+    assert (
+        centerline_length(input_polygon, exterior_only=exterior_only) == expected_length
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "expected_geometry", "size_function"),
+    [
+        (
+            MultiLineString(
+                [
+                    LineString([[0, 0], [0, 1]]),
+                    LineString([[50, 50], [1000, 50]]),
+                ]
+            ),
+            LineString([[50, 50], [1000, 50]]),
+            None,
+        ),
+        (
+            MultiPolygon(
+                [
+                    box(0, 0, 1, 1),
+                    box(0, 0, 2, 2),
+                ]
+            ),
+            box(0, 0, 2, 2),
+            None,
+        ),
+        (
+            MultiPolygon(
+                [
+                    box(0, 0, 10, 10),
+                    box(20, 0, 21, 20),  # smaller area, larger perimeter
+                ]
+            ),
+            box(20, 0, 21, 20),
+            length,
+        ),
+    ],
+    ids=[
+        "multiline, default size function",
+        "multipoly, default size function",
+        "multipoly, different size function",
+    ],
+)
+def test_largest_part(
+    input_geometry: BaseMultipartGeometry,
+    expected_geometry: BaseGeometry,
+    size_function: Callable[[BaseGeometry], float] | None,
+):
+    assert (
+        largest_part(input_geometry, size_function=size_function) == expected_geometry
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "threshold", "expected_geometry", "size_function"),
+    [
+        (
+            MultiLineString(
+                [
+                    LineString([[0, 0], [0, 1]]),
+                    LineString([[50, 50], [1000, 50]]),
+                ]
+            ),
+            50,
+            MultiLineString(
+                [
+                    LineString([[50, 50], [1000, 50]]),
+                ]
+            ),
+            None,
+        ),
+        (
+            MultiPolygon(
+                [
+                    box(0, 0, 1, 1),
+                    box(0, 0, 2, 2),
+                ]
+            ),
+            1.5,
+            MultiPolygon([box(0, 0, 2, 2)]),
+            None,
+        ),
+        (
+            MultiPolygon(
+                [
+                    box(0, 0, 10, 10),
+                    box(20, 0, 21, 20),  # smaller area, larger perimeter
+                ]
+            ),
+            40.5,
+            MultiPolygon([box(20, 0, 21, 20)]),
+            length,
+        ),
+        (
+            box(0, 0, 1, 1),
+            0.5,
+            box(0, 0, 1, 1),
+            None,
+        ),
+        (
+            box(0, 0, 1, 1),
+            5,
+            Polygon(),
+            None,
+        ),
+        (
+            LineString([[0, 0], [0, 1]]),
+            0.5,
+            LineString([[0, 0], [0, 1]]),
+            None,
+        ),
+        (
+            LineString([[0, 0], [0, 1]]),
+            5,
+            LineString(),
+            None,
+        ),
+    ],
+    ids=[
+        "multiline, default size function",
+        "multipoly, default size function",
+        "multipoly, different size function",
+        "single poly, over threshold",
+        "single poly, under threshold",
+        "single line, over threshold",
+        "single line, under threshold",
+    ],
+)
+def test_remove_small_parts(
+    input_geometry: BaseGeometry,
+    threshold: float,
+    expected_geometry: BaseGeometry,
+    size_function: Callable[[BaseGeometry], float] | None,
+):
+    assert (
+        remove_small_parts(
+            input_geometry,
+            threshold,
+            size_function=size_function,
+        )
+        == expected_geometry
+    )
+
+
+@pytest.mark.parametrize(
+    ("line", "mask", "thinness_threshold", "expected"),
+    [
+        (
+            LineString([[0, 0], [1, 0], [2, 0], [3, 0]]),
+            unary_union(
+                [
+                    box(0, -0.5, 1, 0.5),
+                    box(1, -1, 2, 1),
+                    box(2, -0.25, 3, 0.25),
+                ]
+            ),
+            0.75,
+            LineString([[2, 0], [3, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0], [3, 0]]),
+            unary_union(
+                [
+                    box(0, -0.5, 1, 0.5),
+                    box(1, -0.25, 2, 0.25),
+                    box(2, -0.25, 3, 0.25),
+                ]
+            ),
+            0.75,
+            LineString([[1, 0], [2, 0], [3, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0], [3, 0]]),
+            unary_union(
+                [
+                    box(0, -0.25, 1, 0.25),
+                    box(1, -0.5, 2, 0.5),
+                    box(2, -0.25, 3, 0.25),
+                ]
+            ),
+            0.75,
+            MultiLineString(
+                [
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "keep one segment",
+        "keep two segments",
+        "keep disjoint segments",
+    ],
+)
+def test_remove_line_segments_at_wide_sections(
+    line: LineString | MultiLineString,
+    mask: Polygon | MultiPolygon,
+    thinness_threshold: float,
+    expected: LineString | MultiLineString,
+):
+    assert (
+        remove_line_segments_at_wide_sections(
+            line,
+            mask,
+            thinness_threshold,
+        )
+        == expected
+    )
