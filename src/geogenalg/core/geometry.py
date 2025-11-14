@@ -6,29 +6,34 @@
 #  LICENSE file in the root directory of this source tree.
 
 
+from collections.abc import Callable
 from enum import Enum
 from statistics import mean
 from typing import NamedTuple
 
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import column_stack, ndarray, vstack  # noqa: SC200
+from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
+    GeometryCollection,
     LineString,
     MultiLineString,
     MultiPoint,
     MultiPolygon,
     Point,
     Polygon,
-    affinity,
+    area,
     force_2d,
     get_coordinates,
+    length,
     polygonize,
     shortest_line,
     union,
 )
+from shapely.affinity import rotate, scale, translate
 from shapely.coords import CoordinateSequence
-from shapely.geometry.base import BaseGeometry
+from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from shapely.ops import linemerge
 
 from geogenalg.core.exceptions import (
@@ -404,17 +409,29 @@ def extract_interior_rings_gdf(areas: GeoDataFrame) -> GeoDataFrame:
     return interiors.explode()
 
 
-def explode_line(line: LineString) -> list[LineString]:
-    """Explode a line geometry to all its segments.
+def explode_line(line: LineString | MultiLineString) -> MultiLineString:
+    """Explode a line geometry to all its constituent segments.
 
     Returns
     -------
-      All segments of a line geometry.
+        MultiLineString where each segment is its own part.
 
     """
-    return [
-        LineString((a, b)) for a, b in zip(line.coords, line.coords[1:], strict=False)
-    ]
+
+    def _linestring_to_segments(line: LineString) -> list[LineString]:
+        return [
+            LineString((a, b))
+            for a, b in zip(line.coords, line.coords[1:], strict=False)
+        ]
+
+    if isinstance(line, LineString):
+        return MultiLineString(_linestring_to_segments(line))
+
+    lines = []
+    for linestring in line.geoms:
+        lines += _linestring_to_segments(linestring)
+
+    return MultiLineString(lines)
 
 
 def lines_to_segments(lines: GeoSeries) -> GeoSeries:
@@ -436,7 +453,7 @@ def lines_to_segments(lines: GeoSeries) -> GeoSeries:
         raise GeometryTypeError(msg)
 
     return GeoSeries(
-        [segment for line in lines for segment in explode_line(line)],
+        [segment for line in lines for segment in explode_line(line).geoms],
         crs=lines.crs,
     )
 
@@ -471,7 +488,7 @@ def scale_line_to_length(
     if scaling_factor == 1:
         return LineString(geom)
 
-    return affinity.scale(geom, xfact=scaling_factor, yfact=scaling_factor)  # noqa: SC200
+    return scale(geom, xfact=scaling_factor, yfact=scaling_factor)  # noqa: SC200
 
 
 def move_to_point(geom: BaseGeometry, point: Point) -> BaseGeometry:
@@ -486,7 +503,7 @@ def move_to_point(geom: BaseGeometry, point: Point) -> BaseGeometry:
     dx = point.x - geom.centroid.x
     dy = point.y - geom.centroid.y
 
-    return affinity.translate(geom, xoff=dx, yoff=dy)  # noqa: SC200
+    return translate(geom, xoff=dx, yoff=dy)  # noqa: SC200
 
 
 def extend_line_to_nearest(
@@ -770,3 +787,171 @@ def assign_nearest_z(
         else geom
     )
     return result_gdf
+
+
+def largest_part(
+    geom: BaseMultipartGeometry,
+    *,
+    size_function: Callable[[BaseGeometry], float] | None = None,
+) -> BaseGeometry:
+    """Get largest part of multipart geometry.
+
+    Does not work for MultiPoints. By default size is determined by
+    length for MultiLineStrings, and area for MultiPolygons.
+
+    Args:
+    ----
+        geom: Multipart geometry.
+        size_function: Optionally set different function for calculating
+            size of geometry.
+
+    Returns:
+    -------
+        Largest part as a single geometry.
+
+    Raises:
+    ------
+        TypeError: If input geometry is a MultiPoint.
+
+    """
+    if isinstance(geom, MultiPoint):
+        msg = "Can't reduce MultiPoint to largest."
+        raise TypeError(msg)
+
+    if size_function is None:
+        size_function = length if isinstance(geom, MultiLineString) else area
+
+    return max(geom.geoms, key=size_function)
+
+
+def remove_small_parts(
+    geom: BaseGeometry,
+    threshold: float,
+    *,
+    size_function: Callable[[BaseGeometry], float] | None = None,
+) -> MultiLineString | MultiPolygon:
+    """Remove small parts of a geometry.
+
+    By default size is determined by length for (Multi)LineStrings,
+    and area for (Multi)Polygons.
+
+    If input is a single geometry and its size is under the threshold,
+    an empty geometry is returned.
+
+    Args:
+    ----
+        geom: Geometry to process.
+        threshold: Size threshold.
+        size_function: Optionally set different function for calculating
+            size of geometry.
+
+    Returns:
+    -------
+        Processed geometry with small parts removed.
+
+    Raises:
+    ------
+        TypeError: If input geometry is a MultiPoint.
+        NotImplementedError: If input geometry is a GeometryCollection.
+
+    """
+    if isinstance(geom, Point | MultiPoint):
+        msg = "Can't remove small parts from point geometry."
+        raise TypeError(msg)
+
+    # TODO: implement for geometrycollection
+    if isinstance(geom, GeometryCollection):
+        msg = "Not implemented for GeometryCollection"
+        raise NotImplementedError(msg)
+
+    if size_function is None:
+        size_function = (
+            length if isinstance(geom, LineString | MultiLineString) else area
+        )
+
+    geometry_type = type(geom)
+
+    if isinstance(geom, BaseMultipartGeometry):
+        parts = [part for part in geom.geoms if size_function(part) > threshold]
+
+        if parts:
+            return geometry_type(parts)
+
+        return geometry_type()
+
+    if size_function(geom) > threshold:
+        return geom
+
+    return geometry_type()
+
+
+def centerline_length(
+    geom: Polygon,
+    *,
+    exterior_only: bool = False,
+) -> float:
+    """Calculate length of polygon's centerline.
+
+    Args:
+    ----
+        geom: Polygon geometry.
+        exterior_only: Calculate length from polygon's exterior ring only.
+
+    Returns:
+    -------
+        Length of centerline.
+
+    Raises:
+    ------
+        GeometryOperationError: If centerline could not be formed as expected.
+
+    """
+    line = centerline(
+        Polygon(geom.exterior) if exterior_only else geom, simplifytolerance=0.5
+    )
+
+    if not isinstance(line, MultiLineString | LineString):
+        msg = "Centerline could not be formed"
+        raise GeometryOperationError(msg)
+
+    return line.length
+
+
+def remove_line_segments_at_wide_sections(
+    line: LineString | MultiLineString,
+    mask: Polygon | MultiPolygon,
+    threshold: float,
+) -> LineString | MultiLineString:
+    """Remove line segments at wide section of mask polygon.
+
+    Segments are removed from line where approximate width of mask polygon at the
+    segment's centroid is under the threshold.
+
+    This function is intended to work with a polygons' centerline.
+
+    Args:
+    ----
+        line: Line to process.
+        mask: Polygon to check width from.
+        threshold: Width threshold.
+
+    Returns:
+    -------
+        Remaining segments, as merged line(s).
+
+    """
+    segments = explode_line(line)
+
+    # Check width at each segment and keep only segments which are under the
+    # width threshold
+    remaining_segments = []
+    for segment in segments.geoms:
+        perpendicular_segment = scale_line_to_length(
+            rotate(segment, angle=90),
+            threshold,
+        )
+
+        if not perpendicular_segment.within(mask):
+            remaining_segments.append(segment)
+
+    return linemerge(remaining_segments)
