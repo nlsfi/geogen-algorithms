@@ -52,7 +52,10 @@ def inherit_attributes(
         new_features.append(new_attrs)
 
     return GeoDataFrame(
-        new_features, geometry=source_gdf.geometry.name, crs=source_gdf.crs
+        new_features,
+        geometry=source_gdf.geometry.name,
+        index=target_gdf.index,
+        crs=source_gdf.crs,
     )
 
 
