@@ -24,7 +24,7 @@ class BaseAlgorithm(ABC):
     def execute(
         self,
         data: GeoDataFrame,
-        reference_data: dict[str, GeoDataFrame],
+        reference_data: dict[str, GeoDataFrame] | None = None,
     ) -> GeoDataFrame:
         """Execute the algorithm.
 
@@ -42,6 +42,9 @@ class BaseAlgorithm(ABC):
         # to rely on the assumption that input index is some kind of string
         if not is_string_dtype(data.index.dtype):
             data = data.set_index(data.index.astype("string"))
+
+        if reference_data is None:
+            reference_data = {}
 
         output = self._execute(data=data, reference_data=reference_data)
 
