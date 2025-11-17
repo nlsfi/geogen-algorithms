@@ -34,7 +34,7 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     precise checking."""
 
     # Inherited from GeneralizeWaterAreas, override default
-    thin_section_width: float = 0.0
+    thin_section_exaggerate_by: float = 0.0
 
     def _execute(
         self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
