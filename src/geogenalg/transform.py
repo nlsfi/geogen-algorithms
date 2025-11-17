@@ -5,13 +5,12 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import nan
 from pandas import concat
 from pygeoops import centerline
-from shapely import LineString, MultiLineString
 
 from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.geometry import (
@@ -19,6 +18,9 @@ from geogenalg.core.geometry import (
     remove_line_segments_at_wide_sections,
     remove_small_parts,
 )
+
+if TYPE_CHECKING:
+    from shapely import LineString, MultiLineString
 
 
 def thin_polygon_sections_to_lines(  # noqa: PLR0913
@@ -73,10 +75,13 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         threshold,
     )
 
-    if isinstance(lines, MultiLineString):
-        lines = remove_small_parts(lines, min_line_length)
-    else:
-        lines = lines if lines.length > min_line_length else LineString()
+    lines = remove_small_parts(lines, min_line_length)
+
+    if lines.is_empty:
+        if old_ids_column is not None:
+            gdf[old_ids_column] = nan
+
+        return gdf
 
     # Create a polygonal mask from lines which have been determined to be long
     # enough. This is used to remove thin sections from the polygons.
