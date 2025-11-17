@@ -131,6 +131,42 @@ def test_merges_lines_with_same_attribute_value_into_one(
     )
 
 
+def test_merge_connecting_lines_by_attribute_ids():
+    # Two lines will get merged, one stay as-is
+    input_gdf = gpd.GeoDataFrame(
+        {
+            "class": ["merge", "merge", "keep"],
+        },
+        geometry=[
+            LineString([(0, 0), (1, 1)]),
+            LineString([(1, 1), (2, 2)]),
+            LineString([(10, 10), (11, 11)]),
+        ],
+        crs="EPSG:3067",
+    )
+    input_gdf.index = input_gdf.index.astype("string")
+
+    result = merge.merge_connecting_lines_by_attribute(input_gdf, "class")
+
+    merged_row = result.loc[result["class"] == "merge"]
+    kept_row = result.loc[result["class"] == "keep"]
+
+    assert len(merged_row) == 1
+    assert len(kept_row) == 1
+
+    # ID should be preserved
+    old_keep_id = input_gdf.loc[input_gdf["class"] == "keep"].index[0]
+    new_keep_id = kept_row.index[0]
+    assert new_keep_id == old_keep_id
+
+    # ID should be new
+    merge_source_ids = sorted(
+        input_gdf.loc[input_gdf["class"] == "merge"].index.astype(str).tolist()
+    )
+    new_merge_id = merged_row.index[0]
+    assert new_merge_id not in merge_source_ids
+
+
 @pytest.mark.parametrize(
     (
         "input_gdf",
