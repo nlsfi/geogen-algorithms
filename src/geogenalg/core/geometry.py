@@ -954,4 +954,10 @@ def remove_line_segments_at_wide_sections(
         if not perpendicular_segment.within(mask):
             remaining_segments.append(segment)
 
-    return linemerge(remaining_segments)
+    result = linemerge(remaining_segments)
+    # Despite its return annotation, linemerge might return an empty GeometryCollection.
+    # Make sure this function always returns what is annotated.
+    if isinstance(result, GeometryCollection) and result.is_empty:
+        return MultiLineString()
+
+    return result
