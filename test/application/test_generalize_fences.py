@@ -53,7 +53,9 @@ def test_generalize_fences_50k(testdata_path: Path) -> None:
         output_path, layer="result"
     )
 
-    result = read_gdf_from_file_and_set_index(output_path, "index", layer="result")
+    result = read_gdf_from_file_and_set_index(
+        output_path, UNIQUE_ID_COLUMN, layer="result"
+    )
 
     control = control.sort_values("geometry").reset_index(drop=True)
     result = result.sort_values("geometry").reset_index(drop=True)
