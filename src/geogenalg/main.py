@@ -15,7 +15,15 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
-import typer
+try:
+    import typer
+except ImportError:
+    print("CLI dependency not found. Install 'geogenalg[cli]' to use this command.")  # noqa: T201
+    print("Or during development install by running 'uv sync --extra=cli'.")  # noqa: T201
+    import sys
+
+    sys.exit(0)
+
 from geopandas import GeoDataFrame, read_file
 from pandas import Series, concat
 
