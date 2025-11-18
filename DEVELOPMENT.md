@@ -5,8 +5,9 @@
 - Create a venv: `python -m venv .venv`
 - Activate the venv
 - This project uses [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage dependencies, install uv: `pip install uv`
-- Install the dependencies: `uv sync`
+- Install the dependencies: `uv sync --extra=cli`
 - Install pre-commit: `pre-commit install`
+- Run CLI: `generalize --help`
 - Run tests: `pytest`
 
 ## Requirements changes
