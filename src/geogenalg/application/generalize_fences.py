@@ -13,10 +13,17 @@ from cartagen.utils.partitioning.network import network_faces
 from geopandas import GeoDataFrame
 from pandas import concat
 
-from geogenalg import continuity, merge, selection
 from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.continuity import connect_nearby_endpoints
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import assign_nearest_z
+from geogenalg.merge import merge_connecting_lines_by_attribute
+from geogenalg.selection import (
+    remove_disconnected_short_lines,
+    remove_large_polygons,
+    remove_parts_of_lines_on_polygon_edges,
+    split_polygons_by_point_intersection,
+)
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -105,7 +112,7 @@ class GeneralizeFences(BaseAlgorithm):
         result_gdf = data.copy()
 
         # Merge connecting lines with the same attribute value
-        result_gdf = merge.merge_connecting_lines_by_attribute(
+        result_gdf = merge_connecting_lines_by_attribute(
             result_gdf, self.attribute_for_line_merge
         )
 
@@ -123,9 +130,7 @@ class GeneralizeFences(BaseAlgorithm):
         result_gdf = result_gdf.drop(columns=["old_ids"])
 
         # Generate helper lines to close small gaps
-        helper_lines_gdf = continuity.connect_nearby_endpoints(
-            result_gdf, self.gap_threshold
-        )
+        helper_lines_gdf = connect_nearby_endpoints(result_gdf, self.gap_threshold)
 
         # Combine original fence lines with helper lines
         combined_gdf: GeoDataFrame = concat(
@@ -158,14 +163,12 @@ class GeneralizeFences(BaseAlgorithm):
         # Remove polygons whose area exceeds the closing_fence_area_with_mast_threshold
         # and the closing_fence_area_threshold
         polygon_gdf_with_point, polygon_gdf_without_point = (
-            selection.split_polygons_by_point_intersection(
-                faces_gdf, reference_data["masts"]
-            )
+            split_polygons_by_point_intersection(faces_gdf, reference_data["masts"])
         )
-        polygon_gdf_with_point = selection.remove_large_polygons(
+        polygon_gdf_with_point = remove_large_polygons(
             polygon_gdf_with_point, self.closing_fence_area_with_mast_threshold
         )
-        polygon_gdf_without_point = selection.remove_large_polygons(
+        polygon_gdf_without_point = remove_large_polygons(
             polygon_gdf_without_point, self.closing_fence_area_threshold
         )
 
@@ -175,12 +178,10 @@ class GeneralizeFences(BaseAlgorithm):
         )
 
         # Remove the surrounding fence lines of small closed areas with masts considered
-        result_gdf = selection.remove_parts_of_lines_on_polygon_edges(
-            result_gdf, faces_gdf
-        )
+        result_gdf = remove_parts_of_lines_on_polygon_edges(result_gdf, faces_gdf)
 
         # Remove short fence lines
-        result_gdf = selection.remove_disconnected_short_lines(
+        result_gdf = remove_disconnected_short_lines(
             result_gdf, self.fence_length_threshold
         )
 
