@@ -5,7 +5,6 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-from hashlib import sha256
 from itertools import chain
 
 from geopandas import GeoDataFrame
@@ -18,30 +17,33 @@ from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
-def merge_connecting_lines_by_attribute(  # noqa: C901
-    input_gdf: GeoDataFrame, attribute: str
+def merge_connecting_lines_by_attribute(
+    input_gdf: GeoDataFrame,
+    attribute: str,
+    old_ids_column: str = "old_ids",
 ) -> GeoDataFrame:
     """Merge LineStrings in the GeoDataFrame by a given attribute.
 
-    IDs are preserved for unmerged lines. For merged lines new IDs
-    are generated from source line IDs.
+    Lines with the same grouping attribute value and connecting endpoints will
+    get merged into MultiLineStrings.
 
     Args:
     ----
         input_gdf: A GeoDataFrame containing the (Multi)LineStrings to merge.
         attribute: The attribute name used to group lines for merging.
+        old_ids_column: Name of the column in the output GeoDataFrame
+            containing a tuple of the cluster's old identifiers.
 
     Returns:
     -------
         A new GeoDataFrame with merged line geometries and corresponding attributes.
+        Identifiers of the original lines are in `old_ids_column` column.
 
     """
     merged_records: list[dict] = []
-    merged_ids: list[str] = []
 
     for _, group in input_gdf.groupby(attribute):
-        lines: list[tuple[LineString, dict]] = []
-        source_ids = []
+        lines: list[tuple[LineString, dict, str]] = []  # geom, attributes, id
 
         for idx, row in group.iterrows():
             geom = row.geometry
@@ -49,18 +51,18 @@ def merge_connecting_lines_by_attribute(  # noqa: C901
                 continue
 
             row_properties = row.drop(input_gdf.geometry.name).to_dict()
-            source_ids.append(str(idx))
+            source_id = str(idx)
 
             if isinstance(geom, LineString):
-                lines.append((geom, row_properties))
+                lines.append((geom, row_properties, source_id))
             elif isinstance(geom, MultiLineString):
-                lines.extend((part, row_properties) for part in geom.geoms)
+                lines.extend((part, row_properties, source_id) for part in geom.geoms)
 
         if not lines:
             continue
 
         # Extract just geometries for merging
-        geometries = [geom for geom, _ in lines]
+        geometries = [geom for geom, _, _ in lines]
         merged = line_merge(MultiLineString(geometries))
 
         if isinstance(merged, LineString):
@@ -70,28 +72,31 @@ def merge_connecting_lines_by_attribute(  # noqa: C901
         else:
             continue
 
-        properties = lines[0][1]
+        for merged_line in merged_lines:
+            old_ids = sorted(
+                {
+                    source_id
+                    for source_line, _, source_id in lines
+                    if (
+                        source_line.within(merged_line)
+                        or source_line.equals(merged_line)
+                    )
+                }
+            )
+            properties = lines[0][1].copy()
+            properties[input_gdf.geometry.name] = merged_line
+            properties[old_ids_column] = old_ids
+            merged_records.append(properties)
 
-        for piece_index, line in enumerate(merged_lines):
-            merged_records.append({**properties, input_gdf.geometry.name: line})
-
-            # Use old ID
-            if len(source_ids) == 1:
-                new_index = source_ids[0]
-            # Create new ID when there multiple source lines / IDs
-            else:
-                new_index = sha256(
-                    b"merge_connecting_lines_by_attribute"
-                    + "".join(sorted(source_ids)).encode()
-                    + str(piece_index).encode()
-                ).hexdigest()
-
-            merged_ids.append(new_index)
-
-    result_gdf = GeoDataFrame(data=merged_records, index=merged_ids, crs=input_gdf.crs)
+    result_gdf = GeoDataFrame(data=merged_records, crs=input_gdf.crs)
 
     # Assign attributes to merged lines by mapping back to one of the source lines
-    return inherit_attributes(input_gdf, result_gdf)
+    result_gdf_with_attributes = inherit_attributes(input_gdf, result_gdf)
+
+    # Assign old ids back
+    result_gdf_with_attributes[old_ids_column] = result_gdf[old_ids_column]
+
+    return result_gdf_with_attributes
 
 
 def dissolve_and_inherit_attributes(

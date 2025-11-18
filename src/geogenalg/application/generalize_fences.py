@@ -6,6 +6,7 @@
 #  LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import override
 
 from cartagen.utils.partitioning.network import network_faces
@@ -13,12 +14,13 @@ from geopandas import GeoDataFrame
 from pandas import concat
 
 from geogenalg import continuity, merge, selection
-from geogenalg.application import BaseAlgorithm
+from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
+@supports_identity
 @dataclass(frozen=True)
 class GeneralizeFences(BaseAlgorithm):
     """Generalize lines representing fences.
@@ -106,6 +108,19 @@ class GeneralizeFences(BaseAlgorithm):
         result_gdf = merge.merge_connecting_lines_by_attribute(
             result_gdf, self.attribute_for_line_merge
         )
+
+        # Assign IDs for merged lines based on source IDs and set as index
+        result_gdf = result_gdf.set_index(
+            result_gdf["old_ids"].apply(
+                lambda ids: sha256(
+                    b"generalize_fences" + "".join(sorted(ids)).encode()
+                ).hexdigest()
+                if len(ids) > 1
+                else ids[0],  # Use old ID if unmerged line
+            ),
+        )
+        result_gdf.index.name = data.index.name
+        result_gdf = result_gdf.drop(columns=["old_ids"])
 
         # Generate helper lines to close small gaps
         helper_lines_gdf = continuity.connect_nearby_endpoints(
