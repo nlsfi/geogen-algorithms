@@ -292,7 +292,6 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "shapely" },
     { name = "shapelysmooth" },
-    { name = "simplification" },
 ]
 
 [package.optional-dependencies]
@@ -330,7 +329,6 @@ requires-dist = [
     { name = "scikit-learn", specifier = "==1.6.1" },
     { name = "shapely", specifier = "==2.1.2" },
     { name = "shapelysmooth", specifier = "==0.2.1" },
-    { name = "simplification", specifier = "==0.7.13" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.19.2" },
 ]
 provides-extras = ["cli"]
@@ -1304,32 +1302,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
-]
-
-[[package]]
-name = "simplification"
-version = "0.7.13"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5e/43/40887f0edc7a523264fe8dbfe83f762f57b0efcca21cdce62d609310e68a/simplification-0.7.13.tar.gz", hash = "sha256:4ff7a7ef43eb2359a822b981c22c2cd8d58d92d84aa13c715662ec1887d5854e", size = 1437677, upload-time = "2024-10-12T15:35:42.395Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6e/d0/33f719701fbac841359b62006067d7438589c86831dc87fdc6d2baf0f624/simplification-0.7.13-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:9d0b4f6e678bbd693268155b3b24d1d26a81b3fcff57eacbaa0fcbea7328e33b", size = 275197, upload-time = "2024-10-12T15:35:10.57Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/7f/e2c1a8d50efad3c3574da251f9d9717e2cf506442deb9cc1af1048446b7d/simplification-0.7.13-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:338723ab18d2150af74369e74e9b09024acd9700c405f7d72bb0f53b1e36da50", size = 254924, upload-time = "2024-10-12T15:35:12.373Z" },
-    { url = "https://files.pythonhosted.org/packages/86/47/cd04b263e575b00a19ed85cf86cfa3247e4a435ff35c90683e57f92cf0f9/simplification-0.7.13-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0f5888544c489a9ed897d62f28e5465a60c3eba9e9ff07e13b78c1da92c5d7d0", size = 726019, upload-time = "2024-10-12T15:35:13.753Z" },
-    { url = "https://files.pythonhosted.org/packages/35/e1/fe91971f897ffa835a3228eea4d95622fb92bbcccf38c414913d42445cb7/simplification-0.7.13-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e6f2130789e4726f7ce73a3043bed9980ca504824c3ecb2001123543ea295085", size = 746989, upload-time = "2024-10-12T15:35:15.65Z" },
-    { url = "https://files.pythonhosted.org/packages/25/17/653d9cfb57068ac11060b82d6c2a6e1db20ea731f2910e48cac3da16ec96/simplification-0.7.13-cp311-cp311-win_amd64.whl", hash = "sha256:4d28b080ae0b3255906a1f8fc0bd14ce7d99c46ebbdea352f574cd3a010f8fb7", size = 186042, upload-time = "2024-10-12T15:35:17.424Z" },
-    { url = "https://files.pythonhosted.org/packages/00/80/9496018dc63d79eb1c4a345ced5fad38b87c4c04ed1241a0676b3c574931/simplification-0.7.13-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:e3fb9b94003e28bbc84f71b0d7f1f56936ee9c3c536d7dbfd21ed6bc68810a8d", size = 274538, upload-time = "2024-10-12T15:35:19.079Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/f4/5a62d228a86b6365abce1d8b75e02fcd01addb34ed2d311048f42f8764ff/simplification-0.7.13-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:f7a2e32abe44f84e891b47523b142b9fd29fefadacc3850f94324315bb340a99", size = 255838, upload-time = "2024-10-12T15:35:20.821Z" },
-    { url = "https://files.pythonhosted.org/packages/7e/e1/7add2d7ee952a52939279f064dce7835661833ebff50674c1a13f660e685/simplification-0.7.13-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:14b3a49957370b509d781583fad0fab169d6c60418393d0aab365c25c301c00e", size = 708133, upload-time = "2024-10-12T15:35:22.562Z" },
-    { url = "https://files.pythonhosted.org/packages/72/31/83f133dd919ee05972f3b1a9dc7217b9d69eac580443383f946a5b52628d/simplification-0.7.13-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5127aa72369111f27783311d806ba62452065fb9a06f7445514dbe093c6885c1", size = 734601, upload-time = "2024-10-12T15:35:24.403Z" },
-    { url = "https://files.pythonhosted.org/packages/b6/87/6f1d6339d8279ef55ab38811742f99b0596287fe0d8b0e033149c8d9bd6b/simplification-0.7.13-cp312-cp312-win_amd64.whl", hash = "sha256:599a1e5d05d474d14f5859764bb98f9ee2d8ff156420b22eca6c8635159cba2c", size = 184583, upload-time = "2024-10-12T15:35:26.008Z" },
-    { url = "https://files.pythonhosted.org/packages/a8/68/4238606b2ec0bc3b713b98d1f260b0631f6139f4499de5e5e3ab430eea7c/simplification-0.7.13-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:eda0cb08a5f6cc90b48014833f1dd603c7435dc81e6316f61b288806c84c31bf", size = 273319, upload-time = "2024-10-12T15:35:27.715Z" },
-    { url = "https://files.pythonhosted.org/packages/c1/59/3aeeb1d39017331bef275007f10fa62044767fa685f5381d01a06668b202/simplification-0.7.13-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:60364a6b9ef2c561dd6b057ce1455e30d772b588b3d07e98bcedec830a307858", size = 254440, upload-time = "2024-10-12T15:35:29.392Z" },
-    { url = "https://files.pythonhosted.org/packages/25/59/dd25b36659eb55ea5eb994bfa56098d38ca95bbc4aafc0eba6ef345ad0c2/simplification-0.7.13-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2c02278b3bcdccbf315c31be6332b62f8be2971910a862cc95771542eb8389bd", size = 705948, upload-time = "2024-10-12T15:35:31.175Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/67/5a3cc671bfcb5bfaf8484e0d350fb6da17367471f736f0249b88199a2e79/simplification-0.7.13-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b7a9bbab712e9efced43b2808f9fba9b296933faffbf9456e9f3bb081b143e08", size = 729382, upload-time = "2024-10-12T15:35:32.551Z" },
-    { url = "https://files.pythonhosted.org/packages/86/2e/043372c3b5b9b7d2e2ec58c7590e914e411f8e4cabbb2ef52bdc36fa32ec/simplification-0.7.13-cp313-cp313-win_amd64.whl", hash = "sha256:7092d57248779d86c935763a02084b60c9e3859b1259be75a83b8da662826c8f", size = 184713, upload-time = "2024-10-12T15:35:34.118Z" },
 ]
 
 [[package]]

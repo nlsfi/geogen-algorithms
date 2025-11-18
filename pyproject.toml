@@ -36,7 +36,6 @@ dependencies = [
     "scikit-learn==1.6.1",
     "shapely==2.1.2",
     "shapelysmooth==0.2.1",
-    "simplification==0.7.13",
 ]
 
 [project.optional-dependencies]
