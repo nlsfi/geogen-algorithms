@@ -23,6 +23,7 @@ from geogenalg.core.exceptions import GeometryTypeError
         "expected_num_geoms",
         "expected_attribute_values",
         "expected_geometries",
+        "expected_old_ids",
     ),
     [
         (
@@ -45,6 +46,7 @@ from geogenalg.core.exceptions import GeometryTypeError
                 LineString([(0, 0), (1, 1), (2, 2)]),
                 LineString([(10, 10), (11, 11)]),
             ],
+            [["1", "2"], ["3"]],
         ),
         (
             gpd.GeoDataFrame(
@@ -65,6 +67,7 @@ from geogenalg.core.exceptions import GeometryTypeError
                 LineString([(0, 0), (1, 1)]),
                 LineString([(2, 1), (2, 2)]),
             ],
+            [["1"], ["2"]],
         ),
         (
             gpd.GeoDataFrame(
@@ -85,6 +88,7 @@ from geogenalg.core.exceptions import GeometryTypeError
             [
                 LineString([(0, 0), (1, 1), (2, 2), (3, 3)]),
             ],
+            [["1", "2", "3"]],
         ),
         (
             gpd.GeoDataFrame(
@@ -105,6 +109,7 @@ from geogenalg.core.exceptions import GeometryTypeError
                 LineString([(0, 0), (1, 0)]),
                 LineString([(10, 10), (11, 11)]),
             ],
+            [["1"], ["2"]],
         ),
     ],
     ids=[
@@ -114,13 +119,16 @@ from geogenalg.core.exceptions import GeometryTypeError
         "disjoint_lines_different_classes",
     ],
 )
-def test_merges_lines_with_same_attribute_value_into_one(
+def test_merges_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
     input_gdf: gpd.GeoDataFrame,
     attribute: str,
     expected_num_geoms: int,
     expected_attribute_values: set[str],
     expected_geometries: list[LineString],
+    expected_old_ids: list[list[str]],
 ):
+    input_gdf = input_gdf.set_index("id")
+    input_gdf.index = input_gdf.index.astype("string")
     result_gdf = merge.merge_connecting_lines_by_attribute(input_gdf, attribute)
     assert len(result_gdf) == expected_num_geoms
     assert set(result_gdf[attribute]) == expected_attribute_values
@@ -129,7 +137,8 @@ def test_merges_lines_with_same_attribute_value_into_one(
         any(result_geom.equals(expected_geom) for result_geom in result_gdf.geometry)
         for expected_geom in expected_geometries
     )
-    assert "old_ids" in result_gdf.columns
+    old_ids = [sorted(ids) for ids in result_gdf["old_ids"]]
+    assert old_ids == expected_old_ids
 
 
 @pytest.mark.parametrize(
