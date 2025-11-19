@@ -31,6 +31,7 @@ from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.application.generalize_watercourse_areas import (
     GeneralizeWaterCourseAreas,
 )
+from geogenalg.application.keep_intersection import KeepIntersection
 from geogenalg.application.remove_overlap import RemoveOverlap
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
@@ -310,6 +311,7 @@ def build_app() -> None:
         "points": GeneralizePoints,
         "water_areas": GeneralizeWaterAreas,
         "remove_overlap": RemoveOverlap,
+        "keep_intersection": KeepIntersection,
         "watercourse_areas": GeneralizeWaterCourseAreas,
     }
 
