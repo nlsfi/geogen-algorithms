@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import override
 
 from geopandas import GeoDataFrame, GeoSeries
-from shapely import MultiPoint, MultiPolygon, Polygon, force_2d
+from shapely import MultiPoint, MultiPolygon, Point, Polygon, force_2d
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import GeometryTypeError
@@ -73,6 +73,23 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     """Reference data key to use as a shoreline layer for preventing smoothing of
     non-shoreline vertices."""
 
+    @staticmethod
+    def _get_skip_coords(data: GeoDataFrame, shoreline: GeoDataFrame) -> MultiPoint:
+        data_points = data.extract_unique_points().union_all()
+        shoreline_points = shoreline.extract_unique_points().union_all()
+        skip_coords = force_2d(data_points.difference(shoreline_points))
+
+        if isinstance(skip_coords, Point) and not skip_coords.is_empty:
+            skip_coords = MultiPoint([skip_coords])
+
+        if skip_coords.is_empty:
+            skip_coords = MultiPoint()
+
+        if not isinstance(skip_coords, MultiPoint):
+            skip_coords = MultiPoint()
+
+        return skip_coords
+
     @override
     def _execute(
         self,
@@ -97,9 +114,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             # data, but not the shoreline LineString data. This allows to
             # determine non-shoreline vertices (e.g. territorial water borders
             # in case of sea areas) and skip smoothing them later.
-            data_points = data.extract_unique_points().union_all()
-            shoreline_points = shoreline_gdf.extract_unique_points().union_all()
-            skip_coords = force_2d(data_points.difference(shoreline_points))
+            skip_coords = GeneralizeWaterAreas._get_skip_coords(data, shoreline_gdf)
         else:
             skip_coords = MultiPoint()
 
