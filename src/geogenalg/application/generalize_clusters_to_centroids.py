@@ -13,12 +13,10 @@ from typing import Any
 
 from geopandas import GeoDataFrame
 from pandas import Series, concat
-from shapely import Point, Polygon, box
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.cluster import get_cluster_centroids
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import mean_z
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -49,58 +47,26 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     centroid from multiple points. If the function is given as a string, it
     must correspond to Pandas's aggregation function names. If no function is
     given "first" will be used by default."""
-    reference_key: str = "mask"
-    "Reference data key to use as a mask layer for centroid placement."
 
     def _process_polygons(
         self,
         polygons: GeoDataFrame,
-        mask_geom: Polygon,
     ) -> GeoDataFrame:
-        def _make_centroid(geom: Polygon) -> Point:
-            centroid = geom.centroid
-
-            if geom.has_z:
-                centroid = Point(centroid.x + 1, centroid.y, mean_z(geom))
-
-            return centroid
-
-        gdf = polygons.loc[
-            (polygons.geometry.area < self.polygon_min_area)
-            & (polygons.geometry.centroid.within(mask_geom))
-        ].copy()
-
-        gdf.geometry = gdf.geometry.apply(_make_centroid)
+        gdf = polygons.loc[polygons.geometry.area < self.polygon_min_area].copy()
+        gdf.geometry = gdf.geometry.apply(lambda geom: geom.point_on_surface())
 
         return gdf
 
     def _execute(
         self,
         data: GeoDataFrame,
-        reference_data: dict[str, GeoDataFrame],
+        reference_data: dict[str, GeoDataFrame],  # noqa: ARG002
     ) -> GeoDataFrame:
         if not check_gdf_geometry_type(data, ["Point", "Polygon"]):
-            msg = (
-                "GeneralizePointClustersAndPolygonsToCentroids "
-                + "works only with Point and Polygon geometries"
-            )
+            msg = "Input data must only contain Polygons or Points."
             raise GeometryTypeError(msg)
 
         index_name = data.index.name
-
-        if self.reference_key in reference_data:
-            mask_gdf = reference_data[self.reference_key]
-            if not check_gdf_geometry_type(mask_gdf, ["Polygon", "MultiPolygon"]):
-                msg = "mask dataframe must only contain (Multi)Polygons"
-                raise GeometryTypeError(msg)
-
-            mask_geom = mask_gdf.geometry.union_all()
-        else:
-            # Create a mask which will include all geometries. This is slightly
-            # less efficient, but makes this function more readable and less
-            # complex.
-            x_min, y_min, x_max, y_max = data.total_bounds
-            mask_geom = box(x_min, y_min, x_max, y_max)
 
         points, polygons = (
             data.loc[data.geometry.type == "Point"],
@@ -126,26 +92,22 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
 
         clusters_from_polygons = GeoDataFrame()
         if not polygons.empty:
-            clusters_from_polygons = self._process_polygons(polygons, mask_geom)
+            clusters_from_polygons = self._process_polygons(polygons)
             clusters_from_polygons[self.feature_type_column] = "centroid_from_polygon"
 
         if not clusters_from_points.empty:
-            clusters_from_points = clusters_from_points[
-                clusters_from_points.geometry.within(mask_geom)
-            ]
             ids_to_remove = list(chain.from_iterable(clusters_from_points["old_ids"]))
 
             points = points.loc[~points.index.isin(ids_to_remove)]
+
+        if not clusters_from_polygons.empty:
+            polygons = polygons.loc[(polygons.geometry.area >= self.polygon_min_area)]
+
+        if "old_ids" in clusters_from_points.columns:
             clusters_from_points = clusters_from_points.drop(
                 columns=["old_ids"],
                 axis=1,
             )
-
-        if not clusters_from_polygons.empty:
-            polygons = polygons.loc[
-                (polygons.geometry.area >= self.polygon_min_area)
-                | (~polygons.geometry.centroid.within(mask_geom)),
-            ]
 
         points[self.feature_type_column] = "unchanged_point"
         polygons[self.feature_type_column] = "unchanged_polygon"
