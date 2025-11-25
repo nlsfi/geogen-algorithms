@@ -5,7 +5,6 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-from itertools import chain
 
 from geopandas import GeoDataFrame
 from pandas import Series, concat
@@ -102,8 +101,6 @@ def merge_connecting_lines_by_attribute(
 def dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
     by_column: str,
-    unique_key_column: str,
-    dissolve_members_column: str = "dissolve_members",
     old_ids_column: str = "old_ids",
 ) -> GeoDataFrame:
     """Dissolve polygons and inherit attributes from a representative original polygon.
@@ -111,11 +108,8 @@ def dissolve_and_inherit_attributes(
     Args:
     ----
         input_gdf: Input GeoDataFrame with Polygon geometries. The GeoDataFrame must
-              include a column with a unique key.
-        by_column: Column name used to group and dissolve polygons
-        unique_key_column: Name of the column containing unique identifiers
-        dissolve_members_column: Name of the column that lists the original polygons
-              that have been dissolved
+            include a column with a unique key.
+        by_column: Column name used to group and dissolve polygons.
         old_ids_column: Name of the column in the output GeoDataFrame
             containing a tuple of the cluster's old identifiers.
 
@@ -127,21 +121,24 @@ def dissolve_and_inherit_attributes(
     Raises:
     ------
         GeometryTypeError: If the input GeoDataFrame contains other than
-              polygon geometries.
+            polygon geometries.
 
     """
     if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
         msg = "Dissolve only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
+
     if input_gdf.empty:
         return input_gdf
 
+    gdf = input_gdf.copy()
+
     # Apply buffer(0) to clean geometries. It fixes invalid polygons and
     # ensures resulting geometries are valid before further processing.
-    input_gdf.geometry = input_gdf.buffer(0)
+    gdf.geometry = gdf.buffer(0)
 
     dissolved_gdf: GeoDataFrame = (
-        input_gdf.dissolve(by=by_column).explode(index_parts=True).reset_index()
+        gdf.dissolve(by=by_column).explode(index_parts=True).reset_index()
     )
 
     dissolved_polygons_gdfs: list[GeoDataFrame] = []
@@ -151,82 +148,30 @@ def dissolve_and_inherit_attributes(
         group_value = dissolved_row[by_column]
 
         # Only intersect polygons from the same group
-        intersecting_polygons_gdf: GeoDataFrame = input_gdf[
-            (input_gdf[by_column] == group_value)
-            & (input_gdf.geometry.intersects(dissolved_geom))
+        intersecting_polygons_gdf: GeoDataFrame = gdf[
+            (gdf[by_column] == group_value) & (gdf.geometry.intersects(dissolved_geom))
         ].copy()
 
-        if dissolve_members_column not in intersecting_polygons_gdf.columns:
-            intersecting_polygons_gdf[dissolve_members_column] = None
+        if intersecting_polygons_gdf.empty:
+            continue
 
         # TODO: Add feature to choose how the representative point is selected
-        min_id = intersecting_polygons_gdf[unique_key_column].min()
-        representative_polygon_gdf: GeoDataFrame = (
-            intersecting_polygons_gdf.loc[
-                intersecting_polygons_gdf[unique_key_column] == min_id
-            ]
-            .iloc[
-                [0]
-            ]  # if multiple polygons with same key value, only one is representing
-            .copy()
-        )
-
-        if len(intersecting_polygons_gdf) > 1:
-            _merge_dissolve_members_column(
-                intersecting_polygons_gdf,
-                dissolve_members_column,
-                dissolved_row,
-                unique_key_column,
-                representative_polygon_gdf,
-            )
-
-        # For single polygons, the dissolve members field is set to None if the field
-        # does not contain any dissolve members
-        elif dissolve_members_column not in representative_polygon_gdf.columns:
-            representative_polygon_gdf[dissolve_members_column] = None
+        # Now chooses feat with smallest index
+        min_id = intersecting_polygons_gdf.index.min()
+        representative_polygon_gdf: GeoDataFrame = intersecting_polygons_gdf.loc[
+            [min_id]
+        ].copy()
 
         representative_polygon_gdf = representative_polygon_gdf.iloc[[0]].copy()
         representative_polygon_gdf.geometry = [dissolved_geom]
 
-        member_ids = sorted(
-            {str(x) for x in intersecting_polygons_gdf[unique_key_column].to_list()}
-        )
-        representative_polygon_gdf[old_ids_column] = [member_ids]
+        # Save old IDs
+        old_ids = sorted(map(str, intersecting_polygons_gdf.index.tolist()))
+        representative_polygon_gdf[old_ids_column] = [old_ids]
 
         dissolved_polygons_gdfs.append(representative_polygon_gdf)
 
     return concat(dissolved_polygons_gdfs).reset_index(drop=True)
-
-
-def _merge_dissolve_members_column(
-    intersecting_polygons_gdf: GeoDataFrame,
-    dissolve_members_column: str,
-    dissolved_row: Series,
-    unique_key_column: str,
-    representative_polygon_gdf: GeoDataFrame,
-) -> None:
-    """List all dissolve member keys into the dissolve_members_column."""
-    existing_members = (
-        intersecting_polygons_gdf[dissolve_members_column].dropna().to_list()
-    )
-
-    existing_members = list(chain.from_iterable(existing_members))
-
-    new_dissolve_members = []
-    if dissolved_row.get(dissolve_members_column):
-        for value in dissolved_row[dissolve_members_column]:
-            if isinstance(value, list):
-                new_dissolve_members += value
-            else:
-                new_dissolve_members.append(value)
-
-    dissolve_members = intersecting_polygons_gdf[unique_key_column].dropna().to_list()
-
-    all_dissolve_members = sorted(
-        {str(x) for x in (existing_members + new_dissolve_members + dissolve_members)}
-    )
-
-    representative_polygon_gdf[dissolve_members_column] = [all_dissolve_members]
 
 
 def buffer_and_merge_polygons(
