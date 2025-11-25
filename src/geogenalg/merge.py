@@ -104,6 +104,7 @@ def dissolve_and_inherit_attributes(
     by_column: str,
     unique_key_column: str,
     dissolve_members_column: str = "dissolve_members",
+    old_ids_column: str = "old_ids",
 ) -> GeoDataFrame:
     """Dissolve polygons and inherit attributes from a representative original polygon.
 
@@ -115,10 +116,13 @@ def dissolve_and_inherit_attributes(
         unique_key_column: Name of the column containing unique identifiers
         dissolve_members_column: Name of the column that lists the original polygons
               that have been dissolved
+        old_ids_column: Name of the column in the output GeoDataFrame
+            containing a tuple of the cluster's old identifiers.
 
     Returns:
     -------
-        A GeoDataFrame with dissolved polygons.
+        A GeoDataFrame with dissolved polygons. Identifiers of the original
+        polygons are in `old_ids_column` column.
 
     Raises:
     ------
@@ -183,6 +187,12 @@ def dissolve_and_inherit_attributes(
 
         representative_polygon_gdf = representative_polygon_gdf.iloc[[0]].copy()
         representative_polygon_gdf.geometry = [dissolved_geom]
+
+        member_ids = sorted(
+            {str(x) for x in intersecting_polygons_gdf[unique_key_column].to_list()}
+        )
+        representative_polygon_gdf[old_ids_column] = [member_ids]
+
         dissolved_polygons_gdfs.append(representative_polygon_gdf)
 
     return concat(dissolved_polygons_gdfs).reset_index(drop=True)
