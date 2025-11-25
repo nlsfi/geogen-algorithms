@@ -9,11 +9,14 @@ import re
 
 import pytest
 from geopandas import GeoDataFrame
+from numpy.testing import assert_approx_equal
 from pandas.testing import assert_frame_equal
+from shapely import box
 from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.merge import (
+    buffer_and_merge_polygons,
     dissolve_and_inherit_attributes,
     merge_connecting_lines_by_attribute,
 )
@@ -398,4 +401,54 @@ def test_dissolve_and_inherit_attributes_raises_on_non_polygon_geometry():
     ):
         dissolve_and_inherit_attributes(
             invalid_gdf, by_column="group", unique_key_column="id"
+        )
+
+
+def test_buffer_and_merge_polygons():
+    # CASE 1: Single polygon (nothing to merge)
+    polygon = box(0.0, 0.0, 1.0, 1.0)
+    gdf = GeoDataFrame(geometry=[polygon], crs="EPSG:3067")
+
+    result = buffer_and_merge_polygons(gdf, buffer_distance=1.0)
+
+    assert len(result) == 1
+    assert result.geometry.iloc[0].equals(polygon)
+
+    # CASE 2: Two nearby polygons (merge)
+    polygon_1 = box(0.0, 0.0, 1.0, 1.0)
+    polygon_2 = box(1.5, 0.0, 2.5, 1.0)
+    gdf = GeoDataFrame(geometry=[polygon_1, polygon_2], crs="EPSG:3067")
+
+    result = buffer_and_merge_polygons(gdf, buffer_distance=0.5)
+
+    # Should be merged into a single polygon
+    assert len(result) == 1
+
+    merged = result.geometry.iloc[0]
+    assert merged.contains(polygon_1.centroid)
+    assert merged.contains(polygon_2.centroid)
+
+    # CASE 3: Two distant polygons (no merge)
+    polygon_1 = box(0.0, 0.0, 1.0, 1.0)
+    polygon_2 = box(4.0, 0.0, 5.0, 1.0)
+    gdf = GeoDataFrame(geometry=[polygon_1, polygon_2], crs="EPSG:3067")
+
+    result = buffer_and_merge_polygons(gdf, buffer_distance=1.0)
+
+    # Polygons should stay separate
+    assert len(result) == 2
+    assert_approx_equal(polygon_1.area, result.geometry.iloc[0].area, significant=3)
+    assert_approx_equal(polygon_2.area, result.geometry.iloc[1].area, significant=3)
+
+
+def test_buffer_and_merge_polygons_invalid_geometry_type():
+    with pytest.raises(
+        GeometryTypeError,
+        match=re.escape(
+            "Buffer and merge polygons works only with (Multi)Polygon geometries."
+        ),
+    ):
+        buffer_and_merge_polygons(
+            input_gdf=GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:3067"),
+            buffer_distance=1.0,
         )
