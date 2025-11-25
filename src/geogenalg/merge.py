@@ -100,7 +100,7 @@ def merge_connecting_lines_by_attribute(
 
 def dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
-    by_column: str,
+    by_column: str | None = None,
     old_ids_column: str = "old_ids",
 ) -> GeoDataFrame:
     """Dissolve polygons and inherit attributes from a representative original polygon.
@@ -109,7 +109,8 @@ def dissolve_and_inherit_attributes(
     ----
         input_gdf: Input GeoDataFrame with Polygon geometries. The GeoDataFrame must
             include a column with a unique key.
-        by_column: Column name used to group and dissolve polygons.
+        by_column: Column name used to group and dissolve polygons. If left None,
+            the entire dataframe is considered a single group to dissolve.
         old_ids_column: Name of the column in the output GeoDataFrame
             containing a tuple of the cluster's old identifiers.
 
@@ -145,12 +146,16 @@ def dissolve_and_inherit_attributes(
 
     for _, dissolved_row in dissolved_gdf.iterrows():
         dissolved_geom = dissolved_row.geometry
-        group_value = dissolved_row[by_column]
 
-        # Only intersect polygons from the same group
-        intersecting_polygons_gdf: GeoDataFrame = gdf[
-            (gdf[by_column] == group_value) & (gdf.geometry.intersects(dissolved_geom))
-        ].copy()
+        if by_column is None:
+            intersecting_polygons_gdf = gdf[
+                gdf.geometry.intersects(dissolved_geom)
+            ].copy()
+        else:
+            intersecting_polygons_gdf = gdf[
+                (gdf[by_column] == dissolved_row[by_column])
+                & (gdf.geometry.intersects(dissolved_geom))
+            ].copy()
 
         if intersecting_polygons_gdf.empty:
             continue

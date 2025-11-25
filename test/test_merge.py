@@ -148,11 +148,9 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
 
 
 @pytest.mark.parametrize(
-    (
-        "input_gdf",
-        "expected_gdf",
-    ),
+    ("input_gdf", "expected_gdf", "by_column"),
     [
+        # 1.
         (
             GeoDataFrame(
                 {"id": [1], "group": ["A"]},
@@ -166,7 +164,9 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 },
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
+            "group",
         ),
+        # 2.
         (
             GeoDataFrame(
                 {"id": [2, 1], "group": ["A", "A"]},
@@ -183,7 +183,9 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 },
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
+            "group",
         ),
+        # 3.
         (
             GeoDataFrame(
                 {"id": [1, 2], "group": ["A", "B"]},
@@ -203,7 +205,28 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                     Polygon([(2, 0), (3, 0), (3, 1), (2, 1)]),
                 ],
             ),
+            "group",
         ),
+        # 4.
+        (
+            GeoDataFrame(
+                {"id": [1, 2], "group": ["A", "B"]},
+                geometry=[
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "id": [1],
+                    "group": ["A"],
+                    "old_ids": [["1", "2"]],
+                },
+                geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
+            ),
+            None,
+        ),
+        # 5.
         (
             GeoDataFrame(
                 {"group": ["A", "A"], "id": [1, 2]},
@@ -223,7 +246,9 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                     Polygon([(2, 2), (3, 2), (3, 3), (2, 3)]),
                 ],
             ),
+            "group",
         ),
+        # 6.
         (
             GeoDataFrame(
                 {
@@ -251,26 +276,24 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                     Polygon([(1, 1), (3, 1), (3, 3), (1, 3)]),
                 ],
             ),
+            "group",
         ),
     ],
     ids=[
-        "single polygon",
-        "two polygons in same group should dissolve",
-        "two polygons in different groups should not dissolve",
-        "two separate polygons in same group should not dissolve",
-        "three intersecting polygons with extra attributes, two in same group",
+        "single polygon",  # 1.
+        "two polygons in same group should dissolve",  # 2.
+        "two polygons in different groups should not dissolve",  # 3.
+        "two polygons without group parameter should dissolve",  # 4.
+        "two separate polygons in same group should not dissolve",  # 5.
+        "three intersecting polygons with extra attributes, two in same group",  # 6.
     ],
 )
 def test_dissolve_and_inherit_attributes(
-    input_gdf: GeoDataFrame,
-    expected_gdf: GeoDataFrame,
+    input_gdf: GeoDataFrame, expected_gdf: GeoDataFrame, by_column: str | None
 ):
     input_gdf = input_gdf.set_index(input_gdf["id"].astype(str))
 
-    result_gdf = dissolve_and_inherit_attributes(
-        input_gdf,
-        by_column="group",
-    )
+    result_gdf = dissolve_and_inherit_attributes(input_gdf, by_column, "old_ids")
 
     result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
     expected_sorted = expected_gdf.sort_values("id").reset_index(drop=True)
