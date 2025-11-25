@@ -9,7 +9,7 @@ from itertools import chain
 
 from geopandas import GeoDataFrame
 from pandas import Series, concat
-from shapely import line_merge
+from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString
 
 from geogenalg.attributes import inherit_attributes
@@ -217,3 +217,73 @@ def _merge_dissolve_members_column(
     )
 
     representative_polygon_gdf[dissolve_members_column] = [all_dissolve_members]
+
+
+def buffer_and_merge_polygons(
+    input_gdf: GeoDataFrame, buffer_distance: float
+) -> GeoDataFrame:
+    """Merge polygons that are close to each other using a buffer.
+
+    Attributes and IDs of the input data are not preserved and
+    included in the output.
+
+    Steps:
+    - Buffers polygons outward by `buffer_distance`
+    - Merge touching and overlapping geometries
+    - Buffer back inward to restore approximate original sizes and shapes
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame containing Polygon geometries.
+        buffer_distance: Distance used for buffering.
+
+    Returns:
+    -------
+        A GeoDataFrame where nearby polygons have been merged and each merged
+        polygon is represented as its own row.
+
+    Raises:
+    ------
+        GeometryTypeError: If the input GeoDataFrame contains other than
+            polygon geometries.
+
+    """
+    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+        msg = "Buffer and merge polygons works only with (Multi)Polygon geometries."
+        raise GeometryTypeError(msg)
+
+    if input_gdf.empty:
+        return input_gdf
+
+    # Return early if input contains only one polygon
+    if len(input_gdf) == 1 and isinstance(input_gdf.geometry.iloc[0], Polygon):
+        return input_gdf
+
+    # 1. Buffer outward
+    buffered = input_gdf.geometry.buffer(buffer_distance)
+
+    # 2. Union all buffered geometries
+    merged = buffered.union_all()
+
+    # 3. Collect individual polygons
+    polygons: list[Polygon] = []
+    if isinstance(merged, Polygon):
+        polygons = [merged]
+    elif isinstance(merged, MultiPolygon):
+        polygons = list(merged.geoms)
+    elif isinstance(merged, GeometryCollection):
+        polygons = [geom for geom in merged.geoms if isinstance(geom, Polygon)]
+    else:
+        polygons = []
+
+    # 4. Buffer inward to restore approximate original size
+    out_geoms = [
+        geom.buffer(-buffer_distance)
+        for geom in polygons
+        if geom is not None and not geom.is_empty
+    ]
+
+    # Filter out empty
+    out_geoms = [geom for geom in out_geoms if geom is not None and not geom.is_empty]
+
+    return GeoDataFrame(geometry=out_geoms, crs=input_gdf.crs)
