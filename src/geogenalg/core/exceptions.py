@@ -16,3 +16,7 @@ class GeometryOperationError(Exception):
 
 class InvalidGeometryError(Exception):
     pass
+
+
+class MissingReferenceError(Exception):
+    pass

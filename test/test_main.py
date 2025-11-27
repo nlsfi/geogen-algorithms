@@ -5,69 +5,164 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-import tempfile
-from pathlib import Path
-
 import pytest
 import typer
-from geopandas import read_file
-from geopandas.testing import assert_geodataframe_equal
+from pygeoops import GeoDataFrame
 from typer.testing import CliRunner
 
-from geogenalg.main import app, geopackage_uri
+from geogenalg.application import BaseAlgorithm
+from geogenalg.main import (
+    GeoPackageURI,
+    NamedGeoPackageURI,
+    app,
+    build_app,
+    geopackage_uri,
+    get_basealgorithm_attribute_docstrings,
+    get_class_attribute_docstrings,
+    named_geopackage_uri,
+)
 
 runner = CliRunner()
 
 
-def test_geopackage_uri():
-    assert geopackage_uri("/path/to/geopackage.gpkg").file == "/path/to/geopackage.gpkg"
-    assert geopackage_uri("/path/to/geopackage.gpkg").layer_name is None
+@pytest.mark.parametrize(
+    ("input_string", "expected"),
+    [
+        (
+            "/path/to/geopackage.gpkg",
+            GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name=None),
+        ),
+        (
+            "/path/to/geopackage.gpkg|layer",
+            GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name="layer"),
+        ),
+        (
+            '"/path/to/geopackage.gpkg|layer"',
+            GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name="layer"),
+        ),
+    ],
+    ids=[
+        "no layer",
+        "with layer",
+        "quotes",
+    ],
+)
+def test_geopackage_uri(input_string: str, expected: GeoPackageURI):
+    assert geopackage_uri(input_string) == expected
 
-    assert (
-        geopackage_uri("/path/to/geopackage.gpkg|layer").file
-        == "/path/to/geopackage.gpkg"
-    )
-    assert geopackage_uri("/path/to/geopackage.gpkg|layer").layer_name == "layer"
 
-    assert (
-        geopackage_uri('"/path/to/geopackage.gpkg|layer"').file
-        == "/path/to/geopackage.gpkg"
-    )
-    assert geopackage_uri('"/path/to/geopackage.gpkg|layer"').layer_name == "layer"
-
+@pytest.mark.parametrize(
+    ("input_string"),
+    [
+        ("data.gpkg||layer"),
+        ("data.gpk|g|layer"),
+        ("data.gpkg|la@yer"),
+    ],
+)
+def test_geopackage_uri_raises(input_string: str):
     with pytest.raises(typer.BadParameter, match="Incorrectly formatted GeoPackageURI"):
-        assert (
-            geopackage_uri("/path/to/geopackage.gpkg||layer").file
-            == "/path/to/geopackage.gpkg"
-        )
+        geopackage_uri(input_string)
 
 
-def test_clusters_to_centroids(testdata_path: Path):
-    input_gpkg = testdata_path / "boulder_in_water.gpkg"
-    input_geopackage_uri = f'"{input_gpkg}|boulder_in_water"'
+@pytest.mark.parametrize(
+    ("input_string", "expected"),
+    [
+        (
+            "mask:data.gpkg",
+            NamedGeoPackageURI(
+                "mask",
+                GeoPackageURI(file="data.gpkg", layer_name=None),
+            ),
+        ),
+        (
+            "mask:data.gpkg|layer",
+            NamedGeoPackageURI(
+                "mask",
+                GeoPackageURI(file="data.gpkg", layer_name="layer"),
+            ),
+        ),
+        (
+            "reference:data.gpkg@layer",
+            NamedGeoPackageURI(
+                "reference",
+                GeoPackageURI(file="data.gpkg", layer_name="layer"),
+            ),
+        ),
+    ],
+    ids=[
+        "no layer",
+        "with layer",
+        "@ delimiter",
+    ],
+)
+def test_named_geopackage_uri(input_string: str, expected: NamedGeoPackageURI):
+    assert named_geopackage_uri(input_string) == expected
 
-    mask_geopackage_uri = f'"{input_gpkg}|lake_part"'
 
-    temp_dir = tempfile.TemporaryDirectory()
-    output_geopackage_uri = f"{temp_dir.name}/output.gpkg"
+@pytest.mark.parametrize(
+    ("input_string"),
+    [
+        ("data.gpkg|layer"),
+        (":data.gpkg|layer"),
+    ],
+    ids=[
+        "no name",
+        "empty name",
+    ],
+)
+def test_named_geopackage_uri_raises(input_string: str):
+    with pytest.raises(
+        typer.BadParameter, match="Incorrectly formatted NamedGeoPackageURI"
+    ):
+        named_geopackage_uri(input_string)
 
+
+def test_get_class_attribute_docstrings():
+    class TestClass:
+        attribute_1: str = "something"
+        """Attribute 1 docstring"""
+        attribute_2: int = 10
+        """Attribute 2 docstring"""
+        attribute_3: int = 10  # doesn't have a docstring
+
+    assert get_class_attribute_docstrings(TestClass) == {
+        "attribute_1": "Attribute 1 docstring",
+        "attribute_2": "Attribute 2 docstring",
+    }
+
+
+def test_get_basealgorithm_docstrings():
+    class MockAlgParent(BaseAlgorithm):
+        parent_attribute: str = "something"
+        """Parent attribute."""
+
+        def _execute(
+            self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
+        ) -> GeoDataFrame:
+            pass
+
+    class MockAlgSubclass(MockAlgParent):
+        subclass_attribute: str = "something"
+        """Subclass attribute."""
+
+        def _execute(
+            self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
+        ) -> GeoDataFrame:
+            pass
+
+    assert get_basealgorithm_attribute_docstrings(MockAlgSubclass) == {
+        "parent_attribute": "Parent attribute.",
+        "subclass_attribute": "Subclass attribute.",
+    }
+
+
+def test_main():
+    build_app()
     result = runner.invoke(
         app,
         [
-            # TODO: uncomment? after a new command is added to CLI
-            # "clusters-to-centroids",
-            input_geopackage_uri,
-            output_geopackage_uri,
-            "--unique-id-column=kmtk_id",
-            "--polygon-min-area=1000.0",
-            f"--mask-data={mask_geopackage_uri}",
+            "--help",
         ],
     )
 
     assert result.exit_code == 0
-    assert Path(output_geopackage_uri).exists()
-
-    control = read_file(input_gpkg, layer="control")
-    result = read_file(output_geopackage_uri)
-
-    assert_geodataframe_equal(control, result)
