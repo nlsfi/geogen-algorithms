@@ -204,7 +204,7 @@ def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str
         Dictionary containing docstring for each attribute found in class.
 
     """
-    output = get_class_attribute_docstrings(cls)
+    output: dict[str, str] = {}
     base_classes = getmro(cls)
     for base_class in base_classes:
         if not issubclass(base_class, BaseAlgorithm):
@@ -217,6 +217,8 @@ def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str
             continue
 
         output |= get_class_attribute_docstrings(base_class)
+
+    output |= get_class_attribute_docstrings(cls)
 
     return output
 
