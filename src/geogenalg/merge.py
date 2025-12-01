@@ -6,8 +6,10 @@
 #  LICENSE file in the root directory of this source tree.
 
 
+from typing import Literal
+
 from geopandas import GeoDataFrame
-from pandas import Series, concat
+from pandas import concat
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString
 
@@ -102,6 +104,7 @@ def dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
     by_column: str | None = None,
     old_ids_column: str = "old_ids",
+    inherit_from: Literal["min_id", "most_intersection"] = "most_intersection",
 ) -> GeoDataFrame:
     """Dissolve polygons and inherit attributes from a representative original polygon.
 
@@ -113,6 +116,8 @@ def dissolve_and_inherit_attributes(
             the entire dataframe is considered a single group to dissolve.
         old_ids_column: Name of the column in the output GeoDataFrame
             containing a tuple of the cluster's old identifiers.
+        inherit_from: Method for determining which intersecting feature is considered as
+            the representative original polygon to inherit attributes from.
 
     Returns:
     -------
@@ -123,6 +128,7 @@ def dissolve_and_inherit_attributes(
     ------
         GeometryTypeError: If the input GeoDataFrame contains other than
             polygon geometries.
+        ValueError: If invalid inherit_from method is passed.
 
     """
     if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
@@ -160,14 +166,34 @@ def dissolve_and_inherit_attributes(
         if intersecting_polygons_gdf.empty:
             continue
 
-        # TODO: Add feature to choose how the representative point is selected
-        # Now chooses feat with smallest index
-        min_id = intersecting_polygons_gdf.index.min()
-        representative_polygon_gdf: GeoDataFrame = intersecting_polygons_gdf.loc[
-            [min_id]
-        ].copy()
+        match inherit_from:
+            case "min_id":
+                min_id = intersecting_polygons_gdf.index.min()
+                representative_polygon_gdf = intersecting_polygons_gdf.loc[
+                    [min_id]
+                ].copy()
+                representative_polygon_gdf = representative_polygon_gdf.iloc[[0]].copy()
+            case "most_intersection":
+                intersecting_polygons_gdf.geometry = (
+                    intersecting_polygons_gdf.geometry.intersection(dissolved_geom)
+                )
 
-        representative_polygon_gdf = representative_polygon_gdf.iloc[[0]].copy()
+                intersecting_polygons_gdf["__area"] = (
+                    intersecting_polygons_gdf.geometry.area
+                )
+                intersecting_polygons_gdf = intersecting_polygons_gdf.sort_values(
+                    "__area",
+                    ascending=False,
+                )
+                intersecting_polygons_gdf = intersecting_polygons_gdf.drop(
+                    "__area", axis=1
+                )
+
+                representative_polygon_gdf = intersecting_polygons_gdf.iloc[[0]].copy()
+            case _:
+                msg = f"Unaccepted value: {inherit_from}"
+                raise ValueError(msg)
+
         representative_polygon_gdf.geometry = [dissolved_geom]
 
         # Save old IDs
