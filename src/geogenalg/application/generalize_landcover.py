@@ -6,120 +6,96 @@
 #  LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from pathlib import Path
 
-import geopandas as gpd
+from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
 
-from geogenalg import attributes, selection
+from geogenalg.application import BaseAlgorithm
+from geogenalg.attributes import inherit_attributes
+from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import assign_nearest_z
+from geogenalg.selection import remove_small_holes, remove_small_polygons
+from geogenalg.utility.validation import check_gdf_geometry_type
 
 
-@dataclass
-class AlgorithmOptions:
-    """Options for generalize land cover algorithm.
+@dataclass(frozen=True)
+class GeneralizeLandcover(BaseAlgorithm):
+    """Generalize polygon data representing a land cover class.
 
-    Attributes:
-        buffer_constant: Constant used for buffering polygons
-        simplification_tolerance: Tolerance used for geometry simplification
-        area_threshold: Minimum polygon area to retain
-        hole_threshold: Minimum area of holes to retain
-        smoothing: If True, polygons will be smoothed
+    Input should be a polygon dataset. This algorithm can process only one
+    dataset at a time, as generalization parameters need to be adjusted
+    between different classes and scales to achieve a good cartographic result.
 
+    Reference data is not used in this algorithm.
+
+    Output is a GeoDataFrame with generalized land cover polygons.
+
+    The algorithm does the following steps:
+    - Merges polygons with narrow gaps by buffering geometries
+    - Removes narrow polygon parts by negatively buffering geometries
+    - Simplifies polygons using `simplification_tolerance`
+    - Optionally smooths polygons
+    - Removes areas with area under given `area_threshold`
+    - Removes holes with area under given `hole_threshold`
     """
 
-    buffer_constant: float
-    simplification_tolerance: float
-    area_threshold: float
-    hole_threshold: float
-    smoothing: bool
+    buffer_constant: float = 10.0
+    """Constant used for buffering polygons."""
+    simplification_tolerance: float = 5.0
+    """Tolerance used for geometry simplification."""
+    area_threshold: float = 2500.0
+    """Minimum polygon area to retain."""
+    hole_threshold: float = 2500.0
+    """Minimum area of holes to retain."""
+    smoothing: bool = False
+    """If True, polygons will be smoothed."""
 
+    def _execute(
+        self,
+        data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],  # noqa: ARG002
+    ) -> GeoDataFrame:
+        if not check_gdf_geometry_type(data, ["Polygon"]):
+            msg = "GeneralizeLandcover works only with Polygon geometries."
+            raise GeometryTypeError(msg)
 
-def create_generalized_landcover(
-    input_path: Path | str,
-    layer_name: str,
-    options: AlgorithmOptions,
-    output_path: str,
-) -> None:
-    """Create GeoDataFrame and pass it to the generalization function.
+        result_gdf = data.copy()
 
-    Args:
-    ----
-        input_path: Path to the input GeoPackage
-        layer_name: Name of the layer for land cover polygons
-        options: Algorithm parameters for generalize land cover
-        output_path: Path to save the output GeoPackage
+        def _buffer(gdf: GeoDataFrame, distance: float) -> None:
+            gdf.geometry = gdf.geometry.buffer(
+                distance, cap_style="square", join_style="bevel"
+            )
 
-    Raises:
-    ------
-        FileNotFoundError: If the input_path does not exist
+        # Create a buffer of size buffer_constant to close narrow gaps between polygons
+        _buffer(result_gdf, self.buffer_constant)
+        result_gdf = result_gdf.dissolve(as_index=False)
 
-    """
-    if not Path(input_path).resolve().exists():
-        raise FileNotFoundError
+        # Create a double negative buffer to remove narrow polygon parts
+        _buffer(result_gdf, -2 * self.buffer_constant)
 
-    landcover_gdf = gpd.read_file(input_path, layer=layer_name)
+        # Restore polygons to their original size with a positive buffer
+        _buffer(result_gdf, self.buffer_constant)
 
-    result = generalize_landcover(landcover_gdf, options)
+        result_gdf = result_gdf.dissolve(as_index=False)
+        result_gdf = result_gdf.explode(index_parts=False)
 
-    result.to_file(output_path, driver="GPKG")
+        # Simplify the polygons
+        result_gdf.geometry = result_gdf.geometry.simplify(
+            self.simplification_tolerance, preserve_topology=True
+        )
 
+        # Smooth the polygons if smoothing is wanted
+        if self.smoothing:
+            result_gdf.geometry = result_gdf.geometry.apply(chaikin_smooth)
 
-def generalize_landcover(
-    landcover_gdf: gpd.GeoDataFrame,
-    options: AlgorithmOptions,
-) -> gpd.GeoDataFrame:
-    """Generalize the polygon layer representing a land cover class.
+        # Remove polygons smaller than the area_threshold
+        result_gdf = remove_small_polygons(result_gdf, self.area_threshold)
 
-    This algorithm can process only one polygon layer at a time, as generalization
-    parameters need to be adjusted between different classes and scales to achieve
-    a good cartographic result.
+        # Remove holes smaller than the hole_threshold and return
+        result_gdf = remove_small_holes(result_gdf, self.hole_threshold)
 
-    Args:
-    ----
-        landcover_gdf: A GeoDataFrame containing the land cover polygons
-        options: Algorithm parameters for generalize land cover
+        # Assign nearst z values from source gdf
+        result_gdf = assign_nearest_z(data, result_gdf)
 
-    Returns:
-    -------
-        Generalized land cover polygons
-
-    """
-    result_gdf = landcover_gdf.copy()
-
-    # Create a buffer of size buffer_constant to close narrow gaps between polygons
-    result_gdf.geometry = result_gdf.geometry.buffer(
-        options.buffer_constant, cap_style="square", join_style="bevel"
-    )
-    result_gdf = result_gdf.dissolve(as_index=False)
-
-    # Create a double negative buffer to remove narrow polygon parts
-    result_gdf.geometry = result_gdf.geometry.buffer(
-        -2 * options.buffer_constant, cap_style="square", join_style="bevel"
-    )
-
-    # Restore polygons to their original size with a positive buffer
-    result_gdf.geometry = result_gdf.geometry.buffer(
-        options.buffer_constant, cap_style="square", join_style="bevel"
-    )
-
-    result_gdf = result_gdf.dissolve(as_index=False)
-    result_gdf = result_gdf.explode(index_parts=False)
-
-    # Simplify the polygons
-    result_gdf.geometry = result_gdf.geometry.simplify(
-        options.simplification_tolerance, preserve_topology=True
-    )
-
-    # Smooth the polygons if smoothing is wanted
-    if options.smoothing:
-        geometries = list(result_gdf.geometry)
-        smoothed_geometries = [chaikin_smooth(geom) for geom in geometries]
-        result_gdf.geometry = smoothed_geometries
-
-    # Remove polygons smaller than the area_threshold
-    result_gdf = selection.remove_small_polygons(result_gdf, options.area_threshold)
-
-    # Remove holes smaller than the hole_threshold and return
-    result_gdf = selection.remove_small_holes(result_gdf, options.hole_threshold)
-
-    return attributes.inherit_attributes(landcover_gdf, result_gdf)
+        # Inherit attributes from source gdf
+        return inherit_attributes(data, result_gdf)

@@ -5,16 +5,19 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-import tempfile
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-import geopandas as gpd
-import geopandas.testing
+import pytest
+from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
+from shapely import Point
 
-from geogenalg.application.generalize_landcover import (
-    AlgorithmOptions,
-    generalize_landcover,
-)
+from geogenalg.application.generalize_landcover import GeneralizeLandcover
+from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+
+UNIQUE_ID_COLUMN = "mtk_id"
 
 
 def test_generalize_landcover_50k(
@@ -23,14 +26,47 @@ def test_generalize_landcover_50k(
     """
     Test generalizing landcover with cultivated land class
     """
-    source_path = testdata_path / "marshes_small_area.gpkg"
+    input_path = testdata_path / "marshes_small_area.gpkg"
+    input_data = read_gdf_from_file_and_set_index(
+        input_path,
+        UNIQUE_ID_COLUMN,
+        layer="mtk_marshes",
+    )
 
-    temp_dir = tempfile.TemporaryDirectory()
-    output_path = temp_dir.name + "/generalized_marshes.gpkg"
+    temp_dir = TemporaryDirectory()
+    output_path = Path(temp_dir.name) / "generalized_marshes.gpkg"
 
-    input_gdf = gpd.read_file(source_path, layer="mtk_marshes")
+    algorithm = GeneralizeLandcover(
+        buffer_constant=20,
+        simplification_tolerance=30,
+        area_threshold=7500,
+        hole_threshold=5000,
+        smoothing=True,
+    )
+    algorithm.execute(input_data, {}).to_file(output_path, layer="marshes_50k")
+    result_marshes = read_gdf_from_file_and_set_index(
+        output_path, "index", layer="marshes_50k"
+    )
 
-    options = AlgorithmOptions(
+    control_marshes: GeoDataFrame = read_gdf_from_file_and_set_index(
+        input_path, UNIQUE_ID_COLUMN, layer="generalized_marshes"
+    )
+
+    control_marshes = control_marshes.sort_values("geometry").reset_index(drop=True)
+    result_marshes = result_marshes.sort_values("geometry").reset_index(drop=True)
+
+    # TODO: figure out how to pass Geojson geometries without rounding errors
+    assert_geodataframe_equal(
+        control_marshes.drop(columns=["sijainti_piste"]),
+        result_marshes.drop(columns=["sijainti_piste"]),
+        check_index_type=False,
+    )
+
+
+def test_generalize_landcover_invalid_geometry_type() -> None:
+    gdf = GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
+
+    algorithm = GeneralizeLandcover(
         buffer_constant=20,
         simplification_tolerance=30,
         area_threshold=7500,
@@ -38,24 +74,8 @@ def test_generalize_landcover_50k(
         smoothing=True,
     )
 
-    result = generalize_landcover(input_gdf, options)
-
-    assert result is not None
-
-    result.to_file(output_path, layer="marshes_50k")
-
-    control_marshes: gpd.GeoDataFrame = gpd.read_file(
-        source_path, layer="generalized_marshes"
-    )
-
-    result_marshes = gpd.read_file(output_path, layer="marshes_50k")
-
-    control_marshes = control_marshes.sort_values("geometry").reset_index(drop=True)
-    result_marshes = result_marshes.sort_values("geometry").reset_index(drop=True)
-
-    # TODO: figure out how to pass Geojson geometries without rounding errors
-    geopandas.testing.assert_geodataframe_equal(
-        control_marshes.drop(columns=["sijainti_piste"]),
-        result_marshes.drop(columns=["sijainti_piste"]),
-        check_index_type=False,
-    )
+    with pytest.raises(
+        GeometryTypeError,
+        match=r"GeneralizeLandcover works only with Polygon geometries.",
+    ):
+        algorithm.execute(data=gdf, reference_data={})

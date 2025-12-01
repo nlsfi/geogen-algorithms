@@ -51,7 +51,6 @@ def dbscan_cluster_ids(
 def get_cluster_centroids(
     input_gdf: GeoDataFrame,
     cluster_distance: float,
-    unique_id_column: str,
     *,
     aggregation_functions: dict[str, Callable[[Series], Any] | str] | None = None,
     old_ids_column: str = "old_ids",
@@ -63,8 +62,6 @@ def get_cluster_centroids(
         input_gdf: GeoDataFrame containing Points to be clustered.
         cluster_distance: Points within this distance will be clustered, must
             be > 0.0.
-        unique_id_column: Name of a column containing unique identifiers in the
-            GeoDataFrame
         aggregation_functions: Dictionary of aggregation functions, which is
             passed to geopandas' dissolve function. The keys should correspond
             to column names in the input GeoDataFrame. If aggregation function
@@ -80,20 +77,25 @@ def get_cluster_centroids(
         all the points in the cluster.
 
     """
+    gdf = input_gdf.copy()
+
     cluster_id_column = "__cluster_id"  # temporary column
-    cluster_ids = dbscan_cluster_ids(
-        input_gdf,
-        cluster_distance,
-        cluster_column_name=cluster_id_column,
+    cluster_ids = (
+        dbscan_cluster_ids(
+            gdf,
+            cluster_distance,
+            cluster_column_name=cluster_id_column,
+        )
+        .to_frame()
+        .set_index(gdf.index)
     )
 
-    gdf = GeoDataFrame(concat([input_gdf, cluster_ids], axis=1))
+    gdf[cluster_id_column] = cluster_ids[cluster_id_column]
 
-    # Filter out non-clustered points denoted by the -1 value
-    gdf = gdf[gdf[cluster_id_column] != -1]
+    gdf = gdf.loc[gdf[cluster_id_column] != -1]
 
     # Copy id column, so all the cluster's ids can be aggregated into it later
-    gdf[old_ids_column] = gdf[unique_id_column]
+    gdf[old_ids_column] = gdf.index
 
     if aggregation_functions is None:
         aggregation_functions = {}
