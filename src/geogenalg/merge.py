@@ -9,7 +9,6 @@
 from typing import Literal
 
 from geopandas import GeoDataFrame
-from pandas import concat
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString
 
@@ -128,7 +127,6 @@ def dissolve_and_inherit_attributes(
     ------
         GeometryTypeError: If the input GeoDataFrame contains other than
             polygon geometries.
-        ValueError: If invalid inherit_from method is passed.
 
     """
     if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
@@ -148,8 +146,7 @@ def dissolve_and_inherit_attributes(
         gdf.dissolve(by=by_column).explode(index_parts=True).reset_index()
     )
 
-    dissolved_polygons_gdfs: list[GeoDataFrame] = []
-
+    features = []
     for _, dissolved_row in dissolved_gdf.iterrows():
         dissolved_geom = dissolved_row.geometry
 
@@ -172,12 +169,11 @@ def dissolve_and_inherit_attributes(
                 representative_polygon_gdf = intersecting_polygons_gdf.loc[
                     [min_id]
                 ].copy()
-                representative_polygon_gdf = representative_polygon_gdf.iloc[[0]].copy()
+                representative_feature = representative_polygon_gdf.iloc[0]
             case "most_intersection":
                 intersecting_polygons_gdf.geometry = (
                     intersecting_polygons_gdf.geometry.intersection(dissolved_geom)
                 )
-
                 intersecting_polygons_gdf["__area"] = (
                     intersecting_polygons_gdf.geometry.area
                 )
@@ -189,20 +185,21 @@ def dissolve_and_inherit_attributes(
                     "__area", axis=1
                 )
 
-                representative_polygon_gdf = intersecting_polygons_gdf.iloc[[0]].copy()
-            case _:
-                msg = f"Unaccepted value: {inherit_from}"
-                raise ValueError(msg)
+                representative_feature = intersecting_polygons_gdf.iloc[0]
 
-        representative_polygon_gdf.geometry = [dissolved_geom]
+        feature = representative_feature.copy()
+        feature.geometry = dissolved_geom
 
-        # Save old IDs
-        old_ids = sorted(map(str, intersecting_polygons_gdf.index.tolist()))
-        representative_polygon_gdf[old_ids_column] = [old_ids]
+        feature[old_ids_column] = tuple(
+            intersecting_polygons_gdf.index.to_list(),
+        )
 
-        dissolved_polygons_gdfs.append(representative_polygon_gdf)
+        features.append(feature)
 
-    return concat(dissolved_polygons_gdfs).reset_index(drop=True)
+    output = GeoDataFrame(features, crs=input_gdf.crs)
+    output.index.name = input_gdf.index.name
+
+    return output
 
 
 def buffer_and_merge_polygons(

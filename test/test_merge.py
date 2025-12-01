@@ -10,8 +10,8 @@ from typing import Literal
 
 import pytest
 from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
 from numpy.testing import assert_approx_equal
-from pandas.testing import assert_frame_equal
 from shapely import box
 from shapely.geometry import LineString, Point, Polygon
 
@@ -161,7 +161,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 {
                     "id": [1],
                     "group": ["A"],
-                    "old_ids": [["1"]],
+                    "old_ids": [(1,)],
                 },
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
@@ -181,9 +181,21 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 {
                     "id": [1],
                     "group": ["A"],
-                    "old_ids": [["1", "2"]],
+                    "old_ids": [(2, 1)],
                 },
-                geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
+                geometry=[
+                    Polygon(
+                        [
+                            (0, 1),
+                            (1, 1),
+                            (2, 1),
+                            (2, 0),
+                            (1, 0),
+                            (0, 0),
+                            (0, 1),
+                        ]
+                    ),
+                ],
             ),
             "group",
             "min_id",
@@ -201,7 +213,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 {
                     "id": [1, 2],
                     "group": ["A", "B"],
-                    "old_ids": [["1"], ["2"]],
+                    "old_ids": [(1,), (2,)],
                 },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -224,7 +236,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 {
                     "id": [1],
                     "group": ["A"],
-                    "old_ids": [["1", "2"]],
+                    "old_ids": [(1, 2)],
                 },
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
@@ -244,7 +256,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 {
                     "group": ["A", "A"],
                     "id": [1, 2],
-                    "old_ids": [["1"], ["2"]],
+                    "old_ids": [(1,), (2,)],
                 },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -273,7 +285,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                     "group": ["A", "B"],
                     "id": [1, 3],
                     "name": ["first", "third"],
-                    "old_ids": [["1", "2"], ["3"]],
+                    "old_ids": [(1, 2), (3,)],
                 },
                 geometry=[
                     Polygon(
@@ -304,7 +316,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                     "group": ["A", "B"],
                     "id": [2, 3],
                     "name": ["second", "third"],
-                    "old_ids": [["1", "2"], ["3"]],
+                    "old_ids": [(2, 1), (3,)],
                 },
                 geometry=[
                     Polygon(
@@ -319,7 +331,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
     ],
     ids=[
         "single polygon",  # 1.
-        "two polygons in same group should dissolve",  # 2.
+        "_two polygons in same group should dissolve",  # 2.
         "two polygons in different groups should not dissolve",  # 3.
         "two polygons without group parameter should dissolve",  # 4.
         "two separate polygons in same group should not dissolve",  # 5.
@@ -331,29 +343,24 @@ def test_dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
     expected_gdf: GeoDataFrame,
     by_column: str | None,
-    inherit_from: Literal["min_id", "largest"],
+    inherit_from: Literal["min_id", "most_intersection"],
 ):
-    input_gdf = input_gdf.set_index(input_gdf["id"].astype(str))
+    input_gdf = input_gdf.set_index("id")
+    expected_gdf = expected_gdf.set_index("id")
 
     result_gdf = dissolve_and_inherit_attributes(
-        input_gdf, by_column, "old_ids", inherit_from
+        input_gdf,
+        by_column,
+        "old_ids",
+        inherit_from,
     )
 
-    result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
-    expected_sorted = expected_gdf.sort_values("id").reset_index(drop=True)
-
-    # Check geometries
-    for result_geom, expected_geom in zip(
-        result_sorted.geometry, expected_sorted.geometry, strict=False
-    ):
-        assert result_geom.equals(expected_geom), (
-            f"Geometries differ: {result_geom} vs {expected_geom}"
-        )
-
-    # Check attributes (including old IDs)
-    result_attrs = result_sorted.drop(columns="geometry")
-    expected_attrs = expected_sorted.drop(columns="geometry")
-    assert_frame_equal(result_attrs, expected_attrs)
+    assert_geodataframe_equal(
+        result_gdf,
+        expected_gdf,
+        check_like=True,
+        normalize=True,
+    )
 
 
 def test_dissolve_and_inherit_attributes_handles_empty_gdf_correctly():
