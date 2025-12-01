@@ -6,6 +6,7 @@
 #  LICENSE file in the root directory of this source tree.
 
 import re
+from typing import Literal
 
 import pytest
 from geopandas import GeoDataFrame
@@ -148,7 +149,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
 
 
 @pytest.mark.parametrize(
-    ("input_gdf", "expected_gdf", "by_column"),
+    ("input_gdf", "expected_gdf", "by_column", "inherit_from"),
     [
         # 1.
         (
@@ -165,6 +166,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             "group",
+            "min_id",
         ),
         # 2.
         (
@@ -184,6 +186,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
             "group",
+            "min_id",
         ),
         # 3.
         (
@@ -206,6 +209,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 ],
             ),
             "group",
+            "min_id",
         ),
         # 4.
         (
@@ -225,6 +229,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
             None,
+            "min_id",
         ),
         # 5.
         (
@@ -247,6 +252,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 ],
             ),
             "group",
+            "min_id",
         ),
         # 6.
         (
@@ -277,6 +283,38 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 ],
             ),
             "group",
+            "min_id",
+        ),
+        # 7.
+        (
+            GeoDataFrame(
+                {
+                    "group": ["A", "A", "B"],
+                    "id": [1, 2, 3],
+                    "name": ["first", "second", "third"],
+                },
+                geometry=[
+                    box(0, 0, 2, 2),
+                    box(1, 1, 4, 4),
+                    box(1, 1, 4, 4),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "group": ["A", "B"],
+                    "id": [2, 3],
+                    "name": ["second", "third"],
+                    "old_ids": [["1", "2"], ["3"]],
+                },
+                geometry=[
+                    Polygon(
+                        [(0, 0), (0, 2), (1, 2), (1, 4), (4, 4), (4, 1), (2, 1), (2, 0)]
+                    ),
+                    Polygon([(4, 1), (1, 1), (1, 4), (4, 4)]),
+                ],
+            ),
+            "group",
+            "most_intersection",
         ),
     ],
     ids=[
@@ -286,14 +324,20 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
         "two polygons without group parameter should dissolve",  # 4.
         "two separate polygons in same group should not dissolve",  # 5.
         "three intersecting polygons with extra attributes, two in same group",  # 6.
+        "three intersecting polygons with extra attributes, two in same group, inherit from most_intersection",  # 7.
     ],
 )
 def test_dissolve_and_inherit_attributes(
-    input_gdf: GeoDataFrame, expected_gdf: GeoDataFrame, by_column: str | None
+    input_gdf: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+    by_column: str | None,
+    inherit_from: Literal["min_id", "largest"],
 ):
     input_gdf = input_gdf.set_index(input_gdf["id"].astype(str))
 
-    result_gdf = dissolve_and_inherit_attributes(input_gdf, by_column, "old_ids")
+    result_gdf = dissolve_and_inherit_attributes(
+        input_gdf, by_column, "old_ids", inherit_from
+    )
 
     result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
     expected_sorted = expected_gdf.sort_values("id").reset_index(drop=True)
