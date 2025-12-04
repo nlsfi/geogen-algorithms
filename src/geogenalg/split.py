@@ -5,10 +5,10 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-from hashlib import sha256
-
 from geopandas import GeoDataFrame
 from pandas.api.types import is_string_dtype
+
+from geogenalg.identity import hash_duplicate_indexes
 
 
 def explode_and_hash_id(
@@ -43,30 +43,11 @@ def explode_and_hash_id(
         msg = "GeoDataFrame must have a string index."
         raise ValueError(msg)
 
-    gdf = data.copy()
-
-    length_before = len(gdf.index)
-    index_name = gdf.index.name
-
-    gdf = gdf.explode()
+    length_before = len(data.index)
+    gdf = data.explode()
 
     if len(gdf.index) == length_before:
         # Nothing exploded, no need to keep going.
         return gdf
 
-    temp_index = "__temp_index"
-
-    gdf[temp_index] = gdf.index
-
-    mask = gdf.duplicated(keep=False, subset=[temp_index])
-    gdf.loc[mask, temp_index] = (
-        hash_prefix + gdf.loc[mask].index + gdf.loc[mask].geometry.to_wkt()
-    )
-    gdf.loc[mask, temp_index] = gdf.loc[mask, temp_index].apply(
-        lambda hash_input: sha256(hash_input.encode()).hexdigest()
-    )
-
-    gdf = gdf.set_index(temp_index)
-    gdf.index.name = index_name
-
-    return gdf
+    return hash_duplicate_indexes(gdf, hash_prefix)
