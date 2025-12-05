@@ -6,32 +6,30 @@
 #  LICENSE file in the root directory of this source tree.
 
 import re
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import geopandas as gpd
-import geopandas.testing
-import numpy as np
-import pandas as pd
 import pytest
+from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
+from numpy import nan
+from pandas import isna
 from pandas.testing import assert_frame_equal
-from pygeoops import BaseGeometry
-from shapely.geometry import LineString, Point, Polygon
+from shapely import LineString, Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
-from geogenalg.application.generalize_buildings import (
-    AlgorithmOptions,
-    _add_attributes_for_area_and_angle,
-    _dissolve_touching_buildings,
-    _filter_buildings_by_area_and_class,
-    _simplify_buildings,
-    create_generalized_buildings,
-)
+from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.testing import (
+    GeoPackageInput,
+    get_result_and_control,
+)
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 from cartagen.algorithms import buildings
+
+UNIQUE_ID_COLUMN = "mtk_id"
 
 
 def test_generalize_buildings_50k(testdata_path: Path) -> None:
@@ -41,45 +39,26 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
     input_path = testdata_path / "buildings_helsinki.gpkg"
     control_path = testdata_path / "buildings_generalized_50k_helsinki.gpkg"
 
-    temp_dir = tempfile.TemporaryDirectory()
-    output_path = Path(temp_dir.name) / "generalized_buildings_50k.gpkg"
-
-    options = AlgorithmOptions(
-        area_threshold_for_all_buildings=5,
-        area_threshold_for_low_priority_buildings=100,
-        side_threshold=30,
-        point_size=15,
-        minimum_distance_to_isolated_building=200,
-        hole_threshold=75,
-        classes_for_low_priority_buildings=[6, 4],
-        classes_for_point_buildings=[8],
-        classes_for_always_kept_buildings=[],
-        unique_key_column="mtk_id",
-        building_class_column="kayttotarkoitus",
+    result, control = get_result_and_control(
+        GeoPackageInput(input_path, layer_name="single_parts"),
+        GeoPackageInput(control_path, layer_name="control"),
+        GeneralizeBuildings(
+            area_threshold_for_all_buildings=5,
+            area_threshold_for_low_priority_buildings=100,
+            side_threshold=30,
+            point_size=15,
+            minimum_distance_to_isolated_building=200,
+            hole_threshold=75,
+            classes_for_low_priority_buildings=[6, 4],
+            classes_for_point_buildings=[8],
+            classes_for_always_kept_buildings=[],
+            unique_key_column="mtk_id",
+            building_class_column="kayttotarkoitus",
+        ),
+        UNIQUE_ID_COLUMN,
     )
 
-    create_generalized_buildings(input_path, options, str(output_path))
-
-    control_large = gpd.read_file(control_path, layer="large_buildings")
-    control_small = gpd.read_file(control_path, layer="small_buildings")
-    result_large = gpd.read_file(output_path, layer="large_buildings")
-    result_small = gpd.read_file(output_path, layer="small_buildings")
-
-    control_large = control_large.sort_values("geometry").reset_index(drop=True)
-    control_small = control_small.sort_values("geometry").reset_index(drop=True)
-    result_large = result_large.sort_values("geometry").reset_index(drop=True)
-    result_small = result_small.sort_values("geometry").reset_index(drop=True)
-
-    # Clean geometries: buffer(0) fixes invalid polygons/self-intersections
-    control_large["geometry"] = control_large.buffer(0)
-    result_large["geometry"] = result_large.buffer(0)
-
-    geopandas.testing.assert_geodataframe_equal(
-        control_large, result_large, check_index_type=False
-    )
-    geopandas.testing.assert_geodataframe_equal(
-        control_small, result_small, check_index_type=False
-    )
+    assert_geodataframe_equal(result, control)
 
 
 def test_generalize_buildings_100k(testdata_path: Path) -> None:
@@ -89,64 +68,45 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
     input_path = testdata_path / "buildings_generalized_50k_helsinki.gpkg"
     control_path = testdata_path / "buildings_generalized_100k_helsinki.gpkg"
 
-    temp_dir = tempfile.TemporaryDirectory()
-    output_path = Path(temp_dir.name) / "generalized_buildings_100k.gpkg"
-
-    options = AlgorithmOptions(
-        area_threshold_for_all_buildings=10,
-        area_threshold_for_low_priority_buildings=500,
-        side_threshold=70,
-        point_size=30,
-        minimum_distance_to_isolated_building=400,
-        hole_threshold=150,
-        classes_for_low_priority_buildings=[6, 4],
-        classes_for_point_buildings=[8],
-        classes_for_always_kept_buildings=[],
-        unique_key_column="mtk_id",
-        building_class_column="kayttotarkoitus",
+    result, control = get_result_and_control(
+        GeoPackageInput(input_path, layer_name="control"),
+        GeoPackageInput(control_path, layer_name="control"),
+        GeneralizeBuildings(
+            area_threshold_for_all_buildings=10,
+            area_threshold_for_low_priority_buildings=500,
+            side_threshold=70,
+            point_size=30,
+            minimum_distance_to_isolated_building=400,
+            hole_threshold=150,
+            classes_for_low_priority_buildings=[6, 4],
+            classes_for_point_buildings=[8],
+            classes_for_always_kept_buildings=[],
+            unique_key_column="mtk_id",
+            building_class_column="kayttotarkoitus",
+        ),
+        UNIQUE_ID_COLUMN,
     )
 
-    create_generalized_buildings(input_path, options, str(output_path))
-
-    control_large = gpd.read_file(control_path, layer="large_buildings")
-    control_small = gpd.read_file(control_path, layer="small_buildings")
-    result_large = gpd.read_file(output_path, layer="large_buildings")
-    result_small = gpd.read_file(output_path, layer="small_buildings")
-
-    control_large = control_large.sort_values("geometry").reset_index(drop=True)
-    control_small = control_small.sort_values("geometry").reset_index(drop=True)
-    result_large = result_large.sort_values("geometry").reset_index(drop=True)
-    result_small = result_small.sort_values("geometry").reset_index(drop=True)
-
-    # Clean geometries: buffer(0) fixes invalid polygons/self-intersections
-    control_large["geometry"] = control_large.buffer(0)
-    result_large["geometry"] = result_large.buffer(0)
-
-    geopandas.testing.assert_geodataframe_equal(
-        control_large, result_large, check_index_type=False
-    )
-    geopandas.testing.assert_geodataframe_equal(
-        control_small, result_small, check_index_type=False
-    )
+    assert_geodataframe_equal(result, control)
 
 
 @pytest.mark.parametrize(
     ("input_gdf", "expected_area", "expected_angle"),
     [
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 geometry=[Polygon([(0, 0), (1, 1), (0, 2), (-1, 1)])], crs="EPSG:3067"
             ),
             2.0,
             135.0,
         ),
         (
-            gpd.GeoDataFrame(geometry=[Point(1, 1)], crs="EPSG:3067"),
+            GeoDataFrame(geometry=[Point(1, 1)], crs="EPSG:3067"),
             0.0,
-            np.nan,
+            nan,
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {
                     "geometry": [Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
                     "original_area": [9999.0],
@@ -158,7 +118,7 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
             8888.0,
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {
                     "geometry": [Point(1, 1)],
                     "original_area": [123.0],
@@ -178,9 +138,9 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
     ],
 )
 def test_add_attributes_for_area_and_angle(
-    input_gdf: gpd.GeoDataFrame, expected_area: float, expected_angle: float
+    input_gdf: GeoDataFrame, expected_area: float, expected_angle: float
 ):
-    result_gdf = _add_attributes_for_area_and_angle(input_gdf)
+    result_gdf = GeneralizeBuildings()._add_attributes_for_area_and_angle(input_gdf)
 
     assert "original_area" in result_gdf.columns
     assert "main_angle" in result_gdf.columns
@@ -189,8 +149,8 @@ def test_add_attributes_for_area_and_angle(
     angle = result_gdf.loc[0, "main_angle"]
 
     assert area == expected_area
-    if pd.isna(expected_angle):
-        assert pd.isna(angle)
+    if isna(expected_angle):
+        assert isna(angle)
     else:
         assert angle == expected_angle
 
@@ -215,7 +175,7 @@ def test_add_attributes_for_area_and_angle(
 def test_filter_buildings_by_area_and_class(
     original_area: float, building_class: str, expected_kept: bool
 ):
-    input_gdf = gpd.GeoDataFrame(
+    input_gdf = GeoDataFrame(
         {
             "original_area": [original_area],
             "class": [building_class],
@@ -224,7 +184,7 @@ def test_filter_buildings_by_area_and_class(
         crs="EPSG:3067",
     )
 
-    options = AlgorithmOptions(
+    alg = GeneralizeBuildings(
         area_threshold_for_all_buildings=100,
         area_threshold_for_low_priority_buildings=120,
         classes_for_low_priority_buildings=["low"],
@@ -236,10 +196,9 @@ def test_filter_buildings_by_area_and_class(
         hole_threshold=10,
         classes_for_point_buildings=[3, 2],
         unique_key_column="id",
-        dissolve_members_column="dissolve_members",
     )
 
-    result_gdf = _filter_buildings_by_area_and_class(input_gdf, options)
+    result_gdf = alg._filter_buildings_by_area_and_class(input_gdf)
 
     assert (len(result_gdf) == 1) == expected_kept
 
@@ -281,7 +240,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
     geometries: list[BaseGeometry],
     expected_count: int,
 ):
-    gdf = gpd.GeoDataFrame(
+    gdf = GeoDataFrame(
         {
             "original_area": original_areas,
             "class": classes,
@@ -290,7 +249,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
         crs="EPSG:3857",
     )
 
-    options = AlgorithmOptions(
+    alg = GeneralizeBuildings(
         area_threshold_for_all_buildings=100,
         area_threshold_for_low_priority_buildings=200,
         classes_for_low_priority_buildings=["low"],
@@ -302,9 +261,8 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
         hole_threshold=10,
         classes_for_point_buildings=[3, 2],
         unique_key_column="id",
-        dissolve_members_column="dissolve_members",
     )
-    result_gdf = _filter_buildings_by_area_and_class(gdf, options)
+    result_gdf = alg._filter_buildings_by_area_and_class(gdf)
 
     assert len(result_gdf) == expected_count
 
@@ -313,19 +271,19 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
     ("input_gdf", "building_class_column", "unique_key_column", "expected_gdf"),
     [
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "class": ["A"]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             "class",
             "id",
-            gpd.GeoDataFrame(
-                {"id": [1], "class": ["A"], "dissolve_members": [None]},
+            GeoDataFrame(
+                {"id": [1], "class": ["A"], "old_ids": [(1,)]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [2, 1], "class": ["A", "A"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -334,13 +292,13 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             ),
             "class",
             "id",
-            gpd.GeoDataFrame(
-                {"id": [1], "class": ["A"], "dissolve_members": [["1", "2"]]},
+            GeoDataFrame(
+                {"id": [1], "class": ["A"], "old_ids": [(2, 1)]},
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1, 2], "class": ["A", "B"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -349,8 +307,8 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             ),
             "class",
             "id",
-            gpd.GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "B"], "dissolve_members": [None, None]},
+            GeoDataFrame(
+                {"id": [1, 2], "class": ["A", "B"], "old_ids": [(1,), (2,)]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(1.0001, 0), (2, 0), (2, 1), (1.0001, 1)]),
@@ -358,13 +316,13 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             ),
         ),
         (
-            gpd.GeoDataFrame(columns=["id", "class"], geometry=[]),
+            GeoDataFrame(columns=["id", "class"], geometry=[]),
             "class",
             "id",
-            gpd.GeoDataFrame(columns=["id", "class"], geometry=[]),
+            GeoDataFrame(columns=["id", "class"], geometry=[]),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1, 2], "class": ["A", "A"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -373,8 +331,8 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             ),
             "class",
             "id",
-            gpd.GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "A"], "dissolve_members": [None, None]},
+            GeoDataFrame(
+                {"id": [1, 2], "class": ["A", "A"], "old_ids": [(1,), (2,)]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(5, 5), (6, 5), (6, 6), (5, 6)]),
@@ -391,13 +349,17 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
     ],
 )
 def test_dissolve_touching_buildings(
-    input_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
     building_class_column: str,
     unique_key_column: str,
-    expected_gdf: gpd.GeoDataFrame,
+    expected_gdf: GeoDataFrame,
 ):
-    result_gdf = _dissolve_touching_buildings(
-        input_gdf.copy(), building_class_column, unique_key_column
+    input_gdf = input_gdf.set_index("id")
+    expected_gdf = expected_gdf.set_index("id")
+    result_gdf = GeneralizeBuildings(
+        building_class_column=building_class_column,
+    )._dissolve_touching_buildings(
+        input_gdf.copy(),
     )
 
     result_sorted = result_gdf.sort_values(unique_key_column).reset_index(drop=True)
@@ -418,21 +380,25 @@ def test_dissolve_touching_buildings(
 
 
 def test_simplify_buildings_calls_cartagen_function_correctly(mocker: "MockerFixture"):
-    input_gdf = gpd.GeoDataFrame(
+    input_gdf = GeoDataFrame(
         {"id": [1, 2], "class": ["A", "A"], "dissolve_members": [None, None]},
         geometry=[
             Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
             Polygon([(5, 5), (6, 5), (6, 6), (5, 6)]),
         ],
     )
+    # TODO: this requires not importing the simplify_building function
+    # directly, instead requiring to import the buildings module in
+    # generalize_buildings.py. Ideally this test should be refactored so that
+    # the direct import can be used.
     spy_simplify_building = mocker.spy(buildings, "simplify_building")
-    _simplify_buildings(input_gdf, 3)
+    GeneralizeBuildings._simplify_buildings(input_gdf, 3)
 
     assert spy_simplify_building.call_count == 2
 
 
 def test_simplify_buildings_raises_on_invalid_geometry():
-    invalid_gdf = gpd.GeoDataFrame(
+    invalid_gdf = GeoDataFrame(
         {"id": [1, 2, 3], "class": ["A", "B", "C"]},
         geometry=[
             Point(0, 0),
@@ -447,4 +413,4 @@ def test_simplify_buildings_raises_on_invalid_geometry():
             "Simplify buildings only supports Polygon or MultiPolygon geometries."
         ),
     ):
-        _simplify_buildings(invalid_gdf, 5.0)
+        GeneralizeBuildings._simplify_buildings(invalid_gdf, 5.0)
