@@ -15,8 +15,6 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
-from geogenalg.application.generalize_cliffs import GeneralizeCliffs
-
 try:
     import typer
 except ImportError:
@@ -30,6 +28,8 @@ from geopandas import GeoDataFrame, read_file
 from pandas import Series, concat
 
 from geogenalg.application import BaseAlgorithm
+from geogenalg.application.generalize_buildings import GeneralizeBuildings
+from geogenalg.application.generalize_cliffs import GeneralizeCliffs
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
@@ -328,6 +328,7 @@ def build_app() -> None:
         "watercourse_areas": GeneralizeWaterCourseAreas,
         "cliffs": GeneralizeCliffs,
         "roads": GeneralizeRoads,
+        "buildings": GeneralizeBuildings,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -374,7 +375,10 @@ def build_app() -> None:
 
         # This should include any parameter types which are unnecessary/too
         # complex to support entering in the CLI.
-        ignored_types_for_cli = (dict[str, Callable[[Series], Any] | str] | None,)
+        ignored_types_for_cli = (
+            dict[str, Callable[[Series], Any] | str] | None,
+            list[int | str] | None,
+        )
         argspec = getfullargspec(alg)
 
         fields = argspec.args
