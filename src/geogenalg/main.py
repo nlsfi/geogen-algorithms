@@ -15,6 +15,8 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
+from geogenalg.application.generalize_buildings import GeneralizeBuildings
+
 try:
     import typer
 except ImportError:
@@ -323,6 +325,7 @@ def build_app() -> None:
         "remove_overlap": RemoveOverlap,
         "keep_intersection": KeepIntersection,
         "watercourse_areas": GeneralizeWaterCourseAreas,
+        "buildings": GeneralizeBuildings,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -369,7 +372,10 @@ def build_app() -> None:
 
         # This should include any parameter types which are unnecessary/too
         # complex to support entering in the CLI.
-        ignored_types_for_cli = (dict[str, Callable[[Series], Any] | str] | None,)
+        ignored_types_for_cli = (
+            dict[str, Callable[[Series], Any] | str] | None,
+            list[int | str] | None,
+        )
         argspec = getfullargspec(alg)
 
         fields = argspec.args
