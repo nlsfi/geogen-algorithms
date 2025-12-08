@@ -7,14 +7,15 @@
 
 from hashlib import sha256
 
+from geopandas import GeoDataFrame
 from pandas import DataFrame, Index
 from pandas.api.types import is_string_dtype
 
 
 def hash_duplicate_indexes(
-    data: DataFrame,
+    data: GeoDataFrame,
     hash_prefix: str,
-) -> DataFrame:
+) -> GeoDataFrame:
     """Change any duplicate indexes to a hash value.
 
     It is required that the input has a string index.
@@ -94,7 +95,7 @@ def hash_index_from_old_ids(
 
     """
     if not is_string_dtype(data.index):
-        msg = "GeoDataFrame must have a string index."
+        msg = "DataFrame must have a string index."
         raise ValueError(msg)
 
     gdf = data.copy()
