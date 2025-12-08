@@ -8,7 +8,7 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-import geopandas as gpd
+from geopandas import GeoDataFrame
 from shapely.geometry import MultiPolygon, Polygon
 
 if TYPE_CHECKING:
@@ -19,8 +19,8 @@ from geogenalg.core.exceptions import GeometryTypeError
 
 
 def remove_disconnected_short_lines(
-    input_gdf: gpd.GeoDataFrame, length_threshold: float
-) -> gpd.GeoDataFrame:
+    input_gdf: GeoDataFrame, length_threshold: float
+) -> GeoDataFrame:
     """Remove short lines from a GeoDataFrame unless they are connected to other lines.
 
     A line is retained if:
@@ -69,9 +69,9 @@ def remove_disconnected_short_lines(
 
 
 def split_polygons_by_point_intersection(
-    polygon_gdf: gpd.GeoDataFrame,
-    point_gdf: gpd.GeoDataFrame,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    polygon_gdf: GeoDataFrame,
+    point_gdf: GeoDataFrame,
+) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Split polygons into two GeoDataFrames based on whether they contain any point.
 
     Args:
@@ -90,15 +90,15 @@ def split_polygons_by_point_intersection(
         lambda poly: point_gdf.geometry.intersects(poly).any()
     )
 
-    polygons_with_point: gpd.GeoDataFrame = polygon_gdf[polygons_intersecting_point]
-    polygons_without_point: gpd.GeoDataFrame = polygon_gdf[~polygons_intersecting_point]
+    polygons_with_point: GeoDataFrame = polygon_gdf[polygons_intersecting_point]
+    polygons_without_point: GeoDataFrame = polygon_gdf[~polygons_intersecting_point]
 
     return polygons_with_point, polygons_without_point
 
 
 def remove_parts_of_lines_on_polygon_edges(
-    lines_gdf: gpd.GeoDataFrame, polygons_gdf: gpd.GeoDataFrame
-) -> gpd.GeoDataFrame:
+    lines_gdf: GeoDataFrame, polygons_gdf: GeoDataFrame
+) -> GeoDataFrame:
     """Remove line parts that lie exactly on the edges of the given polygons.
 
     Args:
@@ -126,8 +126,8 @@ def remove_parts_of_lines_on_polygon_edges(
 
 
 def remove_large_polygons(
-    input_gdf: gpd.GeoDataFrame, area_threshold: float
-) -> gpd.GeoDataFrame:
+    input_gdf: GeoDataFrame, area_threshold: float
+) -> GeoDataFrame:
     """Remove polygons from a GeoDataFrame whose area exceeds the given threshold.
 
     Args:
@@ -145,8 +145,8 @@ def remove_large_polygons(
 
 
 def remove_small_polygons(
-    polygons_gdf: gpd.GeoDataFrame, area_threshold: float
-) -> gpd.GeoDataFrame:
+    polygons_gdf: GeoDataFrame, area_threshold: float
+) -> GeoDataFrame:
     """Remove polygons smaller than a minimum area threshold.
 
     Args:
@@ -183,9 +183,7 @@ def remove_small_polygons(
     return gdf.loc[mask].copy()
 
 
-def remove_small_holes(
-    input_gdf: gpd.GeoDataFrame, hole_threshold: float
-) -> gpd.GeoDataFrame:
+def remove_small_holes(input_gdf: GeoDataFrame, hole_threshold: float) -> GeoDataFrame:
     """Remove too small polygon holes.
 
     Args:
@@ -234,12 +232,11 @@ def remove_small_holes(
 
 
 def reduce_nearby_points_by_selecting(
-    input_points_gdf: gpd.GeoDataFrame,
-    reference_points_gdf: gpd.GeoDataFrame | None,
+    input_points_gdf: GeoDataFrame,
+    reference_points_gdf: GeoDataFrame | None,
     distance_threshold: float,
     priority_column: str,
-    unique_key_column: str,
-) -> gpd.GeoDataFrame:
+) -> GeoDataFrame:
     """Reduce nearby points by keeping the higher-priority point within a threshold.
 
     Args:
@@ -249,8 +246,6 @@ def reduce_nearby_points_by_selecting(
               priority comparison. If None, the same GeoDataFrame as input gdf is used.
         distance_threshold: Maximum distance for two points to be considered "too close"
         priority_column: Column name whose higher value determines which point is kept
-        unique_key_column: Column name that uniquely identifies each point and is used
-              to track removals
 
     Returns:
     -------
@@ -278,8 +273,11 @@ def reduce_nearby_points_by_selecting(
     reference_sindex = reference_points_gdf.sindex
     to_remove = set()
 
-    for input_point in input_points_gdf.itertuples():
-        if getattr(input_point, unique_key_column) in to_remove:
+    gdf = input_points_gdf.copy()
+
+    for input_point in gdf.itertuples():
+        input_point_index = input_point.Index
+        if input_point_index in to_remove:
             continue
 
         possible_matches_idx = list(
@@ -287,16 +285,11 @@ def reduce_nearby_points_by_selecting(
                 input_point.geometry.buffer(distance_threshold).bounds
             )
         )
-        possible_matches: gpd.GeoDataFrame = reference_points_gdf.iloc[
-            possible_matches_idx
-        ]
+        possible_matches: GeoDataFrame = reference_points_gdf.iloc[possible_matches_idx]
 
         for other_point in possible_matches.itertuples():
-            if (
-                getattr(other_point, unique_key_column)
-                == getattr(input_point, unique_key_column)
-                or getattr(other_point, unique_key_column) in to_remove
-            ):
+            other_point_index = other_point.Index
+            if other_point_index == input_point_index or other_point_index in to_remove:
                 continue
 
             distance = input_point.geometry.distance(other_point.geometry)
@@ -304,7 +297,7 @@ def reduce_nearby_points_by_selecting(
             if distance < distance_threshold and (
                 getattr(input_point, priority_column)
             ) <= getattr(other_point, priority_column):
-                to_remove.add(getattr(input_point, unique_key_column))
+                to_remove.add(input_point_index)
                 break
 
-    return input_points_gdf.loc[~input_points_gdf[unique_key_column].isin(to_remove)]
+    return gdf.loc[~gdf.index.isin(to_remove)]

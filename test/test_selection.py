@@ -585,13 +585,16 @@ def test_reduce_nearby_points_selects_points_correctly(
     distance_threshold: float,
     expected_gdf: gpd.GeoDataFrame,
 ):
+    input_gdf = input_gdf.set_index("id")
+
     result_gdf = reduce_nearby_points_by_selecting(
         input_gdf,
         reference_gdf,
         distance_threshold,
         priority_column="priority",
-        unique_key_column="id",
     )
+
+    expected_gdf = expected_gdf.set_index("id")
 
     result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
     expected_sorted = expected_gdf.sort_values("id").reset_index(drop=True)
@@ -622,7 +625,7 @@ def test_reduce_nearby_points_by_selecting_raises_on_invalid_geometry():
             "reduce_nearby_points_by_selecting only supports Point geometries."
         ),
     ):
-        reduce_nearby_points_by_selecting(invalid_gdf, None, 2.0, "priority", "id")
+        reduce_nearby_points_by_selecting(invalid_gdf, None, 2.0, "priority")
 
 
 def test_remove_small_polygons_a():  # test A - simple case of a few different-sized squares
