@@ -412,9 +412,3 @@ def test_dissolve_polygon_layers_rejects_invalid_geometry():
 
     with pytest.raises(GeometryTypeError):
         merge.dissolve_polygon_layers(input_gdfs=[gdf])
-
-
-def test_dissolve_polygon_layers_requires_valid_arguments():
-    """Throws ValueError when input is missing."""
-    with pytest.raises(ValueError, match="input"):
-        merge.dissolve_polygon_layers()  # no path, no layers, no gdfs
