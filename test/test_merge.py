@@ -411,4 +411,4 @@ def test_dissolve_polygon_layers_rejects_invalid_geometry():
     gdf = gpd.GeoDataFrame(geometry=[point], crs="EPSG:3067")
 
     with pytest.raises(GeometryTypeError):
-        merge.dissolve_polygon_layers(input_gdfs=[gdf])
+        dissolve_polygon_layers(input_gdfs=[gdf])
