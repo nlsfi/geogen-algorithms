@@ -7,6 +7,7 @@
 
 from collections.abc import Callable
 from enum import Enum
+from math import atan2, degrees, pi, sqrt
 from statistics import mean
 from typing import NamedTuple
 
@@ -23,6 +24,7 @@ from shapely import (
     Point,
     Polygon,
     area,
+    count_coordinates,
     force_2d,
     get_coordinates,
     length,
@@ -967,3 +969,48 @@ def remove_line_segments_at_wide_sections(
         return MultiLineString()
 
     return result
+
+
+def segment_direction(segment: LineString) -> float:
+    """Calculate the direction of a two-point LineString relative to north.
+
+    Calculation is done in the Cartesian plane.
+
+    The input geometry must be a segment, i.e. a LineString consisting
+    of two vertexes.
+
+    Returns:
+    -------
+        The calculated direction in degrees.
+
+    Raises:
+    ------
+        GeometryOperationError: If geometry does not have exactly two vertexes,
+            or has two identical vertexes.
+
+    Note:
+    ----
+        If you want to compare the direction of two segments you may want to
+        normalize them first, because although segments appear similarly
+        oriented, they may have differently ordered vertexes, resulting in a
+        significantly different result.
+
+    """
+    if count_coordinates(segment) != 2:  # noqa: PLR2004
+        msg = "Input geometry must have two vertexes"
+        raise GeometryOperationError(msg)
+
+    dx = segment.coords[0][0] - segment.coords[1][0]
+    dy = segment.coords[0][1] - segment.coords[1][1]
+
+    if dx == 0 and dy == 0:
+        msg = "Segment has duplicate vertexes."
+        raise GeometryOperationError(msg)
+
+    m = sqrt(dx**2 + dy**2)
+    direction = atan2(dx / m, dy / m)
+
+    if direction < 0:
+        return degrees(direction + 2 * pi)
+
+    return degrees(direction)
