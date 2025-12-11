@@ -397,7 +397,7 @@ def test_dissolve_polygon_layers_with_valid_input():
     gdf1 = GeoDataFrame(geometry=[poly1], crs="EPSG:3067")
     gdf2 = GeoDataFrame(geometry=[poly2], crs="EPSG:3067")
 
-    result = merge.dissolve_polygon_layers(input_gdfs=[gdf1, gdf2])
+    result = dissolve_polygon_layers(input_gdfs=[gdf1, gdf2])
 
     assert len(result) == 1
     assert result.geometry.iloc[0].is_valid
