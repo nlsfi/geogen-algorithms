@@ -212,7 +212,7 @@ def dissolve_polygon_layers(input_gdfs: list[GeoDataFrame]) -> GeoDataFrame:
     """
     # Combine all layers
     combined = concat(input_gdfs, ignore_index=True)
-    combined = gpd.GeoDataFrame(combined, crs=landcover_gdfs[0].crs)
+    combined = GeoDataFrame(combined, crs=landcover_gdfs[0].crs)
 
     # Validate geometry type
     if not check_gdf_geometry_type(combined, ["Polygon", "MultiPolygon"]):
