@@ -48,7 +48,6 @@ def test_clusters_to_centroids(testdata_path: Path):
 
     temp_dir = tempfile.TemporaryDirectory()
     output_geopackage_uri = f"{temp_dir.name}/output.gpkg"
-
     result = runner.invoke(
         app,
         [
