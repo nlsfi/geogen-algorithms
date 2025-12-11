@@ -6,6 +6,7 @@
 #  LICENSE file in the root directory of this source tree.
 
 import math
+import re
 from collections.abc import Callable
 
 import pytest
@@ -26,6 +27,7 @@ from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Pol
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 
 from geogenalg.core.exceptions import (
+    GeometryOperationError,
     GeometryTypeError,
 )
 from geogenalg.core.geometry import (
@@ -50,6 +52,7 @@ from geogenalg.core.geometry import (
     remove_line_segments_at_wide_sections,
     remove_small_parts,
     scale_line_to_length,
+    segment_direction,
 )
 
 
@@ -1417,3 +1420,91 @@ def test_remove_line_segments_at_wide_sections(
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("geom", "expected"),
+    [
+        (
+            LineString([[1, 0], [0, 0]]),
+            90.0,
+        ),
+        (
+            LineString([[1, 1], [0, 0]]),
+            45.0,
+        ),
+        (
+            LineString([[0, 1], [0, 0]]),
+            0.0,
+        ),
+        (
+            LineString([[-1, 1], [0, 0]]),
+            315.0,
+        ),
+        (
+            LineString([[-1, 0], [0, 0]]),
+            270.0,
+        ),
+        (
+            LineString([[-1, -1], [0, 0]]),
+            225.0,
+        ),
+        (
+            LineString([[0, -1], [0, 0]]),
+            180.0,
+        ),
+        (
+            LineString([[1, -1], [0, 0]]),
+            135.0,
+        ),
+        (
+            LineString([[600, 500], [500, 500]]),
+            90.0,
+        ),
+        (
+            LineString([[600, 500, 100], [500, 500, 24]]),
+            90.0,
+        ),
+    ],
+    ids=[
+        "90 degrees",
+        "45 degrees",
+        "0 degrees",
+        "315 degrees",
+        "270 degrees",
+        "215 degrees",
+        "180 degrees",
+        "135 degrees",
+        "90 degrees, different location and scale",
+        "segment with Z",
+    ],
+)
+def test_segment_direction(geom: LineString, expected: float):
+    assert segment_direction(geom) == expected
+
+
+@pytest.mark.parametrize(
+    ("geom", "msg"),
+    [
+        (
+            LineString([[1, 0], [0, 0], [-1, 0]]),
+            "Input geometry must have two vertexes",
+        ),
+        (
+            LineString(),
+            "Input geometry must have two vertexes",
+        ),
+        (
+            LineString([[0, 0], [0, 0]]),
+            "Segment has duplicate vertexes.",
+        ),
+    ],
+    ids=[
+        "empty",
+        "three vertices",
+        "duplicate",
+    ],
+)
+def test_segment_direction_raises(geom: LineString, msg: str):
+    with pytest.raises(GeometryOperationError, match=re.escape(msg)):
+        segment_direction(geom)
