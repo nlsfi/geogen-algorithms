@@ -42,10 +42,6 @@ def geopackage_uri(value: str) -> GeoPackageURI:
         Parsed GeoPackage URI. If layer name could not be parsed, it will be
         None.
 
-    Raises:
-    ------
-        BadParameter: if string is incorrectly formatted
-
     """
     uri = GeoPackageURI(value, None)
 
