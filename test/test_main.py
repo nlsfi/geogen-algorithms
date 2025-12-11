@@ -8,8 +8,6 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-import typer
 from geopandas import read_file
 from geopandas.testing import assert_geodataframe_equal
 from typer.testing import CliRunner
