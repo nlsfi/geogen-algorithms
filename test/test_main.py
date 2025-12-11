@@ -50,6 +50,12 @@ runner = CliRunner()
 def test_geopackage_uri(input_string: str, expected: GeoPackageURI):
     assert geopackage_uri(input_string) == expected
 
+    with pytest.raises(typer.BadParameter, match="Incorrectly formatted GeoPackageURI"):
+        assert (
+            geopackage_uri("/path/to/geopackage.gpkg||layer").file
+            == "/path/to/geopackage.gpkg"
+        )
+
 
 @pytest.mark.parametrize(
     ("input_string"),

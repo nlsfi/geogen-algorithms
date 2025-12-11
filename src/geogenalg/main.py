@@ -95,6 +95,9 @@ def geopackage_uri(value: str) -> GeoPackageURI:
 
     stripped = value.strip("\"'")
 
+    if "|" in stripped:
+        split = stripped.split("|")
+        if len(split) != expected_split_parts:
     accepted_file_layer_delimiters = ("|", "@")
 
     if all(delimiter in stripped for delimiter in accepted_file_layer_delimiters):

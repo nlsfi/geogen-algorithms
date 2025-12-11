@@ -219,6 +219,34 @@ def _merge_dissolve_members_column(
     representative_polygon_gdf[dissolve_members_column] = [all_dissolve_members]
 
 
+def dissolve_polygon_layers(input_gdfs: list[GeoDataFrame]) -> GeoDataFrame:
+    """Append and dissolve multiple polygon layers into one.
+
+    Args:
+        input_gdfs: List of GeoDataFrames to merge directly.
+
+    Returns:
+        GeoDataFrame containing dissolved polygon geometries (geometry only).
+
+    Raises:
+        GeometryTypeError: If input data is not Polygons or MultiPolygons.
+
+    """
+    # Combine all layers
+    combined = concat(input_gdfs, ignore_index=True)
+    combined = GeoDataFrame(combined, crs=landcover_gdfs[0].crs)
+
+    # Validate geometry type
+    if not check_gdf_geometry_type(combined, ["Polygon", "MultiPolygon"]):
+        error_msg_2 = "Only Polygon or MultiPolygon geometries are supported."
+        raise GeometryTypeError(error_msg_2)
+
+    # Clean geometries and dissolve (remove duplicates / internal borders)
+    combined.geometry = combined.buffer(0)
+    dissolved = combined.dissolve().explode(index_parts=True, ignore_index=True)
+
+    # Return geometry-only GeoDataFrame
+    return dissolved[[dissolved.geometry.name]].set_geometry(dissolved.geometry.name)
 def buffer_and_merge_polygons(
     input_gdf: GeoDataFrame, buffer_distance: float
 ) -> GeoDataFrame:
