@@ -56,8 +56,6 @@ def geopackage_uri(value: str) -> GeoPackageURI:
     if "|" in stripped:
         split = stripped.split("|")
         if len(split) != expected_split_parts:
-            msg = "Incorrectly formatted GeoPackageURI"
-            raise typer.BadParameter(msg)
 
         file = split[0]
         layer_name = split[1]
