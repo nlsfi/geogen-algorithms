@@ -408,7 +408,7 @@ def test_dissolve_polygon_layers_rejects_invalid_geometry():
     """Fails when input contains non-polygon geometries."""
 
     point = Point(0, 0)
-    gdf = gpd.GeoDataFrame(geometry=[point], crs="EPSG:3067")
+    gdf = GeoDataFrame(geometry=[point], crs="EPSG:3067")
 
     with pytest.raises(GeometryTypeError):
         dissolve_polygon_layers(input_gdfs=[gdf])
