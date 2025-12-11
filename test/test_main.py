@@ -51,8 +51,6 @@ def test_clusters_to_centroids(testdata_path: Path):
     result = runner.invoke(
         app,
         [
-            # TODO: uncomment? after a new command is added to CLI
-            # "clusters-to-centroids",
             input_geopackage_uri,
             output_geopackage_uri,
             "--unique-id-column=kmtk_id",
