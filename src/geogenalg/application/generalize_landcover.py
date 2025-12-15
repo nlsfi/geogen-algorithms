@@ -11,7 +11,7 @@ from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
 
 from geogenalg.application import BaseAlgorithm
-from geogenalg.attributes import inherit_attributes
+from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.selection import remove_small_holes, remove_small_polygons
@@ -39,8 +39,10 @@ class GeneralizeLandcover(BaseAlgorithm):
     - Removes holes with area under given `hole_threshold`
     """
 
-    buffer_constant: float = 10.0
-    """Constant used for buffering polygons."""
+    positive_buffer: float = 10.0
+    """Buffer to close narrow gaps."""
+    negative_buffer: float = -10.0
+    """Negative buffer to remove narrow parts."""
     simplification_tolerance: float = 5.0
     """Tolerance used for geometry simplification."""
     area_threshold: float = 2500.0
@@ -66,15 +68,18 @@ class GeneralizeLandcover(BaseAlgorithm):
                 distance, cap_style="square", join_style="bevel"
             )
 
-        # Create a buffer of size buffer_constant to close narrow gaps between polygons
-        _buffer(result_gdf, self.buffer_constant)
+        # Create a buffer of size positive_buffer to close narrow gaps between polygons
+        _buffer(result_gdf, self.positive_buffer)
         result_gdf = result_gdf.dissolve(as_index=False)
 
-        # Create a double negative buffer to remove narrow polygon parts
-        _buffer(result_gdf, -2 * self.buffer_constant)
+        # Create a negative buffer to restore polygons back to their original size and
+        # remove narrow polygon parts
+        negative_buffer = -abs(self.negative_buffer)
+        total_negative_buffer = negative_buffer - self.positive_buffer
+        _buffer(result_gdf, total_negative_buffer)
 
         # Restore polygons to their original size with a positive buffer
-        _buffer(result_gdf, self.buffer_constant)
+        _buffer(result_gdf, -negative_buffer)
 
         result_gdf = result_gdf.dissolve(as_index=False)
         result_gdf = result_gdf.explode(index_parts=False)
@@ -97,5 +102,5 @@ class GeneralizeLandcover(BaseAlgorithm):
         # Assign nearst z values from source gdf
         result_gdf = assign_nearest_z(data, result_gdf)
 
-        # Inherit attributes from source gdf
-        return inherit_attributes(data, result_gdf)
+        # Inherit attributes from the largest intersecting source object
+        return inherit_attributes_from_largest(data, result_gdf)

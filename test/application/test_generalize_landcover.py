@@ -37,7 +37,8 @@ def test_generalize_landcover_50k(
     output_path = Path(temp_dir.name) / "generalized_marshes.gpkg"
 
     algorithm = GeneralizeLandcover(
-        buffer_constant=20,
+        positive_buffer=20,
+        negative_buffer=-20,
         simplification_tolerance=30,
         area_threshold=7500,
         hole_threshold=5000,
@@ -49,7 +50,7 @@ def test_generalize_landcover_50k(
     )
 
     control_marshes: GeoDataFrame = read_gdf_from_file_and_set_index(
-        input_path, UNIQUE_ID_COLUMN, layer="generalized_marshes"
+        input_path, "index", layer="generalized_marshes"
     )
 
     control_marshes = control_marshes.sort_values("geometry").reset_index(drop=True)
@@ -67,7 +68,8 @@ def test_generalize_landcover_invalid_geometry_type() -> None:
     gdf = GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
 
     algorithm = GeneralizeLandcover(
-        buffer_constant=20,
+        positive_buffer=20,
+        negative_buffer=-20,
         simplification_tolerance=30,
         area_threshold=7500,
         hole_threshold=5000,
