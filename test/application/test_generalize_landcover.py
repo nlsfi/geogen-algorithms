@@ -26,7 +26,7 @@ def test_generalize_landcover_50k(
     """
     Test generalizing landcover with cultivated land class
     """
-    input_path = testdata_path / "marshes_small_area.gpkg"
+    input_path = testdata_path / "marshes_small_area_v2.gpkg"
     input_data = read_gdf_from_file_and_set_index(
         input_path,
         UNIQUE_ID_COLUMN,
