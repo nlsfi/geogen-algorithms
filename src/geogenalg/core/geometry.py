@@ -1002,3 +1002,32 @@ def remove_close_line_segments(
     result = lines.copy()
     result.geometry = lines.difference(reference_lines.buffer(buffer_size).union_all())
     return result.loc[~result.geometry.is_empty & result.geometry.notna()]
+
+
+def remove_short_lines(lines: GeoDataFrame, length_threshold: float) -> GeoDataFrame:
+    """Remove short line features.
+
+    Removes all lines that are shorter than the given length
+    threshold value.
+
+    Args:
+    ----
+        lines: GeoDataFrame with lines to process.
+        length_threshold: Threshold that determines too short lines.
+
+    Returns:
+    -------
+        Remaining lines.
+
+    Raises:
+    ------
+        GeometryTypeError: If input lines or reference lines contain other
+            than line geometries.
+
+    """
+    if not check_gdf_geometry_type(lines, ["LineString", "MultiLineString"]):
+        msg = "remove_short_lines expects only line geometries."
+        raise GeometryTypeError(msg)
+
+    result = lines.copy()
+    return result.loc[result.geometry.length >= length_threshold]
