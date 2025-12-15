@@ -47,6 +47,7 @@ from geogenalg.core.geometry import (
     move_to_point,
     oriented_envelope_dimensions,
     perforate_polygon_with_gdf_exteriors,
+    remove_close_line_segments,
     remove_line_segments_at_wide_sections,
     remove_small_parts,
     scale_line_to_length,
@@ -1358,3 +1359,44 @@ def test_remove_line_segments_at_wide_sections(
         )
         == expected
     )
+
+
+def test_remove_close_line_segments():
+    lines = GeoDataFrame(
+        geometry=[
+            LineString([(1, 0), (1, 1)]),  # removed
+            LineString([(0, 2), (5, 2)]),  # preserved
+            LineString([(0, 3), (2, 1), (3, 1), (5, 3)]),  # partly preserved
+        ],
+        index=["0", "1", "2"],
+    )
+    reference_line = GeoDataFrame(geometry=[LineString([(0, 0), (10, 0)])])
+
+    result = remove_close_line_segments(lines, reference_line, 1.5)
+
+    assert list(result.index) == ["1", "2"]
+
+    # Unchanged
+    assert result.loc["1", "geometry"].equals(lines.loc["1", "geometry"])
+
+    # Partly cut
+    assert result.loc["2", "geometry"].geom_type == "MultiLineString"
+    assert result.loc["2", "geometry"].length < lines.loc["2", "geometry"].length
+
+
+def test_remove_close_line_segments_invalid_line_geometry_type():
+    with pytest.raises(GeometryTypeError):
+        remove_close_line_segments(
+            lines=GeoDataFrame(geometry=[Point(0.0, 0.0)]),
+            reference_lines=GeoDataFrame(geometry=[LineString([[0, 0], [1, 1]])]),
+            buffer_size=2.0,
+        )
+
+
+def test_remove_close_line_segments_invalid_reference_line_geometry_type():
+    with pytest.raises(GeometryTypeError):
+        remove_close_line_segments(
+            lines=GeoDataFrame(geometry=[LineString([[0, 0], [1, 1]])]),
+            reference_lines=GeoDataFrame(geometry=[Point(0.0, 0.0)]),
+            buffer_size=2.0,
+        )
