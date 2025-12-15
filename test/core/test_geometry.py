@@ -49,6 +49,7 @@ from geogenalg.core.geometry import (
     perforate_polygon_with_gdf_exteriors,
     remove_close_line_segments,
     remove_line_segments_at_wide_sections,
+    remove_short_lines,
     remove_small_parts,
     scale_line_to_length,
 )
@@ -1400,3 +1401,25 @@ def test_remove_close_line_segments_invalid_reference_line_geometry_type():
             reference_lines=GeoDataFrame(geometry=[Point(0.0, 0.0)]),
             buffer_size=2.0,
         )
+
+
+def test_remove_short_lines():
+    gdf = GeoDataFrame(
+        geometry=[
+            LineString([(0, 0), (0, 0.9)]),  # length 0.9
+            LineString([(0, 0), (0, 1.0)]),  # length 1.0
+            LineString([(0, 0), (0, 2.0)]),  # length 2.0
+        ],
+        index=["1", "2", "3"],
+    )
+
+    result = remove_short_lines(gdf, length_threshold=1.0)
+
+    assert list(result.index) == ["2", "3"]
+    assert result.loc["2", "geometry"].equals(gdf.loc["2", "geometry"])
+    assert result.loc["3", "geometry"].equals(gdf.loc["3", "geometry"])
+
+
+def test_remove_short_lines_invalid_geometry_type():
+    with pytest.raises(GeometryTypeError):
+        remove_short_lines(GeoDataFrame(geometry=[Point(0, 0)]), length_threshold=1.0)
