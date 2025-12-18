@@ -260,6 +260,25 @@ from geogenalg.split import explode_and_hash_id
                 ],
             ),
         ),
+        (
+            GeoDataFrame(
+                {
+                    "id": ["1"],
+                },
+                geometry=[
+                    MultiPoint([(0, 0)]),
+                ],
+            ),
+            "test",
+            GeoDataFrame(
+                {
+                    "id": ["1"],
+                },
+                geometry=[
+                    Point(0, 0),
+                ],
+            ),
+        ),
     ],
     ids=[
         "no multigeoms, no changes",
@@ -269,6 +288,7 @@ from geogenalg.split import explode_and_hash_id
         "one multipoint, two parts, different prefix",
         "multiline",
         "multipolygon",
+        "multipoint with one part turns to point",
     ],
 )
 def test_explode_and_hash_id(
