@@ -6,11 +6,12 @@
 #  LICENSE file in the root directory of this source tree.
 
 import re
+from typing import Literal
 
 import pytest
 from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
 from numpy.testing import assert_approx_equal
-from pandas.testing import assert_frame_equal
 from shapely import box
 from shapely.geometry import LineString, Point, Polygon
 
@@ -148,21 +149,26 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
 
 
 @pytest.mark.parametrize(
-    (
-        "input_gdf",
-        "expected_gdf",
-    ),
+    ("input_gdf", "expected_gdf", "by_column", "inherit_from"),
     [
+        # 1.
         (
             GeoDataFrame(
                 {"id": [1], "group": ["A"]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             GeoDataFrame(
-                {"id": [1], "group": ["A"], "dissolve_members": [None]},
+                {
+                    "id": [1],
+                    "group": ["A"],
+                    "old_ids": [(1,)],
+                },
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
+            "group",
+            "min_id",
         ),
+        # 2.
         (
             GeoDataFrame(
                 {"id": [2, 1], "group": ["A", "A"]},
@@ -172,10 +178,29 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 ],
             ),
             GeoDataFrame(
-                {"id": [1], "group": ["A"], "dissolve_members": [["1", "2"]]},
-                geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
+                {
+                    "id": [1],
+                    "group": ["A"],
+                    "old_ids": [(2, 1)],
+                },
+                geometry=[
+                    Polygon(
+                        [
+                            (0, 1),
+                            (1, 1),
+                            (2, 1),
+                            (2, 0),
+                            (1, 0),
+                            (0, 0),
+                            (0, 1),
+                        ]
+                    ),
+                ],
             ),
+            "group",
+            "min_id",
         ),
+        # 3.
         (
             GeoDataFrame(
                 {"id": [1, 2], "group": ["A", "B"]},
@@ -185,13 +210,40 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 ],
             ),
             GeoDataFrame(
-                {"id": [1, 2], "group": ["A", "B"], "dissolve_members": [None, None]},
+                {
+                    "id": [1, 2],
+                    "group": ["A", "B"],
+                    "old_ids": [(1,), (2,)],
+                },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(2, 0), (3, 0), (3, 1), (2, 1)]),
                 ],
             ),
+            "group",
+            "min_id",
         ),
+        # 4.
+        (
+            GeoDataFrame(
+                {"id": [1, 2], "group": ["A", "B"]},
+                geometry=[
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "id": [1],
+                    "group": ["A"],
+                    "old_ids": [(1, 2)],
+                },
+                geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
+            ),
+            None,
+            "min_id",
+        ),
+        # 5.
         (
             GeoDataFrame(
                 {"group": ["A", "A"], "id": [1, 2]},
@@ -201,13 +253,20 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                 ],
             ),
             GeoDataFrame(
-                {"group": ["A", "A"], "id": [1, 2], "dissolve_members": [None, None]},
+                {
+                    "group": ["A", "A"],
+                    "id": [1, 2],
+                    "old_ids": [(1,), (2,)],
+                },
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(2, 2), (3, 2), (3, 3), (2, 3)]),
                 ],
             ),
+            "group",
+            "min_id",
         ),
+        # 6.
         (
             GeoDataFrame(
                 {
@@ -226,7 +285,7 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                     "group": ["A", "B"],
                     "id": [1, 3],
                     "name": ["first", "third"],
-                    "dissolve_members": [["1", "2"], None],
+                    "old_ids": [(1, 2), (3,)],
                 },
                 geometry=[
                     Polygon(
@@ -235,140 +294,73 @@ def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
                     Polygon([(1, 1), (3, 1), (3, 3), (1, 3)]),
                 ],
             ),
+            "group",
+            "min_id",
         ),
+        # 7.
         (
             GeoDataFrame(
                 {
-                    "id": [1, 2],
-                    "group": ["A", "A"],
-                    "dissolve_members": [["10", "1"], ["20"]],
-                },
-                geometry=[
-                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-                    Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
-                ],
-            ),
-            GeoDataFrame(
-                {
-                    "id": [1],
-                    "group": ["A"],
-                    "dissolve_members": [["1", "10", "2", "20"]],
-                },
-                geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
-            ),
-        ),
-        (
-            GeoDataFrame(
-                {
+                    "group": ["A", "A", "B"],
                     "id": [1, 2, 3],
-                    "group": ["A", "A", "A"],
-                    "dissolve_members": [None, ["10", "20"], ["3", "30"]],
+                    "name": ["first", "second", "third"],
                 },
                 geometry=[
-                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-                    Polygon([(0.9, 0), (2, 0), (2, 1), (0.9, 1)]),
-                    Polygon([(1.9, 0), (3, 0), (3, 1), (1.9, 1)]),
+                    box(0, 0, 2, 2),
+                    box(1, 1, 4, 4),
+                    box(1, 1, 4, 4),
                 ],
             ),
             GeoDataFrame(
                 {
-                    "id": [1],
-                    "group": ["A"],
-                    "dissolve_members": [["1", "10", "2", "20", "3", "30"]],
-                },
-                geometry=[Polygon([(0, 0), (3, 0), (3, 1), (0, 1)])],
-            ),
-        ),
-        (
-            GeoDataFrame(
-                {
-                    "id": [1, 2, 3, 4],
-                    "group": ["A", "A", "B", "B"],
-                    "dissolve_members": [["100"], None, ["3", "200", "201"], None],
-                },
-                geometry=[
-                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-                    Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
-                    Polygon([(0, 2), (1, 2), (1, 3), (0, 3)]),
-                    Polygon([(1, 2), (2, 2), (2, 3), (1, 3)]),
-                ],
-            ),
-            GeoDataFrame(
-                {
-                    "id": [1, 3],
                     "group": ["A", "B"],
-                    "dissolve_members": [["1", "100", "2"], ["200", "201", "3", "4"]],
+                    "id": [2, 3],
+                    "name": ["second", "third"],
+                    "old_ids": [(2, 1), (3,)],
                 },
                 geometry=[
-                    Polygon([(0, 0), (2, 0), (2, 1), (0, 1)]),
-                    Polygon([(0, 2), (2, 2), (2, 3), (0, 3)]),
+                    Polygon(
+                        [(0, 0), (0, 2), (1, 2), (1, 4), (4, 4), (4, 1), (2, 1), (2, 0)]
+                    ),
+                    Polygon([(4, 1), (1, 1), (1, 4), (4, 4)]),
                 ],
             ),
-        ),
-        (
-            GeoDataFrame(
-                {
-                    "id": [1, 2, 3],
-                    "group": ["A", "A", "A"],
-                    "dissolve_members": [["1", "5"], None, ["3", "50", "789"]],
-                },
-                geometry=[
-                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-                    Polygon([(0.9, 0), (2, 0), (2, 1), (0.9, 1)]),
-                    Polygon([(2.1, 0), (3, 0), (3, 1), (2.1, 1)]),
-                ],
-            ),
-            GeoDataFrame(
-                {
-                    "id": [1, 3],
-                    "group": ["A", "A"],
-                    "dissolve_members": [["1", "2", "5"], ["3", "50", "789"]],
-                },
-                geometry=[
-                    Polygon([(0, 0), (2, 0), (2, 1), (0, 1)]),
-                    Polygon([(2.1, 0), (3, 0), (3, 1), (2.1, 1)]),
-                ],
-            ),
+            "group",
+            "most_intersection",
         ),
     ],
     ids=[
-        "single polygon",
-        "two polygons in same group should dissolve",
-        "two polygons in different groups should not dissolve",
-        "two separate polygons in same group should not dissolve",
-        "three intersecting polygons with extra attributes, two in same group",
-        "polygons already have attribute for dissolve_members",
-        "mixed None and lists in same group",
-        "multiple groups with mixed dissolve_members",
-        "two dissolving geometries and one separate in same group",
+        "single polygon",  # 1.
+        "_two polygons in same group should dissolve",  # 2.
+        "two polygons in different groups should not dissolve",  # 3.
+        "two polygons without group parameter should dissolve",  # 4.
+        "two separate polygons in same group should not dissolve",  # 5.
+        "three intersecting polygons with extra attributes, two in same group",  # 6.
+        "three intersecting polygons with extra attributes, two in same group, inherit from most_intersection",  # 7.
     ],
 )
 def test_dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
     expected_gdf: GeoDataFrame,
+    by_column: str | None,
+    inherit_from: Literal["min_id", "most_intersection"],
 ):
+    input_gdf = input_gdf.set_index("id")
+    expected_gdf = expected_gdf.set_index("id")
+
     result_gdf = dissolve_and_inherit_attributes(
         input_gdf,
-        by_column="group",
-        unique_key_column="id",
-        dissolve_members_column="dissolve_members",
+        by_column,
+        "old_ids",
+        inherit_from,
     )
 
-    result_sorted = result_gdf.sort_values("id").reset_index(drop=True)
-    expected_sorted = expected_gdf.sort_values("id").reset_index(drop=True)
-
-    # Check geometries
-    for result_geom, expected_geom in zip(
-        result_sorted.geometry, expected_sorted.geometry, strict=False
-    ):
-        assert result_geom.equals(expected_geom), (
-            f"Geometries differ: {result_geom} vs {expected_geom}"
-        )
-
-    # Check attributes
-    result_attrs = result_sorted.drop(columns="geometry")
-    expected_attrs = expected_sorted.drop(columns="geometry")
-    assert_frame_equal(result_attrs, expected_attrs)
+    assert_geodataframe_equal(
+        result_gdf,
+        expected_gdf,
+        check_like=True,
+        normalize=True,
+    )
 
 
 def test_dissolve_and_inherit_attributes_handles_empty_gdf_correctly():
@@ -378,8 +370,6 @@ def test_dissolve_and_inherit_attributes_handles_empty_gdf_correctly():
     result_gdf = dissolve_and_inherit_attributes(
         input_gdf,
         by_column="group",
-        unique_key_column="id",
-        dissolve_members_column="dissolve_members",
     )
 
     assert result_gdf.equals(expected_gdf)
@@ -399,9 +389,7 @@ def test_dissolve_and_inherit_attributes_raises_on_non_polygon_geometry():
         GeometryTypeError,
         match=re.escape("Dissolve only supports Polygon or MultiPolygon geometries."),
     ):
-        dissolve_and_inherit_attributes(
-            invalid_gdf, by_column="group", unique_key_column="id"
-        )
+        dissolve_and_inherit_attributes(invalid_gdf, by_column="group")
 
 
 def test_buffer_and_merge_polygons():
