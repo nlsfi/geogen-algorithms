@@ -15,6 +15,8 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
+from geogenalg.application.generalize_cliffs import GeneralizeCliffs
+
 try:
     import typer
 except ImportError:
@@ -323,6 +325,7 @@ def build_app() -> None:
         "remove_overlap": RemoveOverlap,
         "keep_intersection": KeepIntersection,
         "watercourse_areas": GeneralizeWaterCourseAreas,
+        "cliffs": GeneralizeCliffs,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
