@@ -8,6 +8,7 @@
 from collections import defaultdict
 
 import geopandas as gpd
+from pandas import concat
 from shapely.geometry import LineString, MultiLineString, Point
 
 
@@ -106,3 +107,230 @@ def connect_nearby_endpoints(
 
     # Return a new GeoDataFrame containing only the helper lines
     return gpd.GeoDataFrame(geometry=new_lines, crs=input_gdf.crs)
+
+
+def check_line_connections(
+    gdf: gpd.GeoDataFrame,
+    threshold_distance: float,
+    connection_info_column: str = "is_connected",
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """Check the connections of linestrings with respect to lines on the GeoDataFrame.
+
+    Args:
+    ----
+    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+
+    threshold_distance (float): the max gap allowed for lines to
+    be considered connected.
+
+    connection_info_column (str): name of the attribute column where the info
+    about connectedness is stored as a boolean
+
+    Returns:
+    -------
+    A GeoDataframe of lines with an attribute that indicate the
+    connectedness with respect to the linestrings in the input
+    GeoDataFrame.
+
+    """
+    results = []
+
+    for idx, row in gdf.iterrows():
+        line = row.geometry
+
+        first_point = Point(line.coords[0])
+        last_point = Point(line.coords[-1])
+
+        # Create buffers at the first and last points
+        first_buffer = first_point.buffer(threshold_distance)
+        last_buffer = last_point.buffer(threshold_distance)
+
+        # Check for intersections with other lines
+        other_lines = gdf[gdf.index != idx]  # Exclude the current line
+        first_intersects = other_lines.intersects(first_buffer).any()
+        last_intersects = other_lines.intersects(last_buffer).any()
+
+        # Record whether the line is connected at either end
+        results.append(first_intersects or last_intersects)
+
+    gdf[connection_info_column] = results
+    connected_lines = gdf.loc[
+        gdf[connection_info_column] == True  # noqa: E712
+    ]
+    unconnected_lines = gdf.loc[
+        gdf[connection_info_column] == False  # noqa: E712
+    ]
+    return connected_lines, unconnected_lines
+
+
+def check_reference_line_connections(  # noqa: SC200
+    gdf: gpd.GeoDataFrame,
+    threshold_distance: float,
+    reference_gdf_list: list[gpd.GeoDataFrame],
+    connection_info_column: str = "is_connected",
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """Check the connections of linestrings with respect to lines on the GeoDataFrame.
+
+    Args:
+    ----
+    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+
+    threshold_distance (float): the max gap allowed for lines to
+    be considered connected.
+
+    reference_gdf_list (list): list of reference GeoDataFrames to which the
+
+    connection_info_column (str): name of the attribute column where the info
+    about connectedness is stored as a boolean
+
+    Returns:
+    -------
+    A GeoDataframe of lines with an attribute that indicate the
+    connectedness with respect to the linestrings in the input
+    GeoDataFrame.
+
+    """
+    results = []
+    other_lines = concat(reference_gdf_list)
+    other_lines = gpd.GeoDataFrame(other_lines)
+
+    for _idx, row in gdf.iterrows():
+        line = row.geometry
+
+        # Extract first and last points of the line
+        first_point = Point(line.coords[0])
+        last_point = Point(line.coords[-1])
+
+        # Create buffers around the first and last points
+        first_buffer = first_point.buffer(threshold_distance)
+        last_buffer = last_point.buffer(threshold_distance)
+
+        # Check for intersections with other lines
+        first_intersects = other_lines.intersects(first_buffer).any()
+        last_intersects = other_lines.intersects(last_buffer).any()
+
+        results.append(first_intersects or last_intersects)
+
+    gdf[connection_info_column] = results
+
+    connected_lines = gdf.loc[
+        gdf[connection_info_column] == True  # noqa: E712
+    ]
+    unconnected_lines = gdf.loc[
+        gdf[connection_info_column] == False  # noqa: E712
+    ]
+
+    return connected_lines, unconnected_lines
+
+
+def detect_dead_ends(
+    gdf: gpd.GeoDataFrame,
+    threshold_distance: float,
+    dead_end_info_column: str = "dead_end",
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """Check the connections of linestrings with respect to lines on the GeoDataFrame.
+
+    Args:
+    ----
+    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+
+    threshold_distance (float): the max gap allowed for lines to
+    be considered connected.
+
+    dead_end_info_column (str): Column name for the dead end information.
+
+    Returns:
+    -------
+    A GeoDataframe of lines with an attribute that indicate the
+    connectedness with respect to the linestrings in the input
+    GeoDataFrame.
+
+    """
+    dead_ends = []
+    first_point_connected = []
+    last_point_connected = []
+
+    for idx, row in gdf.iterrows():
+        line = row.geometry
+
+        first_point = Point(line.coords[0])
+        last_point = Point(line.coords[-1])
+
+        first_buffer = first_point.buffer(threshold_distance)
+        last_buffer = last_point.buffer(threshold_distance)
+
+        # Check for intersections with other lines
+        other_lines = gdf[gdf.index != idx]  # Exclude the current line
+        first_intersects = other_lines.intersects(first_buffer).any()
+        last_intersects = other_lines.intersects(last_buffer).any()
+
+        dead_ends.append(first_intersects ^ last_intersects)
+        first_point_connected.append(first_intersects)
+        last_point_connected.append(last_intersects)
+
+    # Add the results to the GeoDataFrame as a new column
+    gdf[dead_end_info_column] = dead_ends
+    gdf["first_intersects"] = first_point_connected
+    gdf["last_intersects"] = last_point_connected
+    normal_roads = gdf.loc[
+        gdf[dead_end_info_column] == False  # noqa: E712
+    ]
+    dead_end_roads = gdf.loc[
+        gdf[dead_end_info_column] == True  # noqa: E712
+    ]
+
+    return normal_roads, dead_end_roads
+
+
+def inspect_dead_end_candidates(
+    gdf: gpd.GeoDataFrame,
+    threshold_distance: float,
+    reference_gdf_list: list[gpd.GeoDataFrame],
+    dead_end_conn_info_column: str = "dead_end_connects_to_ref_gdf",
+) -> gpd.GeoDataFrame:
+    """Check the connections of linestrings with respect to lines on the GeoDataFrame.
+
+    Args:
+    ----
+    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+
+    threshold_distance (float): the max gap allowed for lines to
+    be considered connected.
+
+    reference_gdf_list (list): list of reference GeoDataFrames to which the input
+    GeoDataFrame is compared for connections.
+
+    dead_end_conn_info_column (str): name of the column where the connectedness of
+    dead end linestrings are stored
+
+    Returns:
+    -------
+    A GeoDataframe of lines with an attribute that indicate the
+    connectedness with respect to the linestrings in the input
+    GeoDataFrame.
+
+    """
+    new_connection = []
+    other_lines = gpd.GeoDataFrame(concat(reference_gdf_list))
+    gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
+
+    for _idx, row in gdf.iterrows():
+        line = row.geometry
+
+        # Extract first and last points of the line
+        if row["first_intersects"]:
+            point = Point(line.coords[-1])
+            buffer = point.buffer(threshold_distance)
+
+        else:
+            point = Point(line.coords[0])
+            buffer = point.buffer(threshold_distance)
+
+        # Check for intersections with other lines
+        new_intersects = other_lines.intersects(buffer).any()
+
+        new_connection.append(new_intersects)
+
+    # Add the results to the GeoDataFrame as a new column
+    gdf[dead_end_conn_info_column] = new_connection
+    return gdf
