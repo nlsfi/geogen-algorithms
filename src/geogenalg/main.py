@@ -34,6 +34,7 @@ from geogenalg.application.generalize_clusters_to_centroids import (
 from geogenalg.application.generalize_fences import GeneralizeFences
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.application.generalize_points import GeneralizePoints
+from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shoreline import GeneralizeShoreline
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.application.generalize_watercourse_areas import (
@@ -323,6 +324,7 @@ def build_app() -> None:
         "remove_overlap": RemoveOverlap,
         "keep_intersection": KeepIntersection,
         "watercourse_areas": GeneralizeWaterCourseAreas,
+        "roads": GeneralizeRoads,
     }
 
     for cli_command_name, alg in commands_and_algs.items():

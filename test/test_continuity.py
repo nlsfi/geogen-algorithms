@@ -120,3 +120,75 @@ def test_connect_nearby_endpoints_when_gap_within_threshold(
     for geom in result.geometry:
         assert geom.length <= gap_threshold
         assert geom in expected_helper_lines
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "threshold_distance",
+        "expected_number_of_connected",
+        "expected_number_of_unconnected",
+    ),
+    [
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)]), LineString([(1.5, 0), (5, 0)])],
+                crs="EPSG:3067",
+            ),
+            1.0,
+            2,
+            0,
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)]), LineString([(5, 0), (10, 0)])],
+                crs="EPSG:3067",
+            ),
+            2.0,
+            0,
+            2,
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(2, 0), (5, 0)]),
+                    LineString([(0, 2), (0, 5)]),
+                ],
+                crs="EPSG:3067",
+            ),
+            1.5,
+            2,
+            1,
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0, 0), (1, 0, 0)]),
+                    LineString([(1.1, 0, 0), (2, 0, 0)]),
+                ],
+                crs="EPSG:3903",
+            ),
+            0.2,
+            2,
+            0,
+        ),
+    ],
+    ids=[
+        "within_threshold",
+        "outside_threshold",
+        "multiple_connections",
+        "coordinates_with_height",
+    ],
+)
+def test_check_line_connections(
+    input_gdf: gpd.GeoDataFrame,
+    threshold_distance: float,
+    expected_number_of_connected: int,
+    expected_number_of_unconnected: int,
+):
+    result = continuity.check_line_connections(input_gdf, threshold_distance)
+    assert isinstance(result[0], gpd.GeoDataFrame)
+    assert isinstance(result[1], gpd.GeoDataFrame)
+    assert len(result[0].index) == expected_number_of_connected
+    assert len(result[1].index) == expected_number_of_unconnected
