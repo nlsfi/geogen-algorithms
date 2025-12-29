@@ -106,3 +106,35 @@ def connect_nearby_endpoints(
 
     # Return a new GeoDataFrame containing only the helper lines
     return gpd.GeoDataFrame(geometry=new_lines, crs=input_gdf.crs)
+
+
+def get_paths_along_roads(
+    gdf_input: gpd.GeoDataFrame,
+    gdf_reference: gpd.GeoDataFrame,
+    detection_distance: float = 25.0,
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """Flag lines in gdf_input that fall within a buffer around reference roads.
+
+    Args:
+    ----
+        gdf_input: GeoDataFrame with LineString geometries to check.
+        gdf_reference: GeoDtaaFrame with reference LineStrings.
+        detection_distance: Distance to buffer around reference roads.
+
+    Returns:
+    -------
+        tuple of GeoDataFrames divided by the attribute "along_ref", i.e.,
+        whether they reside completely within detection_distancde of the reference
+        geometries.
+
+    """
+    # Single geometry for the reference roads buffer
+    buffered_union = gdf_reference.geometry.buffer(detection_distance)
+    buffered_union = buffered_union.union_all()
+
+    gdf_input["along_ref"] = gdf_input.geometry.within(buffered_union)
+
+    lines_along_ref = gdf_input.loc[gdf_input["along_ref"]]
+    lines_independent_of_ref = gdf_input.loc[not gdf_input["along_ref"]]
+
+    return lines_along_ref, lines_independent_of_ref
