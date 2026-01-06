@@ -192,3 +192,131 @@ def test_check_line_connections(
     assert isinstance(result[1], gpd.GeoDataFrame)
     assert len(result[0].index) == expected_number_of_connected
     assert len(result[1].index) == expected_number_of_unconnected
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "threshold_distance",
+        "reference_gdf_list",
+        "expected_number_of_connected",
+        "expected_number_of_unconnected",
+    ),
+    [
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)])],
+                crs="EPSG:3067",
+            ),
+            0.1,
+            [
+                gpd.GeoDataFrame(
+                    geometry=[LineString([(1, 0), (2, 0)])],
+                    crs="EPSG:3067",
+                )
+            ],
+            1,
+            0,
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)])],
+                crs="EPSG:3067",
+            ),
+            2.0,
+            [
+                gpd.GeoDataFrame(
+                    geometry=[LineString([(5, 0), (10, 0)])],
+                    crs="EPSG:3067",
+                )
+            ],
+            0,
+            1,
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0, 0), (1, 0, 0)]),
+                    LineString([(2, 0, 0), (3, 0, 0)]),
+                ],
+                crs="EPSG:3903",
+            ),
+            0.2,
+            [
+                gpd.GeoDataFrame(
+                    geometry=[
+                        LineString([(0, 0, 0), (0, 1, 0)]),
+                    ],
+                    crs="EPSG:3903",
+                )
+            ],
+            1,
+            1,
+        ),
+    ],
+    ids=[
+        "within_threshold",
+        "outside_threshold",
+        "coordinates_with_height",
+    ],
+)
+def test_check_reference_line_connections(
+    input_gdf: gpd.GeoDataFrame,
+    threshold_distance: float,
+    reference_gdf_list: list[gpd.GeoDataFrame],
+    expected_number_of_connected: int,
+    expected_number_of_unconnected: int,
+):
+    result = continuity.check_reference_line_connections(
+        input_gdf, threshold_distance, reference_gdf_list
+    )
+    assert isinstance(result[0], gpd.GeoDataFrame)
+    assert isinstance(result[1], gpd.GeoDataFrame)
+    assert len(result[0].index) == expected_number_of_connected
+    assert len(result[1].index) == expected_number_of_unconnected
+    assert "is_connected" in result[0].columns
+
+
+def test_detect_dead_ends():
+    gdf = gpd.GeoDataFrame(
+        geometry=[
+            LineString([(0, 0), (1, 0)]),
+            LineString([(1, 0), (2, 0)]),
+            LineString([(10, 0), (11, 0)]),
+        ],
+        crs="EPSG:3067",
+    )
+
+    normal, dead_end = continuity.detect_dead_ends(gdf, threshold_distance=0.01)
+
+    assert len(normal) == 1
+    assert len(dead_end) == 2
+    assert "first_intersects" in dead_end.columns
+    assert "last_intersects" in dead_end.columns
+
+
+def test_inspect_dead_end_candidates():
+    gdf = gpd.GeoDataFrame(
+        {
+            "first_intersects": [True, False],
+            "geometry": [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(2, 0), (3, 0)]),
+            ],
+        },
+        crs="EPSG:3067",
+    )
+
+    reference = gpd.GeoDataFrame(
+        geometry=[LineString([(1, 0), (2, 0)])],
+        crs="EPSG:3067",
+    )
+
+    result = continuity.inspect_dead_end_candidates(
+        gdf,
+        threshold_distance=0.1,
+        reference_gdf_list=[reference],
+    )
+
+    assert "dead_end_connects_to_ref_gdf" in result.columns
+    assert result["dead_end_connects_to_ref_gdf"].any()
