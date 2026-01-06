@@ -6,6 +6,7 @@
 #  LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
+from typing import override
 
 from geopandas import GeoDataFrame
 from pandas import concat
@@ -46,6 +47,7 @@ class GeneralizeRoads(BaseAlgorithm):
     connection_info_column: str = "is_connected"
     """Column name for which the connection information is stored as a boolean"""
 
+    @override
     def _execute(
         self,
         data: GeoDataFrame,
