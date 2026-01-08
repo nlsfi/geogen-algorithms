@@ -29,23 +29,20 @@ DEAD_END_CONN_INFO_COLUMN = "dead_end_connects_to_ref_gdf"
 @supports_identity
 @dataclass(frozen=True)
 class GeneralizeRoads(BaseAlgorithm):
-    """Removes short unconnected linestrings from the network."""
+    """Removes short unconnected linestrings from the network.
 
-    """By selection generalization, linestrings in the input GeoDataFrame
+    By selection generalization, linestrings in the input GeoDataFrame
     are removed if 1.) they are non-connected or partly non-connected (dead-ends)
     and 2.) too short. The connectedness is determined also with respect to
     linestrings in the reference data, if provided.
     """
 
     threshold_distance: float = 10.0
-    """size of the buffer at the end vertices of the road linestrings. If the buffer
+    """Size of the buffer at the end vertices of the road linestrings. If the buffer
     does not intersect with any other linestrings, the line will be considered
     unconnected on that end."""
-
     threshold_length: float = 75.0
     """Unconnected/dead-end linestring shorter than this will be removed."""
-    connection_info_column: str = "is_connected"
-    """Column name for which the connection information is stored as a boolean"""
 
     @override
     def _execute(

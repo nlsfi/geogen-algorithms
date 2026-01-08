@@ -47,7 +47,6 @@ def test_generalize_roads(
         GeneralizeRoads(
             threshold_distance=10.0,
             threshold_length=75.0,
-            connection_info_column="is_connected",
         ),
         UNIQUE_ID_COLUMN,
         {"path": GeoPackageInput(input_path, layer_name="path")},
