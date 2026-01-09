@@ -377,7 +377,7 @@ def build_app() -> None:
         # complex to support entering in the CLI.
         ignored_types_for_cli = (
             dict[str, Callable[[Series], Any] | str] | None,
-            list[int | str] | None,
+            list[int | str],
         )
         argspec = getfullargspec(alg)
 
