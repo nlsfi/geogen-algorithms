@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
 from pandas import Series, concat
+from shapely import box
 
 from geogenalg.analyze import (
     calculate_main_angle,
@@ -77,9 +78,9 @@ class GeneralizeBuildings(BaseAlgorithm):
     """Building classes always represented as points."""
     classes_for_always_kept_buildings: list[int | str] = field(default_factory=list)
     """Building classes that are always retained, regardless of thresholds."""
-    unique_key_column: str = "mtk_id"
+    unique_key_column: str = "id"
     """Column name containing the unique identifier."""
-    building_class_column: str = "kayttotarkoitus"
+    building_class_column: str = "building_function"
     """Column name containing the building class information."""
     original_area_column: str = "original_area"
     """Column name for storing the building's original area."""
@@ -293,7 +294,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         result_gdf = fix_invalid_geometries(result_gdf)
         simplified_gdf = drop_empty_geometries(simplified_gdf)
         simplified_gdf = fix_invalid_geometries(simplified_gdf)
-        bounding_polygon = simplified_gdf.union_all().envelope
+        bounding_polygon = box(*simplified_gdf.total_bounds)
         difference_gdf = GeoDataFrame(
             geometry=[bounding_polygon.difference(result_gdf.union_all())],
             crs=input_gdf.crs,
@@ -358,6 +359,8 @@ class GeneralizeBuildings(BaseAlgorithm):
             A GeoDataFrame containing dissolved polygon buildings.
 
         """
+        # TODO: refactor into a generic function outside this class
+
         input_gdf.geometry = input_gdf.buffer(0.1, cap_style="flat", join_style="mitre")
         input_gdf = dissolve_and_inherit_attributes(
             input_gdf,
@@ -383,7 +386,7 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         """
         if input_gdf.empty:
-            return input_gdf.copy()
+            return input_gdf
 
         return input_gdf[
             (
