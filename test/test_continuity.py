@@ -320,3 +320,47 @@ def test_inspect_dead_end_candidates():
 
     assert "dead_end_connects_to_ref_gdf" in result.columns
     assert result["dead_end_connects_to_ref_gdf"].any()
+
+
+@pytest.mark.parametrize(
+    ("gdf_input", "gdf_reference", "detection_distance", "expected_number_along_roads"),
+    [
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)]), LineString([(3, 0), (5, 0)])],
+                crs="EPSG:3067",
+            ),
+            gpd.GeoDataFrame(geometry=[LineString([(0, 0), (10, 0)])], crs="EPSG:3067"),
+            1.0,
+            2,
+        ),
+        (
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)]), LineString([(2, 0), (3, 0)])],
+                crs="EPSG:3067",
+            ),
+            gpd.GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 0)])],
+                crs="EPSG:3067",
+            ),
+            1.0,
+            1,
+        ),
+    ],
+    ids=[
+        "both_inside_buffer",
+        "one_inside_buffer",
+    ],
+)
+def test_get_paths_along_roads(
+    gdf_input: gpd.GeoDataFrame,
+    gdf_reference: gpd.GeoDataFrame,
+    detection_distance: float,
+    expected_number_along_roads: int,
+):
+    result = continuity.get_paths_along_roads(
+        gdf_input, gdf_reference, detection_distance
+    )
+    assert isinstance(result[0], gpd.GeoDataFrame)
+    assert isinstance(result[1], gpd.GeoDataFrame)
+    assert len(result[0].index) == expected_number_along_roads
