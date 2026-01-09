@@ -5,7 +5,7 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
@@ -71,11 +71,11 @@ class GeneralizeBuildings(BaseAlgorithm):
     building."""
     hole_threshold: float = 75
     """Minimum area for holes to retain inside polygon buildings."""
-    classes_for_low_priority_buildings: list[int | str] | None = None
+    classes_for_low_priority_buildings: list[int | str] = field(default_factory=list)
     """Building classes treated as low-priority."""
-    classes_for_point_buildings: list[int | str] | None = None
+    classes_for_point_buildings: list[int | str] = field(default_factory=list)
     """Building classes always represented as points."""
-    classes_for_always_kept_buildings: list[int | str] | None = None
+    classes_for_always_kept_buildings: list[int | str] = field(default_factory=list)
     """Building classes that are always retained, regardless of thresholds."""
     unique_key_column: str = "mtk_id"
     """Column name containing the unique identifier."""
@@ -114,7 +114,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         always_point_buildings = polygon_buildings_gdf[self.building_class_column].isin(
-            self.find_classes_for_point_buildings(),
+            self.classes_for_point_buildings,
         )
 
         # Classify only those buildings that are not flagged as "always_point_buildings"
@@ -191,19 +191,19 @@ class GeneralizeBuildings(BaseAlgorithm):
         # Split buildings into low-priority and others (excluding always-kept)
         low_priority_buildings_gdf = point_buildings_gdf[
             point_buildings_gdf[self.building_class_column].isin(
-                self.find_classes_for_low_priority_buildings()
+                self.classes_for_low_priority_buildings
             )
             & ~point_buildings_gdf[self.building_class_column].isin(
-                self.find_classes_for_always_kept_buildings(),
+                self.classes_for_always_kept_buildings,
             )
         ]
 
         other_buildings_gdf = point_buildings_gdf[
             ~point_buildings_gdf[self.building_class_column].isin(
-                self.find_classes_for_low_priority_buildings()
+                self.classes_for_low_priority_buildings
             )
             & ~point_buildings_gdf[self.building_class_column].isin(
-                self.find_classes_for_always_kept_buildings(),
+                self.classes_for_always_kept_buildings,
             )
         ]
 
@@ -394,7 +394,7 @@ class GeneralizeBuildings(BaseAlgorithm):
                 & ~(
                     (
                         input_gdf[self.building_class_column].isin(
-                            self.find_classes_for_low_priority_buildings()
+                            self.classes_for_low_priority_buildings
                         )
                     )
                     & (
@@ -404,7 +404,7 @@ class GeneralizeBuildings(BaseAlgorithm):
                 )
             )
             | input_gdf[self.building_class_column].isin(
-                self.find_classes_for_always_kept_buildings()
+                self.classes_for_always_kept_buildings
             )
         ]
 
@@ -479,42 +479,3 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         return result_gdf
-
-    def find_classes_for_low_priority_buildings(self) -> list[int | str]:
-        """Getter function for classes_for_low_priority_buildings.
-
-        Returns:
-            The requested attribute, or an empty list if the attribute is None.
-
-        """
-        return (
-            []
-            if self.classes_for_low_priority_buildings is None
-            else self.classes_for_low_priority_buildings
-        )
-
-    def find_classes_for_point_buildings(self) -> list[int | str]:
-        """Getter function for classes_for_point_buildings.
-
-        Returns:
-            The requested attribute, or an empty list if the attribute is None.
-
-        """
-        return (
-            []
-            if self.classes_for_point_buildings is None
-            else self.classes_for_point_buildings
-        )
-
-    def find_classes_for_always_kept_buildings(self) -> list[int | str]:
-        """Getter function for classes_for_always_kept_buildings.
-
-        Returns:
-            The requested attribute, or an empty list if the attribute is None.
-
-        """
-        return (
-            []
-            if self.classes_for_always_kept_buildings is None
-            else self.classes_for_always_kept_buildings
-        )
