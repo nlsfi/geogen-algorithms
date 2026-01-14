@@ -11,7 +11,7 @@ from geopandas import GeoDataFrame
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
-from geogenalg.core.geometry import remove_close_line_segments, remove_short_lines
+from geogenalg.selection import remove_close_line_segments, remove_short_lines
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
