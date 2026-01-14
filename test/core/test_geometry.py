@@ -905,38 +905,97 @@ def test_move_to_point():
     )
 
 
-def test_extend_line_to_nearest():
-    line = from_wkt("LINESTRING (0 0, 1 1)")
-
-    point = from_wkt("POINT (-10 -3)")
-    linestring = from_wkt("LINESTRING (10 10, 10 2)")
-    polygon = from_wkt("POLYGON ((0 2, 0 3, 2 3, 2 2, 0 2))")
-
-    extended_from_end1 = extend_line_to_nearest(line, point, LineExtendFrom.END)
-    extended_from_end2 = extend_line_to_nearest(line, linestring, LineExtendFrom.END)
-    extended_from_end3 = extend_line_to_nearest(line, polygon, LineExtendFrom.END)
-
-    assert extended_from_end1.wkt == "LINESTRING (0 0, 1 1, -10 -3)"
-    assert extended_from_end2.wkt == "LINESTRING (0 0, 1 1, 10 2)"
-    assert extended_from_end3.wkt == "LINESTRING (0 0, 1 1, 1 2)"
-
-    extended_from_start1 = extend_line_to_nearest(line, point, LineExtendFrom.START)
-    extended_from_start2 = extend_line_to_nearest(
-        line, linestring, LineExtendFrom.START
+@pytest.mark.parametrize(
+    ("input_line", "extend_to", "extend_from", "tolerance", "expected_line"),
+    [
+        (
+            LineString([[0, 0], [1, 1]]),
+            Point(5, 5),
+            LineExtendFrom.END,
+            0.0,  # tolerance
+            LineString([[0, 0], [1, 1], [5, 5]]),  # expected
+        ),
+        (
+            LineString([[0, 0], [1, 1]]),
+            Point(150, 150),
+            LineExtendFrom.END,
+            10.0,  # tolerance
+            LineString([[0, 0], [1, 1]]),  # expected
+        ),
+        (
+            LineString([[0, 0], [1, 1]]),
+            Point(-1, -1),
+            LineExtendFrom.START,
+            0.0,  # tolerance
+            LineString([[-1, -1], [0, 0], [1, 1]]),  # expected
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(0.5, 0.5),
+            LineExtendFrom.BOTH,
+            0.0,  # tolerance
+            LineString([[0, 0], [1, 0], [0.5, 0.5], [0, 0]]),  # expected
+        ),
+        (
+            LineString([[0, 0], [1, 0], [0.5, 0.5], [0, 0]]),
+            Point(0.5, 5),
+            LineExtendFrom.START,
+            0.0,  # tolerance
+            LineString(
+                [[0, 0], [1, 0], [0.5, 0.5], [0, 0]]
+            ),  # expected (shouldn't change)
+        ),
+        (
+            LineString([[0.5, 11], [0.5, 10]]),
+            LineString([[0, 0], [1, 0]]),
+            LineExtendFrom.END,
+            0.0,  # tolerance
+            LineString([[0.5, 11], [0.5, 10], [0.5, 0]]),  # expected
+        ),
+        (
+            LineString([[0.5, 11], [0.5, 10]]),
+            box(0, 0, 1, -1),
+            LineExtendFrom.END,
+            0.0,  # tolerance
+            LineString([[0.5, 11], [0.5, 10], [0.5, 0]]),  # expected
+        ),
+        (
+            LineString([[0, 0], [1, 0], [1, 1], [0.5, 1]]),
+            LineString([[0, -1], [1, -1]]),
+            LineExtendFrom.END,
+            0.0,  # tolerance
+            LineString(
+                [[0, 0], [1, 0], [1, 1], [0.5, 1]]
+            ),  # expected (shouldn't change)
+        ),
+    ],
+    ids=[
+        "line_to_point-end-no_tolerance",
+        "line_to_point-end-tolerance",
+        "line_to_point-start-no_tolerance",
+        "line_to_point-both-no_tolerance",
+        "linear_ring",
+        "line_to_line",
+        "line_to_polygon",
+        "crosses",
+    ],
+)
+def test_extend_line_to_nearest(
+    input_line: LineString,
+    extend_to: BaseGeometry,
+    extend_from: LineExtendFrom,
+    tolerance: float,
+    expected_line: LineString,
+):
+    assert (
+        extend_line_to_nearest(
+            input_line,
+            extend_to,
+            extend_from,
+            tolerance,
+        )
+        == expected_line
     )
-    extended_from_start3 = extend_line_to_nearest(line, polygon, LineExtendFrom.START)
-
-    assert extended_from_start1.wkt == "LINESTRING (-10 -3, 0 0, 1 1)"
-    assert extended_from_start2.wkt == "LINESTRING (1 1, 0 0, 10 2)"
-    assert extended_from_start3.wkt == "LINESTRING (0 2, 0 0, 1 1)"
-
-    extended_from_both1 = extend_line_to_nearest(line, point, LineExtendFrom.BOTH)
-    extended_from_both2 = extend_line_to_nearest(line, linestring, LineExtendFrom.BOTH)
-    extended_from_both3 = extend_line_to_nearest(line, polygon, LineExtendFrom.BOTH)
-
-    assert extended_from_both1.wkt == "LINESTRING (-10 -3, 0 0, 1 1, -10 -3)"
-    assert extended_from_both2.wkt == "LINESTRING (0 0, 1 1, 10 2, 0 0)"
-    assert extended_from_both3.wkt == "LINESTRING (0 2, 0 0, 1 1, 1 2)"
 
 
 @pytest.fixture
