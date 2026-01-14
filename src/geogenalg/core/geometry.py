@@ -28,7 +28,6 @@ from shapely import (
     length,
     polygonize,
     shortest_line,
-    union,
 )
 from shapely.affinity import rotate, scale, translate
 from shapely.coords import CoordinateSequence
@@ -509,7 +508,7 @@ def extend_line_to_nearest(
     line: LineString,
     extend_to: BaseGeometry,
     extend_from: LineExtendFrom,
-    tolerance: float = 0,
+    tolerance: float = 0.0,
 ) -> LineString:
     """Extend line to nearest point.
 
@@ -525,42 +524,44 @@ def extend_line_to_nearest(
         operations.
 
     """
-    # TODO: test tolerance
+    start = Point(line.coords[0])
+    end = Point(line.coords[-1])
 
-    if extend_from != LineExtendFrom.BOTH:
-        point = Point(line.coords[extend_from.value])
+    if start == end:  # line forms a ring, can't extend without self-intersection
+        return line
+
+    match extend_from:
+        case LineExtendFrom.BOTH:
+            points = [
+                start,
+                end,
+            ]
+        case LineExtendFrom.START:
+            points = [
+                start,
+            ]
+        case LineExtendFrom.END:
+            points = [
+                end,
+            ]
+
+    new_segments = []
+
+    for point in points:
         new_segment = shortest_line(point, extend_to)
 
-        if tolerance > 0 and new_segment.length >= tolerance:
-            return line
+        if (tolerance > 0.0 and new_segment.length > tolerance) or new_segment.crosses(
+            line
+        ):
+            continue
 
-        combined = union(line, new_segment)
-    else:
-        start = Point(line.coords[0])
-        end = Point(line.coords[-1])
+        new_segments.append(new_segment)
 
-        new_segment_1 = shortest_line(start, extend_to)
-        new_segment_2 = shortest_line(end, extend_to)
+    new_segments.append(line)
 
-        # TODO: clean this up maybe
+    merged = linemerge(new_segments)
 
-        if tolerance > 0:
-            combined = MultiLineString([line])
-            if new_segment_1.length < tolerance:
-                combined = union(combined, new_segment_1)
-
-            if new_segment_2.length < tolerance:
-                combined = union(combined, new_segment_2)
-        else:
-            combined = union(union(line, new_segment_1), new_segment_2)
-
-    if not isinstance(combined, MultiLineString):
-        msg = f"Union result was not a MultiLineString {combined.wkt}"
-        raise GeometryOperationError(msg)
-
-    merged = linemerge(combined)
-
-    if not isinstance(merged, LineString):
+    if isinstance(merged, MultiLineString):
         msg = f"Merge result was not a LineString: {merged}"
         raise GeometryOperationError(msg)
 
