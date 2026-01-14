@@ -508,20 +508,30 @@ def extend_line_to_nearest(
     line: LineString,
     extend_to: BaseGeometry,
     extend_from: LineExtendFrom,
-    tolerance: float = 0.0,
+    length_tolerance: float = 0.0,
 ) -> LineString:
     """Extend line to nearest point.
 
-    Returns
+    If line forms a ring (starts and ends at same point) it is returned
+    unchanged, as extending it would cause a self-intersection. If extended
+    segment's length is under length_tolerance it will not be added.
+
+    Args:
+    ----
+        line: Input line to extend.
+        extend_to: Geometry to extend to.
+        extend_from: From which end the line should extend from (or both).
+        length_tolerance: Minimum distance for extended part.
+
+    Returns:
     -------
         A version of the input line which has been extended to the
         nearest point of another geometry. The extension can be done from
         the end or start of the line, or alternatively both ends.
 
-    Raises
+    Raises:
     ------
-        GeometryOperationError: If invalid result got from line union or merge
-        operations.
+        GeometryOperationError: If merge operation fails to produce LineString.
 
     """
     start = Point(line.coords[0])
@@ -550,9 +560,9 @@ def extend_line_to_nearest(
     for point in points:
         new_segment = shortest_line(point, extend_to)
 
-        if (tolerance > 0.0 and new_segment.length > tolerance) or new_segment.crosses(
-            line
-        ):
+        if (
+            length_tolerance > 0.0 and new_segment.length > length_tolerance
+        ) or new_segment.crosses(line):
             continue
 
         new_segments.append(new_segment)
