@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 from geopandas import GeoDataFrame
 from shapely.geometry import MultiPolygon, Polygon
 
+from geogenalg.utility.validation import check_gdf_geometry_type
+
 if TYPE_CHECKING:
     from shapely.geometry import Point
 
@@ -300,3 +302,76 @@ def reduce_nearby_points_by_selecting(
                 break
 
     return gdf.loc[~gdf.index.isin(to_remove)]
+
+
+def remove_close_line_segments(
+    lines: GeoDataFrame,
+    reference_lines: GeoDataFrame,
+    buffer_size: float,
+) -> GeoDataFrame:
+    """Remove line segments close to reference lines.
+
+    Buffers reference lines and removes intersecting line segments.
+    Only the intersecting areas are removed, so a whole input line feature
+    may be fully removed or split into segments (and change type to
+    MultiLineString).
+
+    Args:
+    ----
+        lines: GeoDataFrame with lines to process.
+        reference_lines: GeoDataFrame with lines to use for interescting.
+        buffer_size: Size used to buffer reference lines and determine
+            the intersection area.
+
+    Returns:
+    -------
+        Remaining lines.
+
+    Raises:
+    ------
+        GeometryTypeError: If input lines or reference lines contain other
+            than line geometries.
+
+    """
+    if not check_gdf_geometry_type(
+        lines, ["LineString", "MultiLineString"]
+    ) or not check_gdf_geometry_type(
+        reference_lines, ["LineString", "MultiLineString"]
+    ):
+        msg = "remove_close_line_segments expects only line geometries."
+        raise GeometryTypeError(msg)
+
+    result = lines.copy()
+    result.geometry = lines.difference(
+        reference_lines.buffer(buffer_size).union_all(),
+    )
+    return result.loc[~result.geometry.is_empty & result.geometry.notna()]
+
+
+def remove_short_lines(lines: GeoDataFrame, length_threshold: float) -> GeoDataFrame:
+    """Remove short line features.
+
+    Removes all lines that are shorter than the given length
+    threshold value.
+
+    Args:
+    ----
+        lines: GeoDataFrame with lines to process.
+        length_threshold: Threshold that determines too short lines.
+
+    Returns:
+    -------
+        Remaining lines.
+
+    Raises:
+    ------
+        GeometryTypeError: If input lines or reference lines contain other
+            than line geometries.
+
+    """
+    if not check_gdf_geometry_type(lines, ["LineString", "MultiLineString"]):
+        msg = "remove_short_lines expects only line geometries."
+        raise GeometryTypeError(msg)
+
+    result = lines.copy()
+    return result.loc[result.geometry.length >= length_threshold]

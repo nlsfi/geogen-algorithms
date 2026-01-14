@@ -7,8 +7,8 @@
 
 import re
 
-import geopandas as gpd
 import pytest
+from geopandas import GeoDataFrame
 from pandas.testing import assert_frame_equal
 from shapely import MultiLineString
 from shapely.geometry import LineString, Point, Polygon
@@ -16,9 +16,11 @@ from shapely.geometry import LineString, Point, Polygon
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.selection import (
     reduce_nearby_points_by_selecting,
+    remove_close_line_segments,
     remove_disconnected_short_lines,
     remove_large_polygons,
     remove_parts_of_lines_on_polygon_edges,
+    remove_short_lines,
     remove_small_holes,
     remove_small_polygons,
     split_polygons_by_point_intersection,
@@ -56,10 +58,10 @@ from geogenalg.selection import (
         "three_connected_lines_one_removed",
     ],
 )
-def test_remove_short_lines(
+def test_remove_disconnected_short_lines(
     input_lines: list[LineString], threshold: float, expected_num_lines: int
 ):
-    lines_gdf = gpd.GeoDataFrame(
+    lines_gdf = GeoDataFrame(
         {
             "id": enumerate(input_lines),
         },
@@ -79,7 +81,7 @@ def test_remove_short_lines(
     ),
     [
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0, 1, 2]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -88,7 +90,7 @@ def test_remove_short_lines(
                 ],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"point_id": [0, 1]},
                 geometry=[Point(2.5, 0.5), Point(4.5, 0.5)],
                 crs="EPSG:3067",
@@ -97,7 +99,7 @@ def test_remove_short_lines(
             {0},
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0, 1]},
                 geometry=[
                     Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
@@ -105,7 +107,7 @@ def test_remove_short_lines(
                 ],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"point_id": []},
                 geometry=[],
                 crs="EPSG:3067",
@@ -120,8 +122,8 @@ def test_remove_short_lines(
     ],
 )
 def test_split_polygons_by_point_containment(
-    polygon_gdf: gpd.GeoDataFrame,
-    point_gdf: gpd.GeoDataFrame,
+    polygon_gdf: GeoDataFrame,
+    point_gdf: GeoDataFrame,
     expected_containing_point: set[int],
     expected_not_containing_point: set[int],
 ):
@@ -137,7 +139,7 @@ def test_split_polygons_by_point_containment(
     ("lines_gdf", "polygons_gdf", "expected_gdf"),
     [
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0, 1, 2]},
                 geometry=[
                     LineString([(0, 0), (2, 0)]),
@@ -146,7 +148,7 @@ def test_split_polygons_by_point_containment(
                 ],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 geometry=[
                     Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
                     Polygon([(10, 10), (12, 10), (12, 12), (10, 12)]),
@@ -154,7 +156,7 @@ def test_split_polygons_by_point_containment(
                 ],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1, 2]},
                 geometry=[
                     LineString([(0.5, 0.5), (1.5, 1.5)]),
@@ -164,29 +166,29 @@ def test_split_polygons_by_point_containment(
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0]},
                 geometry=[LineString([(0, 0), (1, 1)])],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(geometry=[], crs="EPSG:3067"),
-            gpd.GeoDataFrame(
+            GeoDataFrame(geometry=[], crs="EPSG:3067"),
+            GeoDataFrame(
                 {"id": [0]},
                 geometry=[LineString([(0, 0), (1, 1)])],
                 crs="EPSG:3067",
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0]},
                 geometry=[LineString([(1, -1), (1, 3)])],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0]},
                 geometry=[
                     MultiLineString(
@@ -201,7 +203,7 @@ def test_split_polygons_by_point_containment(
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0, 1]},
                 geometry=[
                     LineString([(0, 0), (1, 0), (1, 1)]),
@@ -209,11 +211,11 @@ def test_split_polygons_by_point_containment(
                 ],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
                 crs="EPSG:3067",
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [0, 1]},
                 geometry=[
                     LineString([(1, 0), (1, 1)]),
@@ -231,9 +233,9 @@ def test_split_polygons_by_point_containment(
     ],
 )
 def test_remove_parts_of_lines_on_polygon_edges(
-    lines_gdf: gpd.GeoDataFrame,
-    polygons_gdf: gpd.GeoDataFrame,
-    expected_gdf: gpd.GeoDataFrame,
+    lines_gdf: GeoDataFrame,
+    polygons_gdf: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
 ):
     result_gdf = remove_parts_of_lines_on_polygon_edges(lines_gdf, polygons_gdf)
 
@@ -291,8 +293,8 @@ def test_remove_parts_of_lines_on_polygon_edges(
 def test_remove_large_polygons_correct(
     input_polygons: list[Polygon], threshold: float, expected_polygons: list[Polygon]
 ):
-    input_gdf = gpd.GeoDataFrame(geometry=input_polygons, crs="EPSG:3067")
-    expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
+    input_gdf = GeoDataFrame(geometry=input_polygons, crs="EPSG:3067")
+    expected_gdf = GeoDataFrame(geometry=expected_polygons)
 
     result_gdf = remove_large_polygons(input_gdf, threshold)
 
@@ -349,8 +351,8 @@ def test_remove_large_polygons_correct(
 def test_remove_small_polygons_correct(
     input_polygons: list[Polygon], threshold: float, expected_polygons: list[Polygon]
 ):
-    input_gdf = gpd.GeoDataFrame(geometry=input_polygons, crs="EPSG:3067")
-    expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
+    input_gdf = GeoDataFrame(geometry=input_polygons, crs="EPSG:3067")
+    expected_gdf = GeoDataFrame(geometry=expected_polygons)
 
     result_gdf = remove_small_polygons(input_gdf, threshold)
 
@@ -432,8 +434,8 @@ def test_remove_small_holes_correct(
     hole_threshold: float,
     expected_polygons: list[Polygon],
 ):
-    input_gdf = gpd.GeoDataFrame(geometry=input_polygons)
-    expected_gdf = gpd.GeoDataFrame(geometry=expected_polygons)
+    input_gdf = GeoDataFrame(geometry=input_polygons)
+    expected_gdf = GeoDataFrame(geometry=expected_polygons)
 
     result_gdf = remove_small_holes(input_gdf, hole_threshold)
 
@@ -453,64 +455,64 @@ def test_remove_small_holes_correct(
     ),
     [
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1, 2], "priority": [10, 20]},
                 geometry=[Point(0, 0), Point(10, 0)],
             ),
             None,
             5.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1, 2], "priority": [10, 20]},
                 geometry=[Point(0, 0), Point(10, 0)],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1, 2], "priority": [10, 20]},
                 geometry=[Point(0, 0), Point(1, 0)],
             ),
             None,
             2.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [2], "priority": [20]},
                 geometry=[Point(1, 0)],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "priority": [10]},
                 geometry=[Point(0, 0)],
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [99], "priority": [5]},
                 geometry=[Point(1, 0)],
             ),
             2.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "priority": [10]},
                 geometry=[Point(0, 0)],
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "priority": [10]},
                 geometry=[Point(0, 0)],
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [2], "priority": [10]},
                 geometry=[Point(1, 0)],
             ),
             2.0,
-            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            GeoDataFrame(columns=["id", "priority"], geometry=[]),
         ),
         (
-            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            GeoDataFrame(columns=["id", "priority"], geometry=[]),
             None,
             2.0,
-            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            GeoDataFrame(columns=["id", "priority"], geometry=[]),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {
                     "id": [1, 2, 3, 4, 5],
                     "priority": [1, 2, 3, 4, 5],
@@ -520,7 +522,7 @@ def test_remove_small_holes_correct(
             ),
             None,
             1.5,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {
                     "id": [5],
                     "priority": [5],
@@ -530,11 +532,11 @@ def test_remove_small_holes_correct(
             ),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "priority": [5]},
                 geometry=[Point(0, 0)],
             ),
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {
                     "id": [1, 99],
                     "priority": [5, 10],
@@ -542,10 +544,10 @@ def test_remove_small_holes_correct(
                 geometry=[Point(0, 0), Point(1, 0)],
             ),
             2.0,
-            gpd.GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            GeoDataFrame(columns=["id", "priority"], geometry=[]),
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": list(range(1, 11)), "priority": [1] * 9 + [100]},
                 geometry=[
                     Point(5, 0),
@@ -562,7 +564,7 @@ def test_remove_small_holes_correct(
             ),
             None,
             6.0,
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [10], "priority": [100]},
                 geometry=[Point(0, 0)],
             ),
@@ -580,10 +582,10 @@ def test_remove_small_holes_correct(
     ],
 )
 def test_reduce_nearby_points_selects_points_correctly(
-    input_gdf: gpd.GeoDataFrame,
-    reference_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
     distance_threshold: float,
-    expected_gdf: gpd.GeoDataFrame,
+    expected_gdf: GeoDataFrame,
 ):
     input_gdf = input_gdf.set_index("id")
 
@@ -614,7 +616,7 @@ def test_reduce_nearby_points_selects_points_correctly(
 
 
 def test_reduce_nearby_points_by_selecting_raises_on_invalid_geometry():
-    invalid_gdf = gpd.GeoDataFrame(
+    invalid_gdf = GeoDataFrame(
         {"id": [1], "priority": [10]},
         geometry=[LineString([(0, 0), (1, 1)])],
     )
@@ -629,7 +631,7 @@ def test_reduce_nearby_points_by_selecting_raises_on_invalid_geometry():
 
 
 def test_remove_small_polygons_a():  # test A - simple case of a few different-sized squares
-    gdf = gpd.GeoDataFrame(
+    gdf = GeoDataFrame(
         {"id": [0, 1, 2]},
         geometry=[
             Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),  # 3 m x 3 m = 9 m²
@@ -649,7 +651,7 @@ def test_remove_small_polygons_a():  # test A - simple case of a few different-s
 
 
 def test_remove_small_polygons_b():  # test B - handling None and empty geometries
-    gdf = gpd.GeoDataFrame(
+    gdf = GeoDataFrame(
         {"id": [0, 1, 2]},
         geometry=[
             None,  # should be ignored
@@ -672,7 +674,7 @@ def test_remove_small_polygons_b():  # test B - handling None and empty geometri
 
 
 def test_remove_small_polygons_c():  # test C- handling CRS problems
-    gdf = gpd.GeoDataFrame(
+    gdf = GeoDataFrame(
         {"id": [0]},
         geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
         crs="EPSG:4326",  # not projected (degrees)
@@ -680,3 +682,66 @@ def test_remove_small_polygons_c():  # test C- handling CRS problems
 
     with pytest.raises(ValueError, match="projected CRS"):
         remove_small_polygons(gdf, area_threshold=1.0)
+
+
+def test_remove_close_line_segments():
+    lines = GeoDataFrame(
+        geometry=[
+            LineString([(1, 0), (1, 1)]),  # removed
+            LineString([(0, 2), (5, 2)]),  # preserved
+            LineString([(0, 3), (2, 1), (3, 1), (5, 3)]),  # partly preserved
+        ],
+        index=["0", "1", "2"],
+    )
+    reference_line = GeoDataFrame(geometry=[LineString([(0, 0), (10, 0)])])
+
+    result = remove_close_line_segments(lines, reference_line, 1.5)
+
+    assert list(result.index) == ["1", "2"]
+
+    # Unchanged
+    assert result.loc["1", "geometry"].equals(lines.loc["1", "geometry"])
+
+    # Partly cut
+    assert result.loc["2", "geometry"].geom_type == "MultiLineString"
+    assert result.loc["2", "geometry"].length < lines.loc["2", "geometry"].length
+
+
+def test_remove_close_line_segments_invalid_line_geometry_type():
+    with pytest.raises(GeometryTypeError):
+        remove_close_line_segments(
+            lines=GeoDataFrame(geometry=[Point(0.0, 0.0)]),
+            reference_lines=GeoDataFrame(geometry=[LineString([[0, 0], [1, 1]])]),
+            buffer_size=2.0,
+        )
+
+
+def test_remove_close_line_segments_invalid_reference_line_geometry_type():
+    with pytest.raises(GeometryTypeError):
+        remove_close_line_segments(
+            lines=GeoDataFrame(geometry=[LineString([[0, 0], [1, 1]])]),
+            reference_lines=GeoDataFrame(geometry=[Point(0.0, 0.0)]),
+            buffer_size=2.0,
+        )
+
+
+def test_remove_short_lines():
+    gdf = GeoDataFrame(
+        geometry=[
+            LineString([(0, 0), (0, 0.9)]),  # length 0.9
+            LineString([(0, 0), (0, 1.0)]),  # length 1.0
+            LineString([(0, 0), (0, 2.0)]),  # length 2.0
+        ],
+        index=["1", "2", "3"],
+    )
+
+    result = remove_short_lines(gdf, length_threshold=1.0)
+
+    assert list(result.index) == ["2", "3"]
+    assert result.loc["2", "geometry"].equals(gdf.loc["2", "geometry"])
+    assert result.loc["3", "geometry"].equals(gdf.loc["3", "geometry"])
+
+
+def test_remove_short_lines_invalid_geometry_type():
+    with pytest.raises(GeometryTypeError):
+        remove_short_lines(GeoDataFrame(geometry=[Point(0, 0)]), length_threshold=1.0)
