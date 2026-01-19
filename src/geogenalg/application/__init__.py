@@ -47,6 +47,10 @@ class BaseAlgorithm(ABC):
 
         output = self._execute(data=data, reference_data=reference_data)
 
+        # Ensure the output has the same geometry column name as the input data
+        if output.geometry.name != data.geometry.name:
+            output = output.rename_geometry(data.geometry.name)
+
         if getattr(self, _SUPPORTS_IDENTITY_ATTR, False):
             return output
         return reset_with_random_hash_index(output)
