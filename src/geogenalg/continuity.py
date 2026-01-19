@@ -6,9 +6,12 @@
 
 from collections import defaultdict
 
-import geopandas as gpd
+from geopandas import GeoDataFrame
 from pandas import concat
+from shapely import force_2d
 from shapely.geometry import LineString, MultiLineString, Point
+
+from geogenalg.core.geometry import get_topological_points
 
 
 def find_all_endpoints(
@@ -60,8 +63,8 @@ def find_all_endpoints(
 
 
 def connect_nearby_endpoints(
-    input_gdf: gpd.GeoDataFrame, gap_threshold: float
-) -> gpd.GeoDataFrame:
+    input_gdf: GeoDataFrame, gap_threshold: float
+) -> GeoDataFrame:
     """Generate helper lines to close small gaps between line endpoints.
 
     Args:
@@ -105,31 +108,29 @@ def connect_nearby_endpoints(
             used_ends.add(i)
 
     # Return a new GeoDataFrame containing only the helper lines
-    return gpd.GeoDataFrame(geometry=new_lines, crs=input_gdf.crs)
+    return GeoDataFrame(geometry=new_lines, crs=input_gdf.crs)
 
 
 def check_line_connections(
-    gdf: gpd.GeoDataFrame,
+    gdf: GeoDataFrame,
     threshold_distance: float,
     connection_info_column: str = "is_connected",
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Check the connections of linestrings with respect to lines on the GeoDataFrame.
 
     Args:
     ----
-    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
-
-    threshold_distance (float): the max gap allowed for lines to
-    be considered connected.
-
-    connection_info_column (str): name of the attribute column where the info
-    about connectedness is stored as a boolean
+        gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+        threshold_distance (float): the max gap allowed for lines to
+            be considered connected.
+        connection_info_column (str): name of the attribute column where the info
+            about connectedness is stored as a boolean
 
     Returns:
     -------
-    A GeoDataframe of lines with an attribute that indicate the
-    connectedness with respect to the linestrings in the input
-    GeoDataFrame.
+        A GeoDataframe of lines with an attribute that indicate the
+        connectedness with respect to the linestrings in the input
+        GeoDataFrame.
 
     """
     results = []
@@ -163,35 +164,32 @@ def check_line_connections(
 
 
 def check_reference_line_connections(  # noqa: SC200
-    gdf: gpd.GeoDataFrame,
+    gdf: GeoDataFrame,
     threshold_distance: float,
-    reference_gdf_list: list[gpd.GeoDataFrame],
+    reference_gdf_list: list[GeoDataFrame],
     connection_info_column: str = "is_connected",
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Check the connections of linestrings with respect to lines on the GeoDataFrame.
 
     Args:
     ----
-    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
-
-    threshold_distance (float): the max gap allowed for lines to
-    be considered connected.
-
-    reference_gdf_list (list): list of reference GeoDataFrames to which the
-
-    connection_info_column (str): name of the attribute column where the info
-    about connectedness is stored as a boolean
+        gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+        threshold_distance (float): the max gap allowed for lines to
+            be considered connected.
+        reference_gdf_list (list): list of reference GeoDataFrames to which the
+        connection_info_column (str): name of the attribute column where the info
+            about connectedness is stored as a boolean
 
     Returns:
     -------
-    A GeoDataframe of lines with an attribute that indicate the
-    connectedness with respect to the linestrings in the input
-    GeoDataFrame.
+        A GeoDataframe of lines with an attribute that indicate the
+        connectedness with respect to the linestrings in the input
+        GeoDataFrame.
 
     """
     results = []
     other_lines = concat(reference_gdf_list)
-    other_lines = gpd.GeoDataFrame(other_lines)
+    other_lines = GeoDataFrame(other_lines)
 
     for _idx, row in gdf.iterrows():
         line = row.geometry
@@ -223,26 +221,24 @@ def check_reference_line_connections(  # noqa: SC200
 
 
 def detect_dead_ends(
-    gdf: gpd.GeoDataFrame,
+    gdf: GeoDataFrame,
     threshold_distance: float,
     dead_end_info_column: str = "dead_end",
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Check the connections of linestrings with respect to lines on the GeoDataFrame.
 
     Args:
     ----
-    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
-
-    threshold_distance (float): the max gap allowed for lines to
-    be considered connected.
-
-    dead_end_info_column (str): Column name for the dead end information.
+        gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+        threshold_distance (float): the max gap allowed for lines to
+            be considered connected.
+        dead_end_info_column (str): Column name for the dead end information.
 
     Returns:
     -------
-    A GeoDataframe of lines with an attribute that indicate the
-    connectedness with respect to the linestrings in the input
-    GeoDataFrame.
+        A GeoDataframe of lines with an attribute that indicate the
+        connectedness with respect to the linestrings in the input
+        GeoDataFrame.
 
     """
     dead_ends = []
@@ -282,36 +278,33 @@ def detect_dead_ends(
 
 
 def inspect_dead_end_candidates(
-    gdf: gpd.GeoDataFrame,
+    gdf: GeoDataFrame,
     threshold_distance: float,
-    reference_gdf_list: list[gpd.GeoDataFrame],
+    reference_gdf_list: list[GeoDataFrame],
     dead_end_conn_info_column: str = "dead_end_connects_to_ref_gdf",
-) -> gpd.GeoDataFrame:
+) -> GeoDataFrame:
     """Check the connections of linestrings with respect to lines on the GeoDataFrame.
 
     Args:
     ----
-    gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
-
-    threshold_distance (float): the max gap allowed for lines to
-    be considered connected.
-
-    reference_gdf_list (list): list of reference GeoDataFrames to which the input
-    GeoDataFrame is compared for connections.
-
-    dead_end_conn_info_column (str): name of the column where the connectedness of
-    dead end linestrings are stored
+        gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
+        threshold_distance (float): the max gap allowed for lines to
+            be considered connected.
+        reference_gdf_list (list): list of reference GeoDataFrames to which the input
+            GeoDataFrame is compared for connections.
+        dead_end_conn_info_column (str): name of the column where the connectedness of
+            dead end linestrings are stored
 
     Returns:
     -------
-    A GeoDataframe of lines with an attribute that indicate the
-    connectedness with respect to the linestrings in the input
-    GeoDataFrame.
+        A GeoDataframe of lines with an attribute that indicate the
+        connectedness with respect to the linestrings in the input
+        GeoDataFrame.
 
     """
     new_connection = []
-    other_lines = gpd.GeoDataFrame(concat(reference_gdf_list))
-    gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
+    other_lines = GeoDataFrame(concat(reference_gdf_list))
+    gdf = GeoDataFrame(gdf, geometry="geometry")
 
     for _idx, row in gdf.iterrows():
         line = row.geometry
@@ -336,22 +329,22 @@ def inspect_dead_end_candidates(
 
 
 def get_paths_along_roads(
-    gdf_input: gpd.GeoDataFrame,
-    gdf_reference: gpd.GeoDataFrame,
+    gdf_input: GeoDataFrame,
+    gdf_reference: GeoDataFrame,
     detection_distance: float = 25.0,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Flag lines in gdf_input that fall within a buffer around reference roads.
 
     Args:
     ----
         gdf_input: GeoDataFrame with LineString geometries to check.
-        gdf_reference: GeoDtaaFrame with reference LineStrings.
+        gdf_reference: GeoDataFrame with reference LineStrings.
         detection_distance: Distance to buffer around reference roads.
 
     Returns:
     -------
         tuple of GeoDataFrames divided by the attribute "along_ref", i.e.,
-        whether they reside completely within detection_distancde of the reference
+        whether they reside completely within detection_distance of the reference
         geometries.
 
     """
@@ -362,6 +355,94 @@ def get_paths_along_roads(
     gdf_input["along_ref"] = gdf_input.geometry.within(buffered_union)
 
     lines_along_ref = gdf_input.loc[gdf_input["along_ref"]]
-    lines_independent_of_ref = gdf_input.loc[not gdf_input["along_ref"]]
+    lines_independent_of_ref = gdf_input.loc[~gdf_input["along_ref"]]
 
     return lines_along_ref, lines_independent_of_ref
+
+
+def flag_connections(
+    input_gdf: GeoDataFrame,
+    *,
+    start_connected_column: str = "__start_connected",
+    end_connected_column: str = "__end_connected",
+) -> GeoDataFrame:
+    """Flag which end of an input line is connected to dataset.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with LineString geometries to check.
+        start_connected_column: Name of boolean Series which will be added to output,
+            tells whether first vertex of an input geometry is connected to reference
+            data.
+        end_connected_column: Name of boolean Series which will be added to output,
+            tells whether last vertex of an input geometry is connected to reference
+            data.
+
+    Returns:
+    -------
+        GeoDataFrame with boolean Series added, telling which ends each line is
+        connected to the reference dataset, if any.
+
+    """
+    topological_points = get_topological_points(input_gdf.geometry)
+
+    gdf = input_gdf.copy()
+    gdf[start_connected_column] = gdf.geometry.apply(
+        lambda geom: force_2d(Point(geom.coords[0]))
+    )
+    gdf[end_connected_column] = gdf.geometry.apply(
+        lambda geom: force_2d(Point(geom.coords[-1]))
+    )
+    gdf[start_connected_column] = gdf[start_connected_column].apply(
+        lambda geom: geom in topological_points,
+    )
+    gdf[end_connected_column] = gdf[end_connected_column].apply(
+        lambda geom: geom in topological_points,
+    )
+
+    return gdf
+
+
+def flag_connections_to_reference(
+    input_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
+    *,
+    start_connected_column: str = "__start_connected",
+    end_connected_column: str = "__end_connected",
+) -> GeoDataFrame:
+    """Flag which end of an input line is connected to reference dataset.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with LineString geometries to check.
+        reference_gdf: GeoDataFrame with reference LineStrings.
+        start_connected_column: Name of boolean Series which will be added to output,
+            tells whether first vertex of an input geometry is connected to reference
+            data.
+        end_connected_column: Name of boolean Series which will be added to output,
+            tells whether last vertex of an input geometry is connected to reference
+            data.
+
+    Returns:
+    -------
+        GeoDataFrame with boolean Series added, telling which ends each line is
+        connected to the reference dataset, if any.
+
+    """
+    reference_union = reference_gdf.union_all()
+
+    def _is_start_connected(geom: LineString) -> bool:
+        return Point(geom.coords[0]).intersects(reference_union)
+
+    def _is_end_connected(geom: LineString) -> bool:
+        return Point(geom.coords[-1]).intersects(reference_union)
+
+    gdf = input_gdf.copy()
+    gdf[start_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[0]))
+    gdf[end_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[-1]))
+    gdf[start_connected_column] = gdf[start_connected_column].intersects(
+        reference_union
+    )
+    gdf[end_connected_column] = gdf[end_connected_column].intersects(reference_union)
+
+    return gdf
