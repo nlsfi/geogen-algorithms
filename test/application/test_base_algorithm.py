@@ -73,3 +73,24 @@ def test_input_index_converted_to_strings_for_algorithm_use():
     output_data = MockAlg().execute(input_data, {})
 
     assert_index_equal(output_data.index, Index(["111", "222", "333"], dtype="string"))
+
+
+def test_geometry_column_does_not_change():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data.copy().rename_geometry("other_geom")
+
+    input_data = GeoDataFrame(
+        {
+            "a": [1, 2, 3],
+            "b": ["x", "y", "z"],
+            "geom": [Point(0, 0), Point(1, 1), Point(2, 2)],
+        },
+        index=[111, 222, 333],
+        geometry="geom",
+    )
+
+    output_data = MockAlg().execute(input_data, {})
+
+    assert output_data.geometry.name == "geom"
