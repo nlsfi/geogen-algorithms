@@ -7,18 +7,30 @@
 from dataclasses import dataclass
 
 from geopandas import GeoDataFrame
-from pandas import concat
+from shapely import LineString
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.continuity import get_paths_along_roads
+from geogenalg.continuity import (
+    flag_connections,
+)
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
+from geogenalg.core.geometry import LineExtendFrom, extend_line_to_nearest
+from geogenalg.selection import remove_close_line_segments
+from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @supports_identity
 @dataclass(frozen=True)
 class GeneralizeSharedPaths(BaseAlgorithm):
-    """Detects paths that go close along bigger roads and removes them if needed."""
+    """Removes lower priority lines which are parallel to higher priority lines.
+
+    Low priority lines which had their original connection to other low
+    priority lines broken will be reconnected to the higher priority lines.
+
+    Reference data should contain a line GeoDataFrame with the key
+    `reference_key` (default "roads").
+    """
 
     detection_distance: float = 25.0
     """Distance within which the shared paths (or generally network of linestrings of
@@ -52,22 +64,75 @@ class GeneralizeSharedPaths(BaseAlgorithm):
             raise GeometryTypeError(msg)
 
         if self.reference_key in reference_data:
-            water_areas_gdf = reference_data[self.reference_key]
+            reference_gdf = reference_data[self.reference_key]
 
-            if not check_gdf_geometry_type(water_areas_gdf, ["LineString"]):
+            if not check_gdf_geometry_type(reference_gdf, ["LineString"]):
                 msg = "Reference data must contain only LineStrings."
                 raise GeometryTypeError(msg)
         else:
             msg = "Reference data is mandatory."
             raise MissingReferenceError(msg)
 
-        combined_ref_roads = GeoDataFrame(
-            concat(reference_data.values(), ignore_index=True),
-            crs=next(iter(reference_data.values())).crs,
+        gdf = flag_connections(
+            data,
+            start_connected_column="__start_connected_before",
+            end_connected_column="__end_connected_before",
         )
 
-        _too_close_shared_paths, shared_paths_to_keep = get_paths_along_roads(
-            data, combined_ref_roads, self.detection_distance
+        gdf = remove_close_line_segments(
+            gdf,
+            reference_gdf,
+            self.detection_distance,
+        )
+        gdf = explode_and_hash_id(gdf, "sharedpaths")
+
+        gdf = flag_connections(
+            gdf,
+            start_connected_column="__start_connected_after",
+            end_connected_column="__end_connected_after",
         )
 
-        return shared_paths_to_keep
+        # Effectively this checks which connections have been broken
+        # in remove_close_line_segments().
+        gdf["__extend_start"] = (
+            gdf["__start_connected_before"] != gdf["__start_connected_after"]
+        )
+
+        gdf["__extend_end"] = (
+            gdf["__end_connected_before"] != gdf["__end_connected_after"]
+        )
+
+        union_geom = reference_gdf.union_all()
+
+        def _extend(
+            extend_start: bool,  # noqa: FBT001
+            extend_end: bool,  # noqa: FBT001
+            line: LineString,
+        ) -> LineString:
+            if extend_start and extend_end:
+                extend_from = LineExtendFrom.BOTH
+            elif extend_start:
+                extend_from = LineExtendFrom.START
+            elif extend_end:
+                extend_from = LineExtendFrom.END
+            else:
+                return line
+
+            return extend_line_to_nearest(
+                line,
+                union_geom,
+                extend_from,
+                self.detection_distance * 1.25,
+            )
+
+        # Connect those shared paths whose connection was broken back into
+        # the larger network.
+        gdf.geometry = gdf[["__extend_start", "__extend_end", gdf.geometry.name]].apply(
+            lambda columns: _extend(*columns),
+            axis=1,
+        )
+
+        return gdf.drop(
+            [column for column in gdf.columns if column not in data.columns],
+            axis=1,
+        )
