@@ -7,7 +7,6 @@
 
 import re
 
-import geopandas as gpd
 import numpy as np
 import pytest
 from geopandas import GeoDataFrame
@@ -18,6 +17,8 @@ from geogenalg.analyze import (
     calculate_coverage,
     calculate_main_angle,
     classify_polygons_by_size_of_minimum_bounding_rectangle,
+    flag_parallel_lines,
+    get_parallel_line_areas,
 )
 from geogenalg.core.exceptions import GeometryTypeError
 
@@ -154,67 +155,57 @@ def test_calculate_main_angle_empty_polygon():
     ),
     [
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "class": ["A"]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             5.0,
             {
-                "small_polygons": gpd.GeoDataFrame(
+                "small_polygons": GeoDataFrame(
                     {"id": [1], "class": ["A"]},
                     geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
                 ),
-                "large_polygons": gpd.GeoDataFrame(
-                    columns=["id", "class"], geometry=[]
-                ),
+                "large_polygons": GeoDataFrame(columns=["id", "class"], geometry=[]),
             },
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "class": ["A"]},
                 geometry=[Polygon([(0, 0), (10, 0), (10, 1), (0, 1)])],
             ),
             5.0,
             {
-                "small_polygons": gpd.GeoDataFrame(
-                    columns=["id", "class"], geometry=[]
-                ),
-                "large_polygons": gpd.GeoDataFrame(
+                "small_polygons": GeoDataFrame(columns=["id", "class"], geometry=[]),
+                "large_polygons": GeoDataFrame(
                     {"id": [1], "class": ["A"]},
                     geometry=[Polygon([(0, 0), (10, 0), (10, 1), (0, 1)])],
                 ),
             },
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "class": ["SPECIAL"]},
                 geometry=[Polygon([(0, 0), (10, 0), (10, 1), (0, 1)])],
             ),
             15.0,
             {
-                "small_polygons": gpd.GeoDataFrame(
+                "small_polygons": GeoDataFrame(
                     {"id": [1], "class": ["SPECIAL"]},
                     geometry=[Polygon([(0, 0), (10, 0), (10, 1), (0, 1)])],
                 ),
-                "large_polygons": gpd.GeoDataFrame(
-                    columns=["id", "class"], geometry=[]
-                ),
+                "large_polygons": GeoDataFrame(columns=["id", "class"], geometry=[]),
             },
         ),
         (
-            gpd.GeoDataFrame(columns=["id", "class"], geometry=[]),
+            GeoDataFrame(columns=["id", "class"], geometry=[]),
             5.0,
             {
-                "small_polygons": gpd.GeoDataFrame(
-                    columns=["id", "class"], geometry=[]
-                ),
-                "large_polygons": gpd.GeoDataFrame(
-                    columns=["id", "class"], geometry=[]
-                ),
+                "small_polygons": GeoDataFrame(columns=["id", "class"], geometry=[]),
+                "large_polygons": GeoDataFrame(columns=["id", "class"], geometry=[]),
             },
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1, 2], "class": ["A", "B"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
@@ -223,18 +214,18 @@ def test_calculate_main_angle_empty_polygon():
             ),
             5.0,
             {
-                "small_polygons": gpd.GeoDataFrame(
+                "small_polygons": GeoDataFrame(
                     {"id": [1], "class": ["A"]},
                     geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
                 ),
-                "large_polygons": gpd.GeoDataFrame(
+                "large_polygons": GeoDataFrame(
                     {"id": [2], "class": ["B"]},
                     geometry=[Polygon([(0, 0), (10, 0), (10, 1), (0, 1)])],
                 ),
             },
         ),
         (
-            gpd.GeoDataFrame(
+            GeoDataFrame(
                 {"id": [1], "class": ["A"]},
                 geometry=[
                     Polygon(
@@ -254,10 +245,8 @@ def test_calculate_main_angle_empty_polygon():
             ),
             5.5,
             {
-                "small_polygons": gpd.GeoDataFrame(
-                    columns=["id", "class"], geometry=[]
-                ),
-                "large_polygons": gpd.GeoDataFrame(
+                "small_polygons": GeoDataFrame(columns=["id", "class"], geometry=[]),
+                "large_polygons": GeoDataFrame(
                     {"id": [1], "class": ["A"]},
                     geometry=[
                         Polygon(
@@ -288,9 +277,9 @@ def test_calculate_main_angle_empty_polygon():
     ],
 )
 def test_classify_polygons_by_size_of_minimum_bounding_rectangle(
-    input_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
     side_threshold: float,
-    expected_gdfs: dict[str, gpd.GeoDataFrame],
+    expected_gdfs: dict[str, GeoDataFrame],
 ):
     result_gdfs = classify_polygons_by_size_of_minimum_bounding_rectangle(
         input_gdf,
@@ -320,7 +309,7 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle(
 
 
 def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_invalid_geometry():
-    invalid_gdf = gpd.GeoDataFrame(
+    invalid_gdf = GeoDataFrame(
         {"id": [1, 2, 3], "class": ["A", "B", "C"]},
         geometry=[
             Point(0, 0),
@@ -336,3 +325,343 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
         ),
     ):
         classify_polygons_by_size_of_minimum_bounding_rectangle(invalid_gdf, 5.0)
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "parallel_distance",
+        "allowed_direction_difference",
+        "segmentize_distance",
+        "expected",
+    ),
+    [
+        (  # empty
+            GeoDataFrame(geometry=[]),
+            1,
+            10,
+            0,
+            GeoDataFrame(
+                {
+                    "parallel_group": [],
+                    "__direction": [],
+                    "parallel_with": [],
+                    "__id": [],
+                },
+                geometry=[],
+            ),
+        ),
+        (  # no_parallel_lines
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ]
+            ),
+            1,
+            10,
+            0,
+            GeoDataFrame(
+                {
+                    "parallel_group": [],
+                    "__direction": [],
+                    "parallel_with": [],
+                    "__id": [],
+                },
+                geometry=[],
+            ),
+        ),
+        (  # two_parallel_lines
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                ]
+            ),
+            1,
+            10,
+            0,
+            GeoDataFrame(
+                {
+                    "parallel_group": [1, 1],
+                    "__direction": [270.0, 270.0],
+                    "parallel_with": [{1}, {0}],
+                    "__id": [0, 1],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                ],
+            ),
+        ),
+        (  # direction_difference_too_large
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 0.5]]),
+                ]
+            ),
+            1,
+            10,
+            0,
+            GeoDataFrame(
+                {
+                    "parallel_group": [],
+                    "__direction": [],
+                    "parallel_with": [],
+                    "__id": [],
+                },
+                geometry=[],
+            ),
+        ),
+        (  # in_direction_difference_bounds
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 2], [1, 1]]),
+                ]
+            ),
+            5,
+            50,
+            0,
+            GeoDataFrame(
+                {
+                    "parallel_group": [1, 1],
+                    "__direction": [270.0, 315.0],
+                    "parallel_with": [{1}, {0}],
+                    "__id": [0, 1],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 2], [1, 1]]),
+                ],
+            ),
+        ),
+        (  # multiple_parallel_lines
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                    LineString([[0, 2], [1, 2]]),
+                    LineString([[0, 20], [1, 20]]),
+                    LineString([[0, 21], [1, 21]]),
+                ]
+            ),
+            5,
+            10,
+            0,
+            GeoDataFrame(
+                {
+                    "parallel_group": [1, 1, 1, 2, 2],
+                    "__direction": [270.0, 270.0, 270.0, 270.0, 270.0],
+                    "parallel_with": [{1, 2}, {0, 2}, {1, 0}, {4}, {3}],
+                    "__id": [0, 1, 2, 3, 4],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                    LineString([[0, 2], [1, 2]]),
+                    LineString([[0, 20], [1, 20]]),
+                    LineString([[0, 21], [1, 21]]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "no_parallel_lines",
+        "two_parallel_lines",
+        "direction_difference_too_large",
+        "in_direction_difference_bounds",
+        "multiple_parallel_lines",
+    ],
+)
+def test_flag_parallel_lines(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    allowed_direction_difference: float,
+    segmentize_distance: float,
+    expected: GeoDataFrame,
+):
+    if expected.empty:
+        expected["__direction"] = expected["__direction"].astype("float64")
+        expected["parallel_with"] = expected["parallel_with"].astype("object")
+        expected["parallel_group"] = expected["parallel_group"].astype("int64")
+        expected["__id"] = expected["__id"].astype("int64")
+
+    result = flag_parallel_lines(
+        input_gdf,
+        parallel_distance,
+        allowed_direction_difference,
+        segmentize_distance=segmentize_distance,
+    )
+
+    assert_frame_equal(
+        result,
+        expected,
+        check_like=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "parallel_distance",
+        "allowed_direction_difference",
+        "segmentize_distance",
+        "expected",
+    ),
+    [
+        (  # empty
+            GeoDataFrame(geometry=[]),
+            1,
+            10,
+            0,
+            GeoDataFrame(),
+        ),
+        (  # no_parallel_lines
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ]
+            ),
+            1,
+            10,
+            0,
+            GeoDataFrame(),
+        ),
+        (  # two_parallel_lines
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                ]
+            ),
+            1,
+            10,
+            0,
+            GeoDataFrame(
+                {
+                    "__direction": [270.0],
+                },
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 0],
+                            [0, 1],
+                            [1, 1],
+                            [1, 0],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (  # direction_difference_too_large
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 0.5]]),
+                ]
+            ),
+            1,
+            10,
+            0,
+            GeoDataFrame(),
+        ),
+        (  # in_direction_difference_bounds
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 2], [1, 1]]),
+                ]
+            ),
+            5,
+            50,
+            0,
+            GeoDataFrame(
+                {
+                    "__direction": [290.0],
+                },
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 2],
+                            [1, 1],
+                            [1, 0],
+                            [0, 0],
+                            [0, 2],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (  # multiple_parallel_lines
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                    LineString([[0, 2], [1, 2]]),
+                    LineString([[0, 20], [1, 20]]),
+                    LineString([[0, 21], [1, 21]]),
+                ]
+            ),
+            5,
+            10,
+            0,
+            GeoDataFrame(
+                {
+                    "__direction": [270.0, 270.0],
+                },
+                geometry=[
+                    Polygon(
+                        [
+                            [1, 2],
+                            [1, 1],
+                            [1, 0],
+                            [0, 0],
+                            [0, 1],
+                            [0, 2],
+                            [1, 2],
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            [0, 21],
+                            [1, 21],
+                            [1, 20],
+                            [0, 20],
+                            [0, 21],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "no_parallel_lines",
+        "two_parallel_lines",
+        "direction_difference_too_large",
+        "in_direction_difference_bounds",
+        "multiple_parallel_lines",
+    ],
+)
+def test_get_parallel_line_areas(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    allowed_direction_difference: float,
+    segmentize_distance: float,
+    expected: GeoDataFrame,
+):
+    result = get_parallel_line_areas(
+        input_gdf,
+        parallel_distance,
+        allowed_direction_difference=allowed_direction_difference,
+        segmentize_distance=segmentize_distance,
+    )
+
+    assert_frame_equal(
+        result,
+        expected,
+        check_like=True,
+    )
