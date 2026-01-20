@@ -991,13 +991,13 @@ def segment_direction(segment: LineString) -> float:
     Note:
     ----
         If you want to compare the direction of two segments you may want to
-        normalize them first, because although segments appear similarly
+        normalize them first, because although segments may appear similarly
         oriented, they may have differently ordered vertexes, resulting in a
         significantly different result.
 
     """
     if count_coordinates(segment) != 2:  # noqa: PLR2004
-        msg = "Input geometry must have two vertexes"
+        msg = "Input geometry must have two vertexes."
         raise GeometryOperationError(msg)
 
     dx = segment.coords[0][0] - segment.coords[1][0]

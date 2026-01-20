@@ -8,10 +8,235 @@
 import geopandas as gpd
 import numpy as np
 from geopandas import GeoDataFrame, overlay
+from pandas import Series
+from shapely import MultiLineString, concave_hull
 from shapely.geometry import LineString, Polygon
 
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import explode_line, segment_direction
 from geogenalg.utility.validation import check_gdf_geometry_type
+
+
+def _group_parallel_lines(
+    gdf: GeoDataFrame,
+    id_column: str,
+    parallel_with_column: str,
+    parallel_group_column: str,
+) -> None:
+    """Recursively determine which lines are parallel.
+
+    In practice this means that if we consider the lines:
+
+    A - parallel with just B
+    B - parallel with A and C
+    C - parallel just with B
+
+    All of these will be considered to be parallel with each other.
+
+    Input GeoDataFrame is edited in place.
+
+    """
+    groups = []
+    processed = set()
+
+    def _process_row(index: int, row: Series, group: set[int]) -> None:
+        if index in processed:
+            return
+
+        parallels = row[parallel_with_column]
+
+        processed.add(index)
+
+        group.add(index)
+        group.update(parallels)
+
+        for parallel in parallels:
+            if parallel in gdf.index:
+                _process_row(
+                    parallel, gdf.loc[gdf[id_column] == parallel].iloc[0], group
+                )
+
+    for index, row in gdf.iterrows():
+        if index in processed:
+            continue
+
+        group: set[int] = set()
+        _process_row(index, row, group)
+        groups.append(group)
+
+    gdf[parallel_group_column] = -1
+
+    for i, group in enumerate(groups, start=1):
+        for idx in group:
+            if idx in gdf.index:
+                gdf.at[idx, parallel_group_column] = i  # noqa: PD008
+
+
+def flag_parallel_lines(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    allowed_direction_difference: float,
+    *,
+    segmentize_distance: float = 0,
+) -> GeoDataFrame:
+    """Detect which lines are parallel with each other within given parameters.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with LineStrings.
+        parallel_distance: Maximum distance at which lines are considered to be
+            parallel.
+        allowed_direction_difference: If the absolute value of the difference of
+            direction (relative to north) between lines is under this value they
+            will still be considered to parallel.
+        segmentize_distance: If above zero, input lines will be segmentized
+            resulting in more precise detection.
+
+    Returns:
+    -------
+        GeoDataFrame containing detected parallel lines, with a column named
+        "parallel_group" denoting which other lines a line is parallel with.
+
+
+    """
+    gdf = input_gdf.copy()
+
+    def _empty_gdf() -> GeoDataFrame:
+        # This ensures in case we get an empty result, the output consistently
+        # has these columns, with these dtypes.
+        gdf["__direction"] = Series(dtype="float64")
+        gdf["parallel_group"] = Series(dtype="int64")
+        gdf["parallel_with"] = Series(dtype="object")
+        gdf["__id"] = Series(dtype="int64")
+
+        return gdf
+
+    if len(input_gdf.index) == 0:
+        return _empty_gdf()
+
+    if segmentize_distance > 0:
+        gdf.geometry = gdf.geometry.segmentize(segmentize_distance)
+
+    gdf.geometry = gdf.geometry.apply(explode_line)
+    gdf = gdf.explode().reset_index(drop=True)
+
+    # Normalize so that comparing the direction of segments later on is consistent
+    gdf["__direction"] = gdf.geometry.normalize().apply(segment_direction)
+    gdf["__parallel_check"] = gdf.geometry.buffer(
+        parallel_distance, cap_style="flat"
+    ).buffer(0.01, cap_style="square")
+    gdf["parallel_with"] = [set() for _ in range(len(gdf.index))]
+    gdf["__id"] = gdf.index
+
+    for index, row in gdf.iterrows():
+        parallel_geom = row["__parallel_check"]
+        parallel_geom_direction = row["__direction"]
+
+        # This locates lines which a) are not the line we're iterating over
+        # b) intersects the buffered area used to check for parallel lines and
+        # c) are within the given direction bounds.
+        crossing_lines = gdf.loc[
+            (gdf.geometry.intersects(parallel_geom))
+            & ~gdf.geometry.intersects(row.geometry)
+            & (
+                ((gdf["__direction"] - parallel_geom_direction).abs())
+                < allowed_direction_difference
+            )
+        ]
+
+        if len(crossing_lines.index) == 0:
+            continue
+
+        for crossing_index in crossing_lines.index:
+            gdf["parallel_with"].to_numpy()[index].add(crossing_index)
+
+    gdf = gdf.loc[gdf["parallel_with"].apply(len) != 0]
+
+    _group_parallel_lines(
+        gdf,
+        "__id",
+        "parallel_with",
+        "parallel_group",
+    )
+
+    gdf["__direction"] = Series(gdf["__direction"].tolist())
+    gdf = gdf.drop("__parallel_check", axis=1)
+
+    if len(gdf.index) == 0:
+        return _empty_gdf()
+
+    return gdf
+
+
+def get_parallel_line_areas(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    *,
+    allowed_direction_difference: float = 10,
+    segmentize_distance: float = 50,
+) -> GeoDataFrame:
+    """Find areas with parallel lines.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with (potential) parallel lines.
+        parallel_distance: Distance threshold to still consider lines parallel.
+        allowed_direction_difference: Acceptable difference in direction
+            (calculated in relation to North), in degrees.
+        segmentize_distance: Interval at which parallel lines are checked for,
+            the lower the number the more precise result, with the cost of
+            performance.
+
+    Returns:
+    -------
+        GeoDataFrame of polygons enclosing the parallel lines which were found.
+
+    """
+    parallels = flag_parallel_lines(
+        input_gdf,
+        parallel_distance,
+        allowed_direction_difference,
+        segmentize_distance=segmentize_distance,
+    )
+
+    if len(parallels) == 0:
+        return GeoDataFrame()
+
+    compare = parallels[["__id", parallels.geometry.name]].copy()
+
+    def _polygonize_parallel(
+        parallel_with: set[int],
+        geom: LineString,
+    ) -> Polygon:
+        others = compare.loc[compare["__id"].isin(parallel_with)]
+
+        geoms = [geom, *list(others.geometry)]
+
+        return concave_hull(MultiLineString(geoms))
+
+    parallels.geometry = parallels[["parallel_with", parallels.geometry.name]].apply(
+        lambda columns: _polygonize_parallel(*columns), axis=1
+    )
+
+    parallels = parallels.dissolve(
+        by=["parallel_group"],
+        aggfunc={"__direction": "mean"},  # noqa: SC200
+    )
+
+    # There may be some intersections in the generated polygons. This is okay,
+    # if the orientation of the lines the polygon was created from is
+    # different, otherwise this is not desired, so round mean direction and
+    # dissolve again according to it.
+    parallels["__direction"] = parallels["__direction"].round(-1)
+
+    return (
+        parallels.dissolve(
+            by=["__direction"],
+            as_index=False,
+        )
+        .explode(index_parts=False)
+        .reset_index(drop=True)
+    )  # Explode to single rows.
 
 
 def calculate_coverage(
