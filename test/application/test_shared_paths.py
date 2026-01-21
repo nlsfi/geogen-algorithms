@@ -11,10 +11,10 @@ from pathlib import Path
 import pytest
 from geopandas import GeoDataFrame
 from pandas.testing import assert_frame_equal
-from shapely import Point
+from shapely import LineString, Point
 
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
-from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
 from geogenalg.testing import (
     GeoPackageInput,
     get_result_and_control,
@@ -52,4 +52,33 @@ def test_invalid_geom_type() -> None:
     ):
         GeneralizeSharedPaths().execute(
             GeoDataFrame(geometry=[Point(0, 0)]),
+        )
+
+
+def test_missing_reference() -> None:
+    with pytest.raises(
+        MissingReferenceError,
+        match=re.escape("Reference data is mandatory."),
+    ):
+        GeneralizeSharedPaths().execute(
+            GeoDataFrame(
+                geometry=[LineString([[0, 0], [0, 1]])],
+            ),
+        )
+
+
+def test_invalid_reference_geom_type() -> None:
+    with pytest.raises(
+        GeometryTypeError,
+        match=re.escape("Reference data must contain only LineStrings."),
+    ):
+        GeneralizeSharedPaths().execute(
+            GeoDataFrame(
+                geometry=[LineString([[0, 0], [0, 1]])],
+            ),
+            reference_data={
+                "roads": GeoDataFrame(
+                    geometry=[Point(0, 0)],
+                ),
+            },
         )
