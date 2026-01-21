@@ -6,10 +6,9 @@
 #  LICENSE file in the root directory of this source tree.
 
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
-from geopandas import GeoDataFrame, read_file
+from geopandas import GeoDataFrame
 from pandas.testing import assert_frame_equal
 from shapely.geometry import Point, Polygon
 
@@ -18,7 +17,7 @@ from geogenalg.core.exceptions import (
     GeometryTypeError,
     MissingReferenceError,
 )
-from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+from geogenalg.testing import GeoPackageInput, get_result_and_control
 
 UNIQUE_ID_COLUMN = "uuid"
 
@@ -48,30 +47,18 @@ def test_keep_intersection(
 ) -> None:
     input_layer = f"{input_layer}_{layer_suffix}"
     input_path = testdata_path / gpkg_file
-    input_data = read_gdf_from_file_and_set_index(
-        input_path,
+
+    result, control = get_result_and_control(
+        GeoPackageInput(input_path, layer_name=input_layer),
+        GeoPackageInput(input_path, layer_name=f"control_{layer_suffix}"),
+        KeepIntersection(),
         UNIQUE_ID_COLUMN,
-        layer=input_layer,
+        {
+            "mask": GeoPackageInput(input_path, layer_name="mask"),
+        },
     )
 
-    temp_dir = TemporaryDirectory()
-    output_path = Path(temp_dir.name) / "output.gpkg"
-
-    algorithm = KeepIntersection()
-
-    control = read_gdf_from_file_and_set_index(
-        input_path,
-        UNIQUE_ID_COLUMN,
-        layer=f"control_{layer_suffix}",
-    )
-    mask = read_file(input_path, layer="mask")
-    algorithm.execute(input_data, {"mask": mask}).to_file(output_path, layer="result")
-
-    result = read_gdf_from_file_and_set_index(
-        output_path, UNIQUE_ID_COLUMN, layer="result"
-    )
-
-    assert_frame_equal(control, result)
+    assert_frame_equal(result, control)
 
 
 def test_remove_overlap_missing_reference_data():
