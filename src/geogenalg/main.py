@@ -14,6 +14,8 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
+from geogenalg.application.generalize_power_lines import GeneralizePowerLines
+
 try:
     import typer
 except ImportError:
@@ -330,6 +332,7 @@ def build_app() -> None:
         "roads": GeneralizeRoads,
         "buildings": GeneralizeBuildings,
         "shared_paths": GeneralizeSharedPaths,
+        "power_lines": GeneralizePowerLines,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
