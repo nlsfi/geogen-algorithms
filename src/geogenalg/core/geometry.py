@@ -909,11 +909,8 @@ def centerline_length(
 
     Returns:
     -------
-        Length of centerline.
-
-    Raises:
-    ------
-        GeometryOperationError: If centerline could not be formed as expected.
+        Length of centerline. If centerline cannot be formed correctly (such as
+        for empty polygons), returns 0.0.
 
     """
     line = centerline(
@@ -921,8 +918,7 @@ def centerline_length(
     )
 
     if not isinstance(line, MultiLineString | LineString):
-        msg = "Centerline could not be formed"
-        raise GeometryOperationError(msg)
+        return 0.0
 
     return line.length
 

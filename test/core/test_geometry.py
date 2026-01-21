@@ -1193,12 +1193,18 @@ def test_assign_nearest_z_polygon_overwrite(assign_nearest_z_source_gdf: GeoData
             190.0,
             True,
         ),
+        (
+            Polygon(),
+            0.0,
+            True,
+        ),
     ],
     ids=[
         "polygon, no holes, no exterior only",
         "polygon, no holes, exterior only",
         "polygon, holes, no exterior only",
         "polygon, holes, exterior only",
+        "empty polygon",
     ],
 )
 def test_centerline_length(
