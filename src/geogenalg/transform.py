@@ -91,6 +91,7 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
     masked_geoms = gdf.geometry.difference(mask)
     gdf["modified_by_mask__"] = ~gdf.geometry.geom_equals(masked_geoms)
     gdf.geometry = masked_geoms
+    gdf = gdf.loc[~gdf.geometry.is_empty]
 
     geom_column_name = str(gdf.geometry.name)
     for row in gdf.itertuples():
