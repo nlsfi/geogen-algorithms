@@ -4,6 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 from dataclasses import dataclass
+from typing import ClassVar
 
 from geopandas import GeoDataFrame
 
@@ -34,6 +35,9 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
 
     # Inherited from GeneralizeWaterAreas, override default
     thin_section_exaggerate_by: float = 0.0
+
+    valid_input_geometry_types: ClassVar = {"Polygon"}
+    valid_reference_geometry_types: ClassVar = {"LineString"}
 
     def _execute(
         self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]

@@ -73,7 +73,7 @@ def test_remove_overlap():
 def test_remove_overlap_invalid_input_geometry():
     with pytest.raises(
         GeometryTypeError,
-        match=r"Remove overlap works only with Polygon geometries.",
+        match=r"Input data must contain only geometries of following types: Polygon.",
     ):
         RemoveOverlap().execute(
             data=GeoDataFrame(
@@ -107,7 +107,7 @@ def test_remove_overlap_missing_reference_data():
 def test_remove_overlap_invalid_mask_geometry():
     with pytest.raises(
         GeometryTypeError,
-        match=r"Mask data should include only Polygon geometries.",
+        match=r"Reference data must contain only geometries of following types: Polygon.",
     ):
         RemoveOverlap().execute(
             data=GeoDataFrame(

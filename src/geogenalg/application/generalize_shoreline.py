@@ -7,12 +7,12 @@
 import logging
 from dataclasses import dataclass
 from itertools import combinations
-from typing import override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame, overlay
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
+from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,9 @@ class GeneralizeShoreline(BaseAlgorithm):
     reference_key: str = "areas"
     "Reference data key to use as the source of the generalized shoreline."
 
+    valid_input_geometry_types: ClassVar = {"LineString"}
+    valid_reference_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
+
     @override
     def _execute(
         self,
@@ -47,27 +50,16 @@ class GeneralizeShoreline(BaseAlgorithm):
         """Execute algorithm.
 
         Raises:
-            GeometryTypeError: If input GeoDataFrames have incorrect geometry types.
             MissingReferenceError: If reference data is not found.
 
         Returns:
             New shoreline extracted from generalized water areas.
 
         """
-        if not check_gdf_geometry_type(data, ["LineString"]):
-            msg = "Input data must contain only LineStrings."
-            raise GeometryTypeError(msg)
-
         if self.reference_key in reference_data:
             water_areas_gdf = reference_data[self.reference_key]
-
-            if not check_gdf_geometry_type(
-                water_areas_gdf, ["Polygon", "MultiPolygon"]
-            ):
-                msg = "Reference data must contain only (Multi)Polygons."
-                raise GeometryTypeError(msg)
         else:
-            msg = "Reference data is mandatory."
+            msg = "Reference data is missing."
             raise MissingReferenceError(msg)
 
         new_shoreline = water_areas_gdf.geometry.boundary.to_frame()

@@ -6,18 +6,30 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TypeVar, final
+from typing import ClassVar, TypeVar, final
 
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
 
+from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.utility.hash import reset_with_random_hash_index
+from geogenalg.utility.validation import (
+    ShapelyGeometryTypeString,
+    check_gdf_geometry_type,
+)
 
 _SUPPORTS_IDENTITY_ATTR = "__supports_identity"
 
 
 class BaseAlgorithm(ABC):
     """Abstract base class for all algorithms."""
+
+    valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
+    """Set of accepted geometry types for input data. If there is a mismatch,
+    GeometryTypeError will be raised."""
+    valid_reference_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
+    """Set of accepted geometry types for reference data. If there is a mismatch,
+    GeometryTypeError will be raised."""
 
     @final
     def execute(
@@ -36,6 +48,12 @@ class BaseAlgorithm(ABC):
         -------
             A GeoDataFrame containing generalized data
 
+        Raises:
+        ------
+            GeometryTypeError: If input or reference data contains invalid
+            geometry types, or valid geometry types are not defined for
+            subclass.
+
         """
         # Convert non-string indices to allow algorithm implementations
         # to rely on the assumption that input index is some kind of string
@@ -44,6 +62,28 @@ class BaseAlgorithm(ABC):
 
         if reference_data is None:
             reference_data = {}
+
+        if not self.valid_input_geometry_types:
+            msg = "Valid input geometry types not defined."
+            raise GeometryTypeError(msg)
+
+        if not check_gdf_geometry_type(data, self.valid_input_geometry_types):
+            msg = (
+                "Input data must contain only geometries of following types: "
+                + f"{', '.join(self.valid_input_geometry_types)}."
+            )
+            raise GeometryTypeError(msg)
+
+        for reference in reference_data.values():
+            if not check_gdf_geometry_type(
+                reference,
+                self.valid_reference_geometry_types,
+            ):
+                msg = (
+                    "Reference data must contain only geometries of following types: "
+                    + f"{', '.join(self.valid_reference_geometry_types)}."
+                )
+                raise GeometryTypeError(msg)
 
         output = self._execute(data=data, reference_data=reference_data)
 

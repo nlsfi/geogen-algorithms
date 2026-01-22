@@ -81,7 +81,7 @@ def test_remove_overlap_missing_reference_data():
 def test_remove_overlap_invalid_mask_geometry():
     with pytest.raises(
         GeometryTypeError,
-        match=r"Mask data should include only Polygon geometries.",
+        match=r"Reference data must contain only geometries of following types: Polygon, MultiPolygon.",
     ):
         KeepIntersection().execute(
             data=GeoDataFrame(
