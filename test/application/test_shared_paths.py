@@ -5,7 +5,6 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
-import re
 from pathlib import Path
 
 import pytest
@@ -48,7 +47,7 @@ def test_generalize_shared_paths(
 def test_invalid_geom_type() -> None:
     with pytest.raises(
         GeometryTypeError,
-        match=re.escape("Input data must contain only LineStrings."),
+        match=r"Input data must contain only geometries of following types: LineString.",
     ):
         GeneralizeSharedPaths().execute(
             GeoDataFrame(geometry=[Point(0, 0)]),
@@ -58,7 +57,7 @@ def test_invalid_geom_type() -> None:
 def test_missing_reference() -> None:
     with pytest.raises(
         MissingReferenceError,
-        match=re.escape("Reference data is mandatory."),
+        match=r"Reference data is mandatory.",
     ):
         GeneralizeSharedPaths().execute(
             GeoDataFrame(
@@ -70,7 +69,7 @@ def test_missing_reference() -> None:
 def test_invalid_reference_geom_type() -> None:
     with pytest.raises(
         GeometryTypeError,
-        match=re.escape("Reference data must contain only LineStrings."),
+        match=r"Reference data must contain only geometries of following types: LineString.",
     ):
         GeneralizeSharedPaths().execute(
             GeoDataFrame(
