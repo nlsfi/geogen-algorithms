@@ -68,9 +68,13 @@ class BaseAlgorithm(ABC):
             raise GeometryTypeError(msg)
 
         if not check_gdf_geometry_type(data, self.valid_input_geometry_types):
+            types = (
+                next(iter(self.valid_input_geometry_types))
+                if len(self.valid_input_geometry_types) == 1
+                else f"{', '.join(sorted(self.valid_input_geometry_types))}."
+            )
             msg = (
-                "Input data must contain only geometries of following types: "
-                + f"{', '.join(self.valid_input_geometry_types)}."
+                f"Input data must contain only geometries of following types: {types}."
             )
             raise GeometryTypeError(msg)
 
@@ -79,9 +83,14 @@ class BaseAlgorithm(ABC):
                 reference,
                 self.valid_reference_geometry_types,
             ):
+                types = (
+                    next(iter(self.valid_reference_geometry_types))
+                    if len(self.valid_reference_geometry_types) == 1
+                    else f"{', '.join(sorted(self.valid_reference_geometry_types))}"
+                )
                 msg = (
                     "Reference data must contain only geometries of following types: "
-                    + f"{', '.join(self.valid_reference_geometry_types)}."
+                    + f"{types}."
                 )
                 raise GeometryTypeError(msg)
 
