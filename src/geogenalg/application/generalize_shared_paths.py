@@ -5,6 +5,7 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 from dataclasses import dataclass
+from typing import ClassVar
 
 from geopandas import GeoDataFrame
 from shapely import LineString
@@ -13,11 +14,10 @@ from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.continuity import (
     flag_connections,
 )
-from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
+from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.core.geometry import LineExtendFrom, extend_line_to_nearest
 from geogenalg.selection import remove_close_line_segments
 from geogenalg.split import explode_and_hash_id
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @supports_identity
@@ -40,6 +40,9 @@ class GeneralizeSharedPaths(BaseAlgorithm):
     reference_key: str = "roads"
     """Reference data, higher priority layer"""
 
+    valid_input_geometry_types: ClassVar = {"LineString"}
+    valid_reference_geometry_types: ClassVar = {"LineString"}
+
     def _execute(
         self,
         data: GeoDataFrame,
@@ -49,8 +52,6 @@ class GeneralizeSharedPaths(BaseAlgorithm):
 
         Raises
         ------
-            GeometryTypeError: if the geometry of input GeoDataFrames are not
-            LineStrings
             MissingReferenceError: if no reference data is provided
 
         Returns
@@ -59,16 +60,8 @@ class GeneralizeSharedPaths(BaseAlgorithm):
         the detection_distance threshold around reference data LineStrings.
 
         """
-        if not check_gdf_geometry_type(data, ["LineString"]):
-            msg = "Input data must contain only LineStrings."
-            raise GeometryTypeError(msg)
-
         if self.reference_key in reference_data:
             reference_gdf = reference_data[self.reference_key]
-
-            if not check_gdf_geometry_type(reference_gdf, ["LineString"]):
-                msg = "Reference data must contain only LineStrings."
-                raise GeometryTypeError(msg)
         else:
             msg = "Reference data is mandatory."
             raise MissingReferenceError(msg)

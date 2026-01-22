@@ -5,14 +5,13 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
+from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.selection import remove_close_line_segments, remove_short_lines
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @supports_identity
@@ -37,6 +36,9 @@ class GeneralizeCliffs(BaseAlgorithm):
     reference_key: str = "roads"
     """Reference data key for roads data."""
 
+    valid_input_geometry_types: ClassVar = {"LineString", "MultiLineString"}
+    valid_reference_geometry_types: ClassVar = {"LineString", "MultiLineString"}
+
     @override
     def _execute(
         self,
@@ -52,21 +54,15 @@ class GeneralizeCliffs(BaseAlgorithm):
         Returns:
             Generalized cliff lines.
 
-        """
-        if not check_gdf_geometry_type(data, ["LineString", "MultiLineString"]):
-            msg = "GeneralizeFences works only with (Multi)LineString geometries."
-            raise GeometryTypeError(msg)
+        Raises:
+            MissingReferenceError: If reference data is missing.
 
+        """
         if self.reference_key in reference_data:
             roads_data = reference_data[self.reference_key]
-            if not check_gdf_geometry_type(
-                roads_data, ["LineString", "MultiLineString"]
-            ):
-                msg = "Reference data must only contain (Multi)LineStrings."
-                raise GeometryTypeError(msg)
         else:
-            msg = "Reference data is mandatory."
-            raise MissingReferenceError
+            msg = "Reference data is missing."
+            raise MissingReferenceError(msg)
 
         result = remove_close_line_segments(data, roads_data, self.buffer_size)
         return remove_short_lines(result, self.length_threshold)

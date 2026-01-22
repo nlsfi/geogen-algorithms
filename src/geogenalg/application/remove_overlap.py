@@ -5,13 +5,12 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
-from geogenalg.utility.validation import check_gdf_geometry_type
+from geogenalg.core.exceptions import MissingReferenceError
 
 
 @supports_identity
@@ -29,6 +28,9 @@ class RemoveOverlap(BaseAlgorithm):
 
     reference_key: str = "mask"
     """Reference data key to use as a mask layer for overlap detection."""
+
+    valid_input_geometry_types: ClassVar = {"Polygon"}
+    valid_reference_geometry_types: ClassVar = {"Polygon"}
 
     @override
     def _execute(
@@ -51,22 +53,13 @@ class RemoveOverlap(BaseAlgorithm):
 
         Raises:
         ------
-            GeometryTypeError: If data or mask data have non-polygon geometries.
             MissingReferenceError: If reference data is not found.
 
         """
-        if not check_gdf_geometry_type(data, ["Polygon"]):
-            msg = "Remove overlap works only with Polygon geometries."
-            raise GeometryTypeError(msg)
-
         if self.reference_key not in reference_data:
             msg = "Reference data with mask polygons is mandatory."
             raise MissingReferenceError(msg)
 
         mask_data = reference_data[self.reference_key]
-
-        if not check_gdf_geometry_type(mask_data, ["Polygon"]):
-            msg = "Mask data should include only Polygon geometries."
-            raise GeometryTypeError(msg)
 
         return data.overlay(mask_data, how="difference")

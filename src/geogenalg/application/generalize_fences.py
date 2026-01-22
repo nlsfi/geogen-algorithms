@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import override
+from typing import ClassVar, override
 
 from cartagen.utils.partitioning.network import network_faces
 from geopandas import GeoDataFrame
@@ -14,7 +14,7 @@ from pandas import concat
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.continuity import connect_nearby_endpoints
-from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.merge import merge_connecting_lines_by_attribute
 from geogenalg.selection import (
@@ -23,7 +23,6 @@ from geogenalg.selection import (
     remove_parts_of_lines_on_polygon_edges,
     split_polygons_by_point_intersection,
 )
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @supports_identity
@@ -31,8 +30,7 @@ from geogenalg.utility.validation import check_gdf_geometry_type
 class GeneralizeFences(BaseAlgorithm):
     """Generalize lines representing fences.
 
-    Reference data should contain a Point GeoDataFrame with the key
-    "masts".
+    Reference data should contain a Point GeoDataFrame.
 
     Output contains the generalized line fences.
 
@@ -60,6 +58,11 @@ class GeneralizeFences(BaseAlgorithm):
     """Maximum gap between two fence lines to be connected with a helper line."""
     attribute_for_line_merge: str = "kohdeluokka"
     """Name of the attribute to determine which line features can be merged."""
+    reference_key: str = "masts"
+    """Reference data key to use as a source of mast data."""
+
+    valid_input_geometry_types: ClassVar = {"LineString"}
+    valid_reference_geometry_types: ClassVar = {"Point"}
 
     @override
     def _execute(
@@ -72,8 +75,7 @@ class GeneralizeFences(BaseAlgorithm):
         Args:
         ----
             data: A GeoDataFrame containing the fence lines to be generalized.
-            reference_data: Should contain a Point GeoDataFrame with the key
-                "masts".
+            reference_data: Should contain a Point GeoDataFrame.
 
         Returns:
         -------
@@ -81,26 +83,14 @@ class GeneralizeFences(BaseAlgorithm):
 
         Raises:
         ------
-            GeometryTypeError: If `data` contains non-line geometries or the
-                GeoDataFrame with key "masts" in `reference_data` contains
-                non-point geometries.
-            KeyError: If `reference_data` does not contain data with key
-                "masts" or input data does not have specified
-                `attribute_for_line_merge`.
+            MissingReferenceError: If reference data is missing.
+            KeyError: If specified attribute for merging lines is not specified.
 
         """
-        if not check_gdf_geometry_type(data, ["LineString"]):
-            msg = "GeneralizeFences works only with LineString geometries."
-            raise GeometryTypeError(msg)
-        if "masts" not in reference_data:
-            msg = (
-                "GeneralizeFences requires mast Point GeoDataFrame"
-                + " in reference_data with key 'masts'."
-            )
-            raise KeyError(msg)
-        if not check_gdf_geometry_type(reference_data["masts"], ["Point"]):
-            msg = "Masts data should be a Point GeoDataFrame."
-            raise GeometryTypeError(msg)
+        if self.reference_key not in reference_data:
+            msg = "Reference data is missing."
+            raise MissingReferenceError(msg)
+
         if self.attribute_for_line_merge not in data.columns:
             msg = (
                 "Specified `attribute_for_line_merge` "
@@ -162,7 +152,9 @@ class GeneralizeFences(BaseAlgorithm):
         # Remove polygons whose area exceeds the closing_fence_area_with_mast_threshold
         # and the closing_fence_area_threshold
         polygon_gdf_with_point, polygon_gdf_without_point = (
-            split_polygons_by_point_intersection(faces_gdf, reference_data["masts"])
+            split_polygons_by_point_intersection(
+                faces_gdf, reference_data[self.reference_key]
+            )
         )
         polygon_gdf_with_point = remove_large_polygons(
             polygon_gdf_with_point, self.closing_fence_area_with_mast_threshold

@@ -8,15 +8,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from itertools import chain
-from typing import Any
+from typing import Any, ClassVar
 
 from geopandas import GeoDataFrame
 from pandas import Series, concat
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.cluster import get_cluster_centroids
-from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @supports_identity
@@ -47,6 +45,8 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
     must correspond to Pandas's aggregation function names. If no function is
     given "first" will be used by default."""
 
+    valid_input_geometry_types: ClassVar = {"Point", "Polygon"}
+
     def _process_polygons(
         self,
         polygons: GeoDataFrame,
@@ -61,10 +61,6 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],  # noqa: ARG002
     ) -> GeoDataFrame:
-        if not check_gdf_geometry_type(data, ["Point", "Polygon"]):
-            msg = "Input data must only contain Polygons or Points."
-            raise GeometryTypeError(msg)
-
         index_name = data.index.name
 
         points, polygons = (

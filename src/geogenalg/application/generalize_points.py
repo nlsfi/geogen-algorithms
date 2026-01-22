@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from geopandas import GeoDataFrame
 
@@ -12,9 +13,7 @@ from geogenalg.application import supports_identity
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
-from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.displacement import displace_points
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @supports_identity
@@ -51,6 +50,8 @@ class GeneralizePoints(GeneralizePointClustersAndPolygonsToCentroids):
     # Inherited from GeneralizePointClustersAndPolygonsToCentroids, override default
     cluster_distance: float = 20.0
 
+    valid_input_geometry_types: ClassVar = {"Point"}
+
     def _execute(
         self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
     ) -> GeoDataFrame:
@@ -65,15 +66,7 @@ class GeneralizePoints(GeneralizePointClustersAndPolygonsToCentroids):
         -------
             A GeoDataFrame containing the generalized points.
 
-        Raises:
-        ------
-            GeometryTypeError: If `data` contains non-point geometries.
-
         """
-        if not check_gdf_geometry_type(data, ["Point"]):
-            msg = "GeneralizePoints works only with Point geometries."
-            raise GeometryTypeError(msg)
-
         clustered_points = super()._execute(data, reference_data)
 
         return displace_points(

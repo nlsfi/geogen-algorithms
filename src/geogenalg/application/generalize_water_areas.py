@@ -6,13 +6,12 @@
 
 import operator
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame, GeoSeries
 from shapely import MultiPoint, MultiPolygon, Point, Polygon, force_2d
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import (
     assign_nearest_z,
     chaikin_smooth_keep_topology,
@@ -23,7 +22,6 @@ from geogenalg.exaggeration import (
     exaggerate_thin_polygons,
     extract_narrow_polygon_parts,
 )
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @supports_identity
@@ -72,6 +70,9 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     """Reference data key to use as a shoreline layer for preventing smoothing of
     non-shoreline vertices."""
 
+    valid_input_geometry_types: ClassVar = {"Polygon"}
+    valid_reference_geometry_types: ClassVar = {"LineString"}
+
     @staticmethod
     def _get_skip_coords(data: GeoDataFrame, shoreline: GeoDataFrame) -> MultiPoint:
         data_points = data.extract_unique_points().union_all()
@@ -95,20 +96,12 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        if not check_gdf_geometry_type(data, ["Polygon"]):
-            msg = "Input data must only contain Polygons."
-            raise GeometryTypeError(msg)
-
         if not 0.0 <= self.island_min_elongation <= 1.0:
             msg = "Minimum island elongation must be between 0.0 and 1.0."
             raise ValueError(msg)
 
         if self.reference_key in reference_data:
             shoreline_gdf = reference_data[self.reference_key]
-            if not check_gdf_geometry_type(shoreline_gdf, ["LineString"]):
-                msg = "Reference data must only contain LineStrings."
-                raise GeometryTypeError(msg)
-
             # Extract out any points which are found in the input (Polygon)
             # data, but not the shoreline LineString data. This allows to
             # determine non-shoreline vertices (e.g. territorial water borders

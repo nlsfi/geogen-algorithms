@@ -55,6 +55,8 @@ def test_invalid_geom_type() -> None:
 
     with pytest.raises(
         GeometryTypeError,
-        match=re.escape("Input data must only contain Polygons."),
+        match=re.escape(
+            "Input data must contain only geometries of following types: Polygon."
+        ),
     ):
         GeneralizeWaterCourseAreas().execute(data=gdf, reference_data={})

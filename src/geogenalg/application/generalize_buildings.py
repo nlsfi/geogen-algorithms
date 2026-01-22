@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
@@ -85,6 +86,8 @@ class GeneralizeBuildings(BaseAlgorithm):
     """Column name for storing the building's original area."""
     main_angle_column: str = "main_angle"
     """Column name for storing the main angle of the building."""
+
+    valid_input_geometry_types: ClassVar = {"Polygon", "Point"}
 
     def _execute(
         self,
