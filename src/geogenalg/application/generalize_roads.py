@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 from pandas import concat
@@ -17,8 +17,6 @@ from geogenalg.continuity import (
     detect_dead_ends,
     inspect_dead_end_candidates,
 )
-from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 CONNECTION_INFO_COLUMN = "is_connected"
 DEAD_END_INFO_COLUMN = "dead_end"
@@ -43,22 +41,15 @@ class GeneralizeRoads(BaseAlgorithm):
     threshold_length: float = 75.0
     """Unconnected/dead-end linestring shorter than this will be removed."""
 
+    valid_input_geometry_types: ClassVar = {"LineString"}
+    valid_reference_geometry_types: ClassVar = {"LineString"}
+
     @override
     def _execute(
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        if not check_gdf_geometry_type(data, ["LineString"]):
-            msg = "GeneralizeRoads works only with LineString geometries"
-            raise GeometryTypeError(msg)
-
-        if reference_data:
-            for gdf in list(reference_data.values()):
-                if not check_gdf_geometry_type(gdf, ["LineString"]):
-                    msg = "Reference data must only contain LineStrings"
-                    raise GeometryTypeError(msg)
-
         data = data.copy()
 
         input_gdf_columns = list(data.columns)

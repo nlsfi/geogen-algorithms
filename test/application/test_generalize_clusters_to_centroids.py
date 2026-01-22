@@ -66,7 +66,9 @@ def test_generalize_boulders_in_water(
 def test_invalid_geom_type() -> None:
     with pytest.raises(
         GeometryTypeError,
-        match=re.escape("Input data must only contain Polygons or Points."),
+        match=re.escape(
+            "Input data must contain only geometries of following types: Point, Polygon.",
+        ),
     ):
         GeneralizePointClustersAndPolygonsToCentroids().execute(
             GeoDataFrame(

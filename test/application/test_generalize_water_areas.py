@@ -109,7 +109,9 @@ def test_invalid_geom_type() -> None:
 
     with pytest.raises(
         GeometryTypeError,
-        match=re.escape("Input data must only contain Polygons."),
+        match=re.escape(
+            "Input data must contain only geometries of following types: Polygon."
+        ),
     ):
         GeneralizeWaterAreas().execute(data=gdf, reference_data={})
 
@@ -120,7 +122,9 @@ def test_invalid_shoreline_geom_type() -> None:
 
     with pytest.raises(
         GeometryTypeError,
-        match=re.escape("Reference data must only contain LineStrings."),
+        match=re.escape(
+            "Reference data must contain only geometries of following types: LineString."
+        ),
     ):
         GeneralizeWaterAreas().execute(
             data=gdf, reference_data={"shoreline": reference_gdf}

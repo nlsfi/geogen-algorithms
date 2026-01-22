@@ -5,6 +5,7 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+import re
 from pathlib import Path
 
 import pytest
@@ -48,7 +49,9 @@ def test_generalize_cliffs_missing_reference_data(testdata_path: Path) -> None:
         layer="cliffs_source",
     )
 
-    with pytest.raises(MissingReferenceError):
+    with pytest.raises(
+        MissingReferenceError, match=re.escape("Reference data is missing.")
+    ):
         GeneralizeCliffs().execute(data=input_data, reference_data={})
 
 

@@ -76,6 +76,6 @@ def test_generalize_landcover_invalid_geometry_type() -> None:
 
     with pytest.raises(
         GeometryTypeError,
-        match=r"GeneralizeLandcover works only with Polygon geometries.",
+        match=r"Input data must contain only geometries of following types: Polygon.",
     ):
         algorithm.execute(data=gdf, reference_data={})

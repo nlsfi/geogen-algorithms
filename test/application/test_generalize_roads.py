@@ -58,7 +58,9 @@ def test_generalize_roads(
 def test_invalid_geom_type() -> None:
     with pytest.raises(
         GeometryTypeError,
-        match=re.escape("GeneralizeRoads works only with LineString geometries"),
+        match=re.escape(
+            "Input data must contain only geometries of following types: LineString."
+        ),
     ):
         GeneralizeRoads().execute(
             GeoDataFrame(

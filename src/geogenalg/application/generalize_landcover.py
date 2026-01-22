@@ -5,16 +5,15 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.attributes import inherit_attributes
-from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.selection import remove_small_holes, remove_small_polygons
-from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 @dataclass(frozen=True)
@@ -49,15 +48,13 @@ class GeneralizeLandcover(BaseAlgorithm):
     smoothing: bool = False
     """If True, polygons will be smoothed."""
 
+    valid_input_geometry_types: ClassVar = {"Polygon"}
+
     def _execute(
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],  # noqa: ARG002
     ) -> GeoDataFrame:
-        if not check_gdf_geometry_type(data, ["Polygon"]):
-            msg = "GeneralizeLandcover works only with Polygon geometries."
-            raise GeometryTypeError(msg)
-
         result_gdf = data.copy()
 
         def _buffer(gdf: GeoDataFrame, distance: float) -> None:
