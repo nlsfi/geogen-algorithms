@@ -108,7 +108,8 @@ def test_generalize_points() -> None:
 
 def test_generalize_points_invalid_geometry_type():
     with pytest.raises(
-        GeometryTypeError, match=r"GeneralizePoints works only with Point geometries."
+        GeometryTypeError,
+        match=r"Input data must contain only geometries of following types: Point.",
     ):
         GeneralizePoints().execute(
             data=GeoDataFrame(

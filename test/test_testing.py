@@ -9,6 +9,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import ClassVar
 
 import pytest
 from geopandas import GeoDataFrame, read_file
@@ -93,6 +94,9 @@ def test_assert_gdf_equal_save_diff_is_equal():
 @dataclass(frozen=True)
 class MockAlg(BaseAlgorithm):
     mock_attribute: str = "test"
+
+    valid_input_geometry_types: ClassVar = {"Point"}
+    valid_reference_geometry_types: ClassVar = {"Point"}
 
     def _execute(
         self,

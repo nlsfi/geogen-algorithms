@@ -5,13 +5,12 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
-from geogenalg.utility.validation import check_gdf_geometry_type
+from geogenalg.core.exceptions import MissingReferenceError
 
 
 @supports_identity
@@ -32,6 +31,18 @@ class KeepIntersection(BaseAlgorithm):
 
     reference_key: str = "mask"
     """Reference data key to use as a mask layer for overlap detection."""
+
+    valid_input_geometry_types: ClassVar = {
+        "LineString",
+        "Polygon",
+        "MultiLineString",
+        "MultiPolygon",
+        "Point",
+        "MultiPoint",
+        "LinearRing",
+        "GeometryCollection",
+    }
+    valid_reference_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
 
     @override
     def _execute(
@@ -54,7 +65,6 @@ class KeepIntersection(BaseAlgorithm):
 
         Raises:
         ------
-            GeometryTypeError: If mask data has non-polygon geometries.
             MissingReferenceError: If reference data is not found.
 
         """
@@ -63,10 +73,6 @@ class KeepIntersection(BaseAlgorithm):
             raise MissingReferenceError(msg)
 
         mask_data = reference_data[self.reference_key]
-
-        if not check_gdf_geometry_type(mask_data, ["MultiPolygon", "Polygon"]):
-            msg = "Mask data should include only Polygon geometries."
-            raise GeometryTypeError(msg)
 
         # Overlay does not keep index here, so copy it to a separate column,
         # and set back as index later

@@ -4,10 +4,26 @@
 #
 #  SPDX-License-Identifier: MIT
 
+from typing import Literal
+
 from geopandas import GeoDataFrame, GeoSeries
 
+ShapelyGeometryTypeString = Literal[
+    "Point",
+    "LineString",
+    "LinearRing",
+    "Polygon",
+    "MultiPoint",
+    "MultiLineString",
+    "MultiPolygon",
+    "GeometryCollection",
+]
 
-def check_gdf_geometry_type(gdf: GeoDataFrame, accepted_types: list[str]) -> bool:
+
+def check_gdf_geometry_type(
+    gdf: GeoDataFrame,
+    accepted_types: set[ShapelyGeometryTypeString],
+) -> bool:
     """Check if all geometries are of acceptable type.
 
     Args:
@@ -25,7 +41,8 @@ def check_gdf_geometry_type(gdf: GeoDataFrame, accepted_types: list[str]) -> boo
 
 
 def check_geoseries_geometry_type(
-    geoseries: GeoSeries, accepted_types: list[str]
+    geoseries: GeoSeries,
+    accepted_types: set[ShapelyGeometryTypeString],
 ) -> bool:
     """Check if all geometries are of acceptable type.
 

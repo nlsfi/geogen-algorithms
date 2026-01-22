@@ -5,6 +5,8 @@
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
 
+from typing import ClassVar
+
 from geopandas import GeoDataFrame
 from pandas import Index
 from pandas.testing import assert_index_equal
@@ -15,6 +17,8 @@ from geogenalg.application import BaseAlgorithm, supports_identity
 
 def test_index_reset_without_identity_support():
     class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
 
@@ -36,6 +40,8 @@ def test_index_reset_without_identity_support():
 def test_index_not_reset_with_identity_support():
     @supports_identity
     class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
 
@@ -57,6 +63,8 @@ def test_index_not_reset_with_identity_support():
 def test_input_index_converted_to_strings_for_algorithm_use():
     @supports_identity
     class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
 
@@ -78,6 +86,8 @@ def test_input_index_converted_to_strings_for_algorithm_use():
 def test_geometry_column_does_not_change():
     @supports_identity
     class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data.copy().rename_geometry("other_geom")
 

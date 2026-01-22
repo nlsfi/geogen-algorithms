@@ -14,7 +14,7 @@ from geopandas.testing import assert_geodataframe_equal
 from shapely import LineString, Point
 
 from geogenalg.application.generalize_fences import GeneralizeFences
-from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 UNIQUE_ID_COLUMN = "mtk_id"
@@ -69,7 +69,7 @@ def test_generalize_fences_50k_invalid_geometry_type() -> None:
 
     with pytest.raises(
         GeometryTypeError,
-        match=r"GeneralizeFences works only with LineString geometries.",
+        match=r"Input data must contain only geometries of following types: LineString.",
     ):
         algorithm.execute(data=input_data, reference_data={})
 
@@ -85,8 +85,8 @@ def test_generalize_fences_50k_missing_masts_data(testdata_path: Path) -> None:
     algorithm = GeneralizeFences()
 
     with pytest.raises(
-        KeyError,
-        match=r"GeneralizeFences requires mast Point GeoDataFrame in reference_data with key 'masts'.",
+        MissingReferenceError,
+        match=r"Reference data is missing.",
     ):
         algorithm.execute(data=input_data, reference_data={})
 
@@ -105,6 +105,7 @@ def test_generalize_fences_50k_invalid_geometry_type_masts(testdata_path: Path) 
     algorithm = GeneralizeFences()
 
     with pytest.raises(
-        GeometryTypeError, match=r"Masts data should be a Point GeoDataFrame."
+        GeometryTypeError,
+        match=r"Reference data must contain only geometries of following types: Point.",
     ):
         algorithm.execute(data=input_data, reference_data={"masts": masts_data})
