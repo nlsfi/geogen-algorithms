@@ -11,6 +11,7 @@ from geopandas import GeoDataFrame
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
+from geogenalg.identity import hash_duplicate_indexes
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -72,10 +73,14 @@ class KeepIntersection(BaseAlgorithm):
         # and set back as index later
         index_name = data.index.name
 
+        # Create GeoDataFrame with only geometries for mask so its attributes
+        # are not inherited.
+        mask_gdf = GeoDataFrame(mask_data.geometry)
+
         gdf = data.copy()
         gdf["__index"] = gdf.index
-        result = gdf.overlay(mask_data, how="intersection")
+        result = gdf.overlay(mask_gdf, how="intersection")
         result = result.set_index("__index")
         result.index.name = index_name
 
-        return result
+        return hash_duplicate_indexes(result, "keepintersection")
