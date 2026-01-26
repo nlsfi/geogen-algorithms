@@ -19,6 +19,27 @@ from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_in
 UNIQUE_ID_COLUMN = "mtk_id"
 
 
+# TODO: Once GeneralizeLandcover supports identity, refactor to something like this:
+# def test_generalize_landcover(
+#     testdata_path: Path,
+# ) -> None:
+#     gpkg = GeoPackagePath(testdata_path / "marshes_small_area.gpkg")  # noqa: ERA001
+#
+#     IntegrationTest(
+#         input_uri=gpkg.to_input("mtk_marshes"),  # noqa: ERA001
+#         control_uri=gpkg.to_input("generalized_marshes"),  # noqa: ERA001
+#         algorithm=GeneralizeLandcover(  # noqa: ERA001, RUF100
+#             buffer_constant=20,  # noqa: ERA001
+#             simplification_tolerance=30,  # noqa: ERA001
+#             area_threshold=7500,  # noqa: ERA001
+#             hole_threshold=5000,  # noqa: ERA001
+#             smoothing=True,  # noqa: ERA001
+#         ),
+#         unique_id_column=UNIQUE_ID_COLUMN,  # noqa: ERA001
+#         check_missing_reference=False,  # noqa: ERA001
+#     ).run()
+
+
 def test_generalize_landcover_50k(
     testdata_path: Path,
 ) -> None:

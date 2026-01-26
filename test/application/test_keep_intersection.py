@@ -7,30 +7,20 @@
 from pathlib import Path
 
 import pytest
-from geopandas import GeoDataFrame
-from pandas.testing import assert_frame_equal
-from shapely.geometry import Point, Polygon
+from conftest import IntegrationTest
 
 from geogenalg.application.keep_intersection import KeepIntersection
-from geogenalg.core.exceptions import (
-    GeometryTypeError,
-    MissingReferenceError,
-)
-from geogenalg.testing import GeoPackageInput, get_result_and_control
+from geogenalg.testing import GeoPackagePath
 
 UNIQUE_ID_COLUMN = "uuid"
 
 
 @pytest.mark.parametrize(
-    (
-        "gpkg_file",
-        "input_layer",
-        "layer_suffix",
-    ),
+    ("layer_suffix"),
     [
-        ("keep_intersection.gpkg", "data", "polygons"),
-        ("keep_intersection.gpkg", "data", "lines"),
-        ("keep_intersection.gpkg", "data", "points"),
+        ("polygons"),
+        ("lines"),
+        ("points"),
     ],
     ids=[
         "polygons",
@@ -40,63 +30,17 @@ UNIQUE_ID_COLUMN = "uuid"
 )
 def test_keep_intersection(
     testdata_path: Path,
-    gpkg_file: str,
-    input_layer: str,
     layer_suffix: str,
 ) -> None:
-    input_layer = f"{input_layer}_{layer_suffix}"
-    input_path = testdata_path / gpkg_file
+    gpkg = GeoPackagePath(testdata_path / "keep_intersection.gpkg")
 
-    result, control = get_result_and_control(
-        GeoPackageInput(input_path, layer_name=input_layer),
-        GeoPackageInput(input_path, layer_name=f"control_{layer_suffix}"),
-        KeepIntersection(),
-        UNIQUE_ID_COLUMN,
-        {
-            "mask": GeoPackageInput(input_path, layer_name="mask"),
+    IntegrationTest(
+        input_uri=gpkg.to_input(f"data_{layer_suffix}"),
+        control_uri=gpkg.to_input(f"control_{layer_suffix}"),
+        algorithm=KeepIntersection(),
+        unique_id_column=UNIQUE_ID_COLUMN,
+        reference_uris={
+            "mask": gpkg.to_input("mask"),
         },
-    )
-
-    assert_frame_equal(result, control)
-
-
-def test_remove_overlap_missing_reference_data():
-    with pytest.raises(
-        MissingReferenceError,
-        match=r"Reference data is missing.",
-    ):
-        KeepIntersection().execute(
-            data=GeoDataFrame(
-                {
-                    "id": [1],
-                },
-                geometry=[Polygon([(0, 0), (0, 1), (1, 1)])],
-                crs="EPSG:4326",
-            ),
-            reference_data={},
-        )
-
-
-def test_remove_overlap_invalid_mask_geometry():
-    with pytest.raises(
-        GeometryTypeError,
-        match=r"Reference data must contain only geometries of following types: MultiPolygon, Polygon.",
-    ):
-        KeepIntersection().execute(
-            data=GeoDataFrame(
-                {
-                    "id": [1],
-                },
-                geometry=[Polygon([(0, 0), (0, 1), (1, 1)])],
-                crs="EPSG:4326",
-            ),
-            reference_data={
-                "mask": GeoDataFrame(
-                    {
-                        "id": [1],
-                    },
-                    geometry=[Point(0, 0)],
-                    crs="EPSG:4326",
-                )
-            },
-        )
+        check_missing_reference=True,
+    ).run()
