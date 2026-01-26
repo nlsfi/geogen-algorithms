@@ -18,4 +18,11 @@ class InvalidGeometryError(Exception):
 
 
 class MissingReferenceError(Exception):
-    pass
+    def __init__(
+        self,
+        msg: str = "Reference data is missing.",
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        """Initialize exception."""
+        super().__init__(msg, *args, **kwargs)
