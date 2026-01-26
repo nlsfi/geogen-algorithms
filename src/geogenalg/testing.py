@@ -9,9 +9,11 @@ from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory, gettempdir
+from typing import NamedTuple, cast
 
 from geopandas import GeoDataFrame, overlay
 from geopandas.testing import assert_geodataframe_equal
+from pandas import concat
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
@@ -25,6 +27,35 @@ class GeoPackageInput:
 
     file: Path
     layer_name: str | None
+
+
+@dataclass(frozen=True)
+class GeoPackagePath:
+    """Convenience class for more ergonomic integration tests."""
+
+    file: Path
+
+    def to_input(self, layer_name: str) -> GeoPackageInput:
+        """Create GeoPackageInput pointing to specific layer.
+
+        Returns
+        -------
+            GeoPackageInput object.
+
+        """
+        return GeoPackageInput(
+            file=self.file,
+            layer_name=layer_name,
+        )
+
+
+class TestGeoDataFrames(NamedTuple):
+    """Convenience class for more ergonomic integration tests."""
+
+    input_data: GeoDataFrame
+    reference_data: dict[str, GeoDataFrame]
+    result: GeoDataFrame
+    control: GeoDataFrame
 
 
 def assert_gdf_equal_save_diff(
@@ -122,21 +153,18 @@ def get_alg_results_from_geopackage(
     )
 
 
-def get_result_and_control(
-    input_uri: GeoPackageInput,
+def get_test_gdfs(
+    input_uri: GeoPackageInput | list[GeoPackageInput],
     control_uri: GeoPackageInput,
     alg: BaseAlgorithm,
     unique_id_column: str,
     reference_uris: dict[str, GeoPackageInput] | None = None,
-) -> tuple[GeoDataFrame, GeoDataFrame]:
-    """Get result and control GeoDataFrame.
-
-    This is useful if test case requires loading a single input, executing an
-    algorithm with it, and loading one control dataset to match it.
+) -> TestGeoDataFrames:
+    """Get input, reference, result and control GeoDataFrame.
 
     Args:
     ----
-        input_uri: Object pointing to input dataset and the correct layer therein.
+        input_uri: Object pointing to input dataset(s) and the correct layer(s) therein.
         control_uri: Object pointing to control dataset and the correct layer therein.
         alg: Instance of an algorithm to execute.
         unique_id_column: Column to set as GeoDataFrame index.
@@ -146,7 +174,7 @@ def get_result_and_control(
 
     Returns:
     -------
-        Result and control GeoDataFrame, in that order.
+        Input, reference, result and control GeoDataFrames, in that order.
 
     """
     reference_data = {}
@@ -158,11 +186,22 @@ def get_result_and_control(
                 layer=uri.layer_name,
             )
 
-    input_data = read_gdf_from_file_and_set_index(
-        input_uri.file,
-        unique_id_column,
-        layer=input_uri.layer_name,
-    )
+    if isinstance(input_uri, list):
+        gdfs = [
+            read_gdf_from_file_and_set_index(
+                uri.file,
+                unique_id_column,
+                layer=uri.layer_name,
+            )
+            for uri in input_uri
+        ]
+        input_data = cast("GeoDataFrame", concat(gdfs))
+    else:
+        input_data = read_gdf_from_file_and_set_index(
+            input_uri.file,
+            unique_id_column,
+            layer=input_uri.layer_name,
+        )
 
     result = get_alg_results_from_geopackage(
         alg,
@@ -177,4 +216,9 @@ def get_result_and_control(
         layer=control_uri.layer_name,
     )
 
-    return result, control
+    return TestGeoDataFrames(
+        input_data,
+        reference_data,
+        result,
+        control,
+    )

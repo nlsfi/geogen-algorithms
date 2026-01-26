@@ -15,7 +15,7 @@ from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
 from geogenalg.testing import (
     GeoPackageInput,
-    get_result_and_control,
+    get_test_gdfs,
 )
 
 UNIQUE_ID_COLUMN = "kmtk_id"
@@ -26,7 +26,7 @@ def test_generalize_shared_paths(
 ) -> None:
     input_path = testdata_path / "roads.gpkg"
 
-    result, control = get_result_and_control(
+    _, _, result, control = get_test_gdfs(
         GeoPackageInput(input_path, layer_name="shared_path_link"),
         GeoPackageInput(input_path, layer_name="control_shared_paths"),
         GeneralizeSharedPaths(
@@ -56,7 +56,7 @@ def test_invalid_geom_type() -> None:
 def test_missing_reference() -> None:
     with pytest.raises(
         MissingReferenceError,
-        match=r"Reference data is mandatory.",
+        match=r"Reference data is missing.",
     ):
         GeneralizeSharedPaths().execute(
             GeoDataFrame(

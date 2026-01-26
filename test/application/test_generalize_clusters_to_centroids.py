@@ -20,7 +20,7 @@ from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.testing import (
     GeoPackageInput,
     get_alg_results_from_geopackage,
-    get_result_and_control,
+    get_test_gdfs,
 )
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
@@ -47,7 +47,7 @@ def test_generalize_boulders_in_water(
     input_layer: str,
 ) -> None:
     input_path = testdata_path / gpkg_file
-    result, control = get_result_and_control(
+    _, _, result, control = get_test_gdfs(
         GeoPackageInput(input_path, layer_name=input_layer),
         GeoPackageInput(input_path, layer_name="control"),
         GeneralizePointClustersAndPolygonsToCentroids(
@@ -123,7 +123,7 @@ def test_aggregation_functions(testdata_path: Path) -> None:
         else 2
     }
 
-    result, control = get_result_and_control(
+    _, _, result, control = get_test_gdfs(
         GeoPackageInput(input_path, layer_name="boulder_in_water"),
         GeoPackageInput(input_path, layer_name="control_aggfunc"),
         GeneralizePointClustersAndPolygonsToCentroids(

@@ -21,7 +21,7 @@ from geogenalg.testing import (
     GeoPackageInput,
     assert_gdf_equal_save_diff,
     get_alg_results_from_geopackage,
-    get_result_and_control,
+    get_test_gdfs,
 )
 
 
@@ -187,13 +187,16 @@ def test_get_result_and_control():
     ref_data.to_file(ref_path.file, layer=ref_path.layer_name)
     control_data.to_file(control_path.file, layer=control_path.layer_name)
 
-    result, control = get_result_and_control(
+    other_input, other_ref, result, control = get_test_gdfs(
         input_path,
         control_path,
         MockAlg("result"),
         "id",
         reference_uris={"ref": ref_path},
     )
+
+    assert_geodataframe_equal(input_data.set_index("id"), other_input)
+    assert_geodataframe_equal(ref_data.set_index("id"), other_ref["ref"])
 
     result_expected = GeoDataFrame(
         {

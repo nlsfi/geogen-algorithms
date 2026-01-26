@@ -63,7 +63,7 @@ def test_keep_intersection(
 def test_remove_overlap_missing_reference_data():
     with pytest.raises(
         MissingReferenceError,
-        match=r"Reference data with mask polygons is mandatory.",
+        match=r"Reference data is missing.",
     ):
         KeepIntersection().execute(
             data=GeoDataFrame(
