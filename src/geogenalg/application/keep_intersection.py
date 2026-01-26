@@ -69,8 +69,7 @@ class KeepIntersection(BaseAlgorithm):
 
         """
         if self.reference_key not in reference_data:
-            msg = "Reference data with mask polygons is mandatory."
-            raise MissingReferenceError(msg)
+            raise MissingReferenceError
 
         mask_data = reference_data[self.reference_key]
 

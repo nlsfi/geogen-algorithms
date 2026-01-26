@@ -2,8 +2,8 @@
 #
 #  This file is part of geogen-algorithms.
 #
-#  This source code is licensed under the MIT license found in the
-#  LICENSE file in the root directory of this source tree.
+#  SPDX-License-Identifier: MIT
+
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -63,8 +63,7 @@ class GeneralizeSharedPaths(BaseAlgorithm):
         if self.reference_key in reference_data:
             reference_gdf = reference_data[self.reference_key]
         else:
-            msg = "Reference data is mandatory."
-            raise MissingReferenceError(msg)
+            raise MissingReferenceError
 
         gdf = flag_connections(
             data,

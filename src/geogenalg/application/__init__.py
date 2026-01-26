@@ -71,7 +71,7 @@ class BaseAlgorithm(ABC):
             types = (
                 next(iter(self.valid_input_geometry_types))
                 if len(self.valid_input_geometry_types) == 1
-                else f"{', '.join(sorted(self.valid_input_geometry_types))}."
+                else f"{', '.join(sorted(self.valid_input_geometry_types))}"
             )
             msg = (
                 f"Input data must contain only geometries of following types: {types}."
