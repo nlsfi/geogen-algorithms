@@ -21,7 +21,7 @@ from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.testing import (
     GeoPackageInput,
-    get_result_and_control,
+    get_test_gdfs,
 )
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
     input_path = testdata_path / "buildings_helsinki.gpkg"
     control_path = testdata_path / "buildings_generalized_50k_helsinki.gpkg"
 
-    result, control = get_result_and_control(
+    _, _, result, control = get_test_gdfs(
         GeoPackageInput(input_path, layer_name="single_parts"),
         GeoPackageInput(control_path, layer_name="control"),
         GeneralizeBuildings(
@@ -67,7 +67,7 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
     input_path = testdata_path / "buildings_generalized_50k_helsinki.gpkg"
     control_path = testdata_path / "buildings_generalized_100k_helsinki.gpkg"
 
-    result, control = get_result_and_control(
+    _, _, result, control = get_test_gdfs(
         GeoPackageInput(input_path, layer_name="control"),
         GeoPackageInput(control_path, layer_name="control"),
         GeneralizeBuildings(
