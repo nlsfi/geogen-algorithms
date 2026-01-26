@@ -89,7 +89,7 @@ def test_remove_overlap_invalid_input_geometry():
 def test_remove_overlap_missing_reference_data():
     with pytest.raises(
         MissingReferenceError,
-        match=r"Reference data with mask polygons is mandatory.",
+        match=r"Reference data is missing.",
     ):
         RemoveOverlap().execute(
             data=GeoDataFrame(

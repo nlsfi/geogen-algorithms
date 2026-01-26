@@ -16,7 +16,7 @@ from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.testing import (
     GeoPackageInput,
-    get_result_and_control,
+    get_test_gdfs,
 )
 
 UNIQUE_ID_COLUMN = "kmtk_id"
@@ -40,7 +40,7 @@ def test_generalize_roads(
     input_layer: str,
 ) -> None:
     input_path = testdata_path / gpkg_file
-    result, control = get_result_and_control(
+    _, _, result, control = get_test_gdfs(
         GeoPackageInput(input_path, layer_name=input_layer),
         GeoPackageInput(input_path, layer_name="control"),
         GeneralizeRoads(
