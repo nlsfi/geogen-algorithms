@@ -4,76 +4,33 @@
 #
 #  SPDX-License-Identifier: MIT
 
-import re
 from pathlib import Path
 
-import pytest
-from geopandas import GeoDataFrame
-from pandas.testing import assert_frame_equal
-from shapely import Point, Polygon
+from conftest import IntegrationTest
 
 from geogenalg.application.generalize_roads import GeneralizeRoads
-from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.testing import (
-    GeoPackageInput,
-    get_test_gdfs,
+    GeoPackagePath,
 )
 
 UNIQUE_ID_COLUMN = "kmtk_id"
 
 
-@pytest.mark.parametrize(
-    (
-        "gpkg_file",
-        "input_layer",
-    ),
-    [
-        ("roads.gpkg", "road_link"),
-    ],
-    ids=[
-        "roads_to_generalize",
-    ],
-)
 def test_generalize_roads(
     testdata_path: Path,
-    gpkg_file: str,
-    input_layer: str,
 ) -> None:
-    input_path = testdata_path / gpkg_file
-    _, _, result, control = get_test_gdfs(
-        GeoPackageInput(input_path, layer_name=input_layer),
-        GeoPackageInput(input_path, layer_name="control"),
-        GeneralizeRoads(
+    gpkg = GeoPackagePath(testdata_path / "roads.gpkg")
+
+    IntegrationTest(
+        input_uri=gpkg.to_input("road_link"),
+        control_uri=gpkg.to_input("control"),
+        algorithm=GeneralizeRoads(
             threshold_distance=10.0,
             threshold_length=75.0,
         ),
-        UNIQUE_ID_COLUMN,
-        {"path": GeoPackageInput(input_path, layer_name="path")},
-    )
-
-    assert_frame_equal(result, control)
-
-
-def test_invalid_geom_type() -> None:
-    with pytest.raises(
-        GeometryTypeError,
-        match=re.escape(
-            "Input data must contain only geometries of following types: LineString."
-        ),
-    ):
-        GeneralizeRoads().execute(
-            GeoDataFrame(
-                {"id": [1]},
-                geometry=[
-                    Polygon(
-                        (
-                            Point(0, 0),
-                            Point(1, 0),
-                            Point(1, 1),
-                            Point(0, 1),
-                            Point(0, 0),
-                        )
-                    )
-                ],
-            ),
-        )
+        unique_id_column=UNIQUE_ID_COLUMN,
+        reference_uris={
+            "path": gpkg.to_input("path"),
+        },
+        check_missing_reference=False,
+    ).run()

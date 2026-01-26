@@ -5,39 +5,27 @@
 #  SPDX-License-Identifier: MIT
 
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
-from geopandas import read_file
-from pandas.testing import assert_frame_equal
+from conftest import IntegrationTest
 
 from geogenalg.application.generalize_shoreline import GeneralizeShoreline
+from geogenalg.testing import GeoPackagePath
+
+UNIQUE_ID_COLUMN = "kmtk_id"
 
 
-def test_extract_shoreline_from_generalized_lakes(
+def test_generalize_shoreline(
     testdata_path: Path,
 ) -> None:
-    temp_dir = TemporaryDirectory()
-    output_path = Path(temp_dir.name) / "output.gpkg"
+    gpkg = GeoPackagePath(testdata_path / "lakes_to_shoreline.gpkg")
 
-    test_file = testdata_path / "lakes_to_shoreline.gpkg"
-
-    original_shoreline = read_file(
-        test_file,
-        layer="original_shoreline",
-    )
-    generalized_lakes = read_file(
-        test_file,
-        layer="generalized_lakes",
-    )
-    control = read_file(
-        test_file,
-        layer="control",
-    )
-
-    GeneralizeShoreline().execute(
-        original_shoreline, {"areas": generalized_lakes}
-    ).to_file(output_path, layer="result")
-
-    result = read_file(output_path, layer="result")
-
-    assert_frame_equal(result, control)
+    IntegrationTest(
+        input_uri=gpkg.to_input("original_shoreline"),
+        control_uri=gpkg.to_input("control"),
+        algorithm=GeneralizeShoreline(),
+        unique_id_column=UNIQUE_ID_COLUMN,
+        reference_uris={
+            "areas": gpkg.to_input("generalized_lakes"),
+        },
+        check_missing_reference=True,
+    ).run()

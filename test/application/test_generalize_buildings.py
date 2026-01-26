@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from conftest import IntegrationTest
 from geopandas import GeoDataFrame
-from geopandas.testing import assert_geodataframe_equal
 from numpy import nan
 from pandas import isna
 from pandas.testing import assert_frame_equal
@@ -20,8 +20,7 @@ from shapely.geometry.base import BaseGeometry
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.testing import (
-    GeoPackageInput,
-    get_test_gdfs,
+    GeoPackagePath,
 )
 
 if TYPE_CHECKING:
@@ -32,16 +31,15 @@ UNIQUE_ID_COLUMN = "mtk_id"
 
 
 def test_generalize_buildings_50k(testdata_path: Path) -> None:
-    """
-    Test generalizing buildings with parameters to the 1: 50 000 scale
-    """
-    input_path = testdata_path / "buildings_helsinki.gpkg"
-    control_path = testdata_path / "buildings_generalized_50k_helsinki.gpkg"
+    gpkg = GeoPackagePath(testdata_path / "buildings_helsinki.gpkg")
+    gpkg_control = GeoPackagePath(
+        testdata_path / "buildings_generalized_50k_helsinki.gpkg"
+    )
 
-    _, _, result, control = get_test_gdfs(
-        GeoPackageInput(input_path, layer_name="single_parts"),
-        GeoPackageInput(control_path, layer_name="control"),
-        GeneralizeBuildings(
+    IntegrationTest(
+        input_uri=gpkg.to_input("single_parts"),
+        control_uri=gpkg_control.to_input("control"),
+        algorithm=GeneralizeBuildings(
             area_threshold_for_all_buildings=5,
             area_threshold_for_low_priority_buildings=100,
             side_threshold=30,
@@ -54,23 +52,21 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
             unique_key_column="mtk_id",
             building_class_column="kayttotarkoitus",
         ),
-        UNIQUE_ID_COLUMN,
-    )
-
-    assert_geodataframe_equal(result, control)
+        unique_id_column=UNIQUE_ID_COLUMN,
+        check_missing_reference=False,
+    ).run()
 
 
 def test_generalize_buildings_100k(testdata_path: Path) -> None:
-    """
-    Test generalizing buildings with parameters to the 1: 100 000 scale
-    """
-    input_path = testdata_path / "buildings_generalized_50k_helsinki.gpkg"
-    control_path = testdata_path / "buildings_generalized_100k_helsinki.gpkg"
+    gpkg = GeoPackagePath(testdata_path / "buildings_generalized_50k_helsinki.gpkg")
+    gpkg_control = GeoPackagePath(
+        testdata_path / "buildings_generalized_100k_helsinki.gpkg"
+    )
 
-    _, _, result, control = get_test_gdfs(
-        GeoPackageInput(input_path, layer_name="control"),
-        GeoPackageInput(control_path, layer_name="control"),
-        GeneralizeBuildings(
+    IntegrationTest(
+        input_uri=gpkg.to_input("control"),
+        control_uri=gpkg_control.to_input("control"),
+        algorithm=GeneralizeBuildings(
             area_threshold_for_all_buildings=10,
             area_threshold_for_low_priority_buildings=500,
             side_threshold=70,
@@ -83,10 +79,9 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
             unique_key_column="mtk_id",
             building_class_column="kayttotarkoitus",
         ),
-        UNIQUE_ID_COLUMN,
-    )
-
-    assert_geodataframe_equal(result, control)
+        unique_id_column=UNIQUE_ID_COLUMN,
+        check_missing_reference=False,
+    ).run()
 
 
 @pytest.mark.parametrize(
