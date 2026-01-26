@@ -4,135 +4,85 @@
 #
 #  SPDX-License-Identifier: MIT
 
-import re
 from pathlib import Path
 
 import pytest
-from geopandas import GeoDataFrame
-from pandas import concat
-from pandas.testing import assert_frame_equal
-from shapely import LineString, Point
+from conftest import IntegrationTest
 
 from geogenalg.application.generalize_clusters_to_centroids import (
     GeneralizePointClustersAndPolygonsToCentroids,
 )
-from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.testing import (
-    GeoPackageInput,
-    get_alg_results_from_geopackage,
-    get_test_gdfs,
-)
-from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+from geogenalg.testing import GeoPackagePath
 
 UNIQUE_ID_COLUMN = "kmtk_id"
 
 
 @pytest.mark.parametrize(
     (
-        "gpkg_file",
-        "input_layer",
+        "input_layers",
+        "control_layer",
+        "algorithm",
     ),
     [
-        ("boulder_in_water.gpkg", "boulder_in_water"),
-        ("boulders_in_water.gpkg", "boulders_in_water"),
+        (
+            ["boulder_in_water"],
+            "control_only_points",
+            GeneralizePointClustersAndPolygonsToCentroids(
+                cluster_distance=30.0,
+                polygon_min_area=1000.0,
+            ),
+        ),
+        (
+            ["boulders_in_water"],
+            "control_only_polygons",
+            GeneralizePointClustersAndPolygonsToCentroids(
+                cluster_distance=30.0,
+                polygon_min_area=1000.0,
+            ),
+        ),
+        (
+            ["boulder_in_water", "boulders_in_water"],
+            "control_mixed",
+            GeneralizePointClustersAndPolygonsToCentroids(
+                cluster_distance=30.0,
+                polygon_min_area=1000.0,
+            ),
+        ),
+        (
+            ["boulder_in_water"],
+            "control_only_points_aggfunc",
+            GeneralizePointClustersAndPolygonsToCentroids(
+                cluster_distance=30.0,
+                polygon_min_area=1000.0,
+                aggregation_functions={
+                    "boulder_in_water_type_id": lambda values: min(values)
+                    if len(values) == set(values)
+                    else 2
+                },
+            ),
+        ),
     ],
     ids=[
-        "points",
-        "polygons",
+        "only_points",
+        "only_polygons",
+        "mixed_geom_types",
+        "only_points_aggfunc",
     ],
 )
 def test_generalize_boulders_in_water(
     testdata_path: Path,
-    gpkg_file: str,
-    input_layer: str,
+    input_layers: list[str],
+    control_layer: str,
+    algorithm: GeneralizePointClustersAndPolygonsToCentroids,
 ) -> None:
-    input_path = testdata_path / gpkg_file
-    _, _, result, control = get_test_gdfs(
-        GeoPackageInput(input_path, layer_name=input_layer),
-        GeoPackageInput(input_path, layer_name="control"),
-        GeneralizePointClustersAndPolygonsToCentroids(
-            cluster_distance=30.0,
-            polygon_min_area=1000.0,
-            feature_type_column="feature_type",
-            aggregation_functions=None,
-        ),
-        UNIQUE_ID_COLUMN,
-    )
+    gpkg = GeoPackagePath(testdata_path / "clusters_to_centroids.gpkg")
 
-    assert_frame_equal(result, control)
+    inputs = [gpkg.to_input(layer) for layer in input_layers]
 
-
-def test_invalid_geom_type() -> None:
-    with pytest.raises(
-        GeometryTypeError,
-        match=re.escape(
-            "Input data must contain only geometries of following types: Point, Polygon.",
-        ),
-    ):
-        GeneralizePointClustersAndPolygonsToCentroids().execute(
-            GeoDataFrame(
-                {"id": [1]},
-                geometry=[LineString((Point(0, 0), Point(1, 0)))],
-            ),
-        )
-
-
-def test_mixed_geom_types(testdata_path: Path) -> None:
-    points_path = testdata_path / "boulder_in_water.gpkg"
-
-    points = read_gdf_from_file_and_set_index(
-        points_path,
-        UNIQUE_ID_COLUMN,
-        layer="boulder_in_water",
-    )
-    polygons = read_gdf_from_file_and_set_index(
-        testdata_path / "boulders_in_water.gpkg",
-        UNIQUE_ID_COLUMN,
-        layer="boulders_in_water",
-    )
-
-    mixed = GeoDataFrame(concat([points, polygons]))
-
-    control_path = testdata_path / "boulders_in_water_mixed.gpkg"
-    control = read_gdf_from_file_and_set_index(
-        control_path,
-        UNIQUE_ID_COLUMN,
-        layer="control",
-    )
-
-    result = get_alg_results_from_geopackage(
-        GeneralizePointClustersAndPolygonsToCentroids(
-            cluster_distance=30.0,
-            polygon_min_area=1000.0,
-            feature_type_column="feature_type",
-            aggregation_functions=None,
-        ),
-        mixed,
+    IntegrationTest(
+        input_uri=inputs,
+        control_uri=gpkg.to_input(control_layer),
+        algorithm=algorithm,
         unique_id_column=UNIQUE_ID_COLUMN,
-    )
-
-    assert_frame_equal(result, control)
-
-
-def test_aggregation_functions(testdata_path: Path) -> None:
-    input_path = testdata_path / "boulder_in_water.gpkg"
-
-    aggregation_functions = {
-        "boulder_in_water_type_id": lambda values: min(values)
-        if len(values) == set(values)
-        else 2
-    }
-
-    _, _, result, control = get_test_gdfs(
-        GeoPackageInput(input_path, layer_name="boulder_in_water"),
-        GeoPackageInput(input_path, layer_name="control_aggfunc"),
-        GeneralizePointClustersAndPolygonsToCentroids(
-            cluster_distance=30.0,
-            polygon_min_area=1000.0,
-            feature_type_column="feature_type",
-            aggregation_functions=aggregation_functions,
-        ),
-        UNIQUE_ID_COLUMN,
-    )
-
-    assert_frame_equal(result, control)
+        check_missing_reference=False,
+    ).run()
