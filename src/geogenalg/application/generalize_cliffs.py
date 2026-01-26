@@ -61,8 +61,7 @@ class GeneralizeCliffs(BaseAlgorithm):
         if self.reference_key in reference_data:
             roads_data = reference_data[self.reference_key]
         else:
-            msg = "Reference data is missing."
-            raise MissingReferenceError(msg)
+            raise MissingReferenceError
 
         result = remove_close_line_segments(data, roads_data, self.buffer_size)
         return remove_short_lines(result, self.length_threshold)

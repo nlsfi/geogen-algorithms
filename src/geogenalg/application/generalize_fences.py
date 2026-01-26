@@ -88,8 +88,7 @@ class GeneralizeFences(BaseAlgorithm):
 
         """
         if self.reference_key not in reference_data:
-            msg = "Reference data is missing."
-            raise MissingReferenceError(msg)
+            raise MissingReferenceError
 
         if self.attribute_for_line_merge not in data.columns:
             msg = (
