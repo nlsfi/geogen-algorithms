@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from warnings import warn
 
 import pytest
@@ -35,6 +35,18 @@ GEOMETRY_TYPE_STRINGS = (
     "GeometryCollection",
 )
 
+AssertFunctionParameter = Literal[
+    "check_dtype",
+    "check_index_type",
+    "check_column_type",
+    "check_frame_type",
+    "check_like",
+    "check_less_precise",
+    "check_geom_type",
+    "check_crs",
+    "normalize",
+]
+
 
 @dataclass(frozen=True)
 class IntegrationTest:
@@ -52,7 +64,9 @@ class IntegrationTest:
     """If True, test will check that algorithm will raise a MissingReferenceError."""
     reference_uris: dict[str, GeoPackageInput] = field(default_factory=dict)
     """Paths and layers of algorithm's reference data."""
-    assert_function_kwargs: dict[str, Any] = field(default_factory=dict)
+    assert_function_arguments: dict[AssertFunctionParameter, Any] = field(
+        default_factory=dict
+    )
     """Any arguments to pass to geopandas.testing.assert_geodataframe_equal."""
 
     def get_test_gdfs(self) -> TestGeoDataFrames:
@@ -89,7 +103,7 @@ class IntegrationTest:
         assert input_data.crs == control.crs
 
         # TODO: change these to failure states? However, that would
-        # requires changes to some algorithms, so only warn for now.
+        # require changes to some algorithms, so only warn for now.
         if not input_data.has_z.all():
             warn(
                 f"{type(self.algorithm).__name__}: Input data should have only geometries with z included.",
@@ -116,7 +130,7 @@ class IntegrationTest:
         assert_geodataframe_equal(
             result,
             control,
-            *self.assert_function_kwargs,
+            **self.assert_function_arguments,
         )
 
         if self.check_missing_reference:
