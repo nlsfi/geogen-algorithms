@@ -7,6 +7,17 @@
 from typing import Literal
 
 from geopandas import GeoDataFrame, GeoSeries
+from shapely import (
+    GeometryCollection,
+    LinearRing,
+    LineString,
+    MultiLineString,
+    MultiPoint,
+    MultiPolygon,
+    Point,
+    Polygon,
+)
+from shapely.geometry.base import BaseGeometry
 
 ShapelyGeometryTypeString = Literal[
     "Point",
@@ -18,6 +29,37 @@ ShapelyGeometryTypeString = Literal[
     "MultiPolygon",
     "GeometryCollection",
 ]
+
+
+def geometry_string_to_type(
+    string: ShapelyGeometryTypeString,
+) -> type[BaseGeometry]:
+    """Convert geometry type string to geometry type.
+
+    Returns
+    -------
+        Geometry type.
+
+    """
+    match string:
+        case "Point":
+            type_ = Point
+        case "LineString":
+            type_ = LineString
+        case "LinearRing":
+            type_ = LinearRing
+        case "Polygon":
+            type_ = Polygon
+        case "MultiPoint":
+            type_ = MultiPoint
+        case "MultiLineString":
+            type_ = MultiLineString
+        case "MultiPolygon":
+            type_ = MultiPolygon
+        case "GeometryCollection":
+            type_ = GeometryCollection
+
+    return type_
 
 
 def check_gdf_geometry_type(

@@ -7,10 +7,22 @@
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
 from shapely import Point, box
+from shapely.geometry import (
+    GeometryCollection,
+    LinearRing,
+    LineString,
+    MultiLineString,
+    MultiPoint,
+    MultiPolygon,
+    Polygon,
+)
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.utility.validation import (
+    ShapelyGeometryTypeString,
     check_gdf_geometry_type,
     check_geoseries_geometry_type,
+    geometry_string_to_type,
 )
 
 
@@ -58,3 +70,33 @@ def test_check_geoseries_geometry_type(
     expected: bool,
 ):
     assert check_geoseries_geometry_type(geoseries, accepted_types) == expected
+
+
+@pytest.mark.parametrize(
+    ("string", "expected"),
+    [
+        ("Point", Point),
+        ("LineString", LineString),
+        ("LinearRing", LinearRing),
+        ("Polygon", Polygon),
+        ("MultiPoint", MultiPoint),
+        ("MultiLineString", MultiLineString),
+        ("MultiPolygon", MultiPolygon),
+        ("GeometryCollection", GeometryCollection),
+    ],
+    ids=[
+        "Point",
+        "LineString",
+        "LinearRing",
+        "Polygon",
+        "MultiPoint",
+        "MultiLineString",
+        "MultiPolygon",
+        "GeometryCollection",
+    ],
+)
+def test_geometry_string_to_type(
+    string: ShapelyGeometryTypeString,
+    expected: type[BaseGeometry],
+):
+    assert geometry_string_to_type(string) is expected
