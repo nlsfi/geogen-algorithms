@@ -6,17 +6,10 @@
 
 from pathlib import Path
 
-import pytest
-from geopandas import GeoDataFrame
-from pandas.testing import assert_frame_equal
-from shapely import LineString, Point
+from conftest import IntegrationTest
 
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
-from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
-from geogenalg.testing import (
-    GeoPackageInput,
-    get_test_gdfs,
-)
+from geogenalg.testing import GeoPackagePath
 
 UNIQUE_ID_COLUMN = "kmtk_id"
 
@@ -24,59 +17,19 @@ UNIQUE_ID_COLUMN = "kmtk_id"
 def test_generalize_shared_paths(
     testdata_path: Path,
 ) -> None:
-    input_path = testdata_path / "roads.gpkg"
+    gpkg = GeoPackagePath(testdata_path / "roads.gpkg")
 
-    _, _, result, control = get_test_gdfs(
-        GeoPackageInput(input_path, layer_name="shared_path_link"),
-        GeoPackageInput(input_path, layer_name="control_shared_paths"),
-        GeneralizeSharedPaths(
+    IntegrationTest(
+        input_uri=gpkg.to_input("shared_path_link"),
+        control_uri=gpkg.to_input("control_shared_paths"),
+        algorithm=GeneralizeSharedPaths(
             detection_distance=25.0,
         ),
-        UNIQUE_ID_COLUMN,
+        unique_id_column=UNIQUE_ID_COLUMN,
         # Use control from GeneralizeRoads test as reference, as these are intended
         # to be used sequentially.
         reference_uris={
-            "roads": GeoPackageInput(input_path, layer_name="control"),
+            "roads": gpkg.to_input("control"),
         },
-    )
-
-    assert_frame_equal(result, control)
-
-
-def test_invalid_geom_type() -> None:
-    with pytest.raises(
-        GeometryTypeError,
-        match=r"Input data must contain only geometries of following types: LineString.",
-    ):
-        GeneralizeSharedPaths().execute(
-            GeoDataFrame(geometry=[Point(0, 0)]),
-        )
-
-
-def test_missing_reference() -> None:
-    with pytest.raises(
-        MissingReferenceError,
-        match=r"Reference data is missing.",
-    ):
-        GeneralizeSharedPaths().execute(
-            GeoDataFrame(
-                geometry=[LineString([[0, 0], [0, 1]])],
-            ),
-        )
-
-
-def test_invalid_reference_geom_type() -> None:
-    with pytest.raises(
-        GeometryTypeError,
-        match=r"Reference data must contain only geometries of following types: LineString.",
-    ):
-        GeneralizeSharedPaths().execute(
-            GeoDataFrame(
-                geometry=[LineString([[0, 0], [0, 1]])],
-            ),
-            reference_data={
-                "roads": GeoDataFrame(
-                    geometry=[Point(0, 0)],
-                ),
-            },
-        )
+        check_missing_reference=True,
+    ).run()
