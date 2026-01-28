@@ -4,6 +4,7 @@ algs
 arctan2
 argmax
 argspec
+atan2
 basealgorithm
 bbox
 cartagen
@@ -63,6 +64,7 @@ simplifier
 simplifytolerance
 sindex
 sklearn
+sqrt
 starmap
 tolist
 topo
