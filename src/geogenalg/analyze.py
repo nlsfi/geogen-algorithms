@@ -94,24 +94,33 @@ def flag_parallel_lines(
 
     Returns:
     -------
-        GeoDataFrame containing detected parallel lines, with a column named
-        "parallel_group" denoting which other lines a line is parallel with.
+        GeoDataFrame containing detected parallel lines, with columns:
+            `parallel_group` denoting which other lines a line is parallel with.
+            `parallel_direction` direction of line relative to north.
+            `parallel_with` set of number ids of other lines a line is parallel with.
+            `parallel_id` number id of line.
 
 
     """
     gdf = input_gdf.copy()
 
+    column_direction = "parallel_direction"
+    column_group = "parallel_group"
+    column_parallel_with = "parallel_with"
+    column_id = "parallel_id"
+    column_parallel_check = "_parallel_check"
+
     def _empty_gdf() -> GeoDataFrame:
         # This ensures in case we get an empty result, the output consistently
         # has these columns, with these dtypes.
-        gdf["__direction"] = Series(dtype="float64")
-        gdf["parallel_group"] = Series(dtype="int64")
-        gdf["parallel_with"] = Series(dtype="object")
-        gdf["__id"] = Series(dtype="int64")
+        gdf[column_direction] = Series(dtype="float64")
+        gdf[column_group] = Series(dtype="int64")
+        gdf[column_parallel_with] = Series(dtype="object")
+        gdf[column_id] = Series(dtype="int64")
 
         return gdf
 
-    if len(input_gdf.index) == 0:
+    if input_gdf.empty:
         return _empty_gdf()
 
     if segmentize_distance > 0:
@@ -121,16 +130,16 @@ def flag_parallel_lines(
     gdf = gdf.explode().reset_index(drop=True)
 
     # Normalize so that comparing the direction of segments later on is consistent
-    gdf["__direction"] = gdf.geometry.normalize().apply(segment_direction)
-    gdf["__parallel_check"] = gdf.geometry.buffer(
+    gdf[column_direction] = Series(gdf.geometry.normalize().apply(segment_direction))
+    gdf[column_parallel_check] = gdf.geometry.buffer(
         parallel_distance, cap_style="flat"
     ).buffer(0.01, cap_style="square")
-    gdf["parallel_with"] = [set() for _ in range(len(gdf.index))]
-    gdf["__id"] = gdf.index
+    gdf[column_parallel_with] = [set() for _ in range(len(gdf.index))]
+    gdf[column_id] = gdf.index
 
     for index, row in gdf.iterrows():
-        parallel_geom = row["__parallel_check"]
-        parallel_geom_direction = row["__direction"]
+        parallel_geom = row[column_parallel_check]
+        parallel_geom_direction = row[column_direction]
 
         # This locates lines which a) are not the line we're iterating over
         # b) intersects the buffered area used to check for parallel lines and
@@ -139,28 +148,27 @@ def flag_parallel_lines(
             (gdf.geometry.intersects(parallel_geom))
             & ~gdf.geometry.intersects(row.geometry)
             & (
-                ((gdf["__direction"] - parallel_geom_direction).abs())
+                ((gdf[column_direction] - parallel_geom_direction).abs())
                 < allowed_direction_difference
             )
         ]
 
-        if len(crossing_lines.index) == 0:
+        if crossing_lines.empty:
             continue
 
         for crossing_index in crossing_lines.index:
-            gdf["parallel_with"].to_numpy()[index].add(crossing_index)
+            gdf[column_parallel_with].to_numpy()[index].add(crossing_index)
 
-    gdf = gdf.loc[gdf["parallel_with"].apply(len) != 0]
+    gdf = gdf.loc[gdf[column_parallel_with].apply(len) != 0]
 
     _group_parallel_lines(
         gdf,
-        "__id",
-        "parallel_with",
-        "parallel_group",
+        column_id,
+        column_parallel_with,
+        column_group,
     )
 
-    gdf["__direction"] = Series(gdf["__direction"].tolist())
-    gdf = gdf.drop("__parallel_check", axis=1)
+    gdf = gdf.drop(column_parallel_check, axis=1)
 
     if len(gdf.index) == 0:
         return _empty_gdf()
@@ -168,7 +176,7 @@ def flag_parallel_lines(
     return gdf
 
 
-def get_parallel_line_areas(
+def get_polygons_for_parallel_lines(
     input_gdf: GeoDataFrame,
     parallel_distance: float,
     *,
@@ -199,41 +207,50 @@ def get_parallel_line_areas(
         segmentize_distance=segmentize_distance,
     )
 
-    if len(parallels) == 0:
-        return GeoDataFrame()
+    if parallels.empty:
+        return GeoDataFrame({"parallel_direction": []}, geometry=[], crs=input_gdf.crs)
 
-    compare = parallels[["__id", parallels.geometry.name]].copy()
+    column_direction = "parallel_direction"
+    column_group = "parallel_group"
+    column_parallel_with = "parallel_with"
+    column_id = "parallel_id"
+
+    compare = parallels[[column_id, parallels.geometry.name]].copy()
 
     def _polygonize_parallel(
         parallel_with: set[int],
         geom: LineString,
     ) -> Polygon:
-        others = compare.loc[compare["__id"].isin(parallel_with)]
+        others = compare.loc[compare[column_id].isin(parallel_with)]
 
         geoms = [geom, *list(others.geometry)]
 
         return concave_hull(MultiLineString(geoms))
 
-    parallels.geometry = parallels[["parallel_with", parallels.geometry.name]].apply(
-        lambda columns: _polygonize_parallel(*columns), axis=1
-    )
+    parallels.geometry = parallels[
+        [column_parallel_with, parallels.geometry.name]
+    ].apply(lambda columns: _polygonize_parallel(*columns), axis=1)
 
+    # Dissolve by group and calculate mean direction for group. Other columns
+    # not included in the aggfunc parameter will be dropped.
     parallels = parallels.dissolve(
-        by=["parallel_group"],
-        aggfunc={"__direction": "mean"},  # noqa: SC200
+        by=[column_group],
+        aggfunc={column_direction: "mean"},  # noqa: SC200
+        as_index=False,
     )
 
     # There may be some intersections in the generated polygons. This is okay,
     # if the orientation of the lines the polygon was created from is
     # different, otherwise this is not desired, so round mean direction and
     # dissolve again according to it.
-    parallels["__direction"] = parallels["__direction"].round(-1)
+    parallels[column_direction] = parallels[column_direction].round(-1)
 
     return (
         parallels.dissolve(
-            by=["__direction"],
+            by=[column_direction],
             as_index=False,
         )
+        .drop(column_group, axis=1)
         .explode(index_parts=False)
         .reset_index(drop=True)
     )  # Explode to single rows.

@@ -18,7 +18,7 @@ from geogenalg.analyze import (
     calculate_main_angle,
     classify_polygons_by_size_of_minimum_bounding_rectangle,
     flag_parallel_lines,
-    get_parallel_line_areas,
+    get_polygons_for_parallel_lines,
 )
 from geogenalg.core.exceptions import GeometryTypeError
 
@@ -344,9 +344,9 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
             GeoDataFrame(
                 {
                     "parallel_group": [],
-                    "__direction": [],
+                    "parallel_direction": [],
                     "parallel_with": [],
-                    "__id": [],
+                    "parallel_id": [],
                 },
                 geometry=[],
             ),
@@ -363,9 +363,9 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
             GeoDataFrame(
                 {
                     "parallel_group": [],
-                    "__direction": [],
+                    "parallel_direction": [],
                     "parallel_with": [],
-                    "__id": [],
+                    "parallel_id": [],
                 },
                 geometry=[],
             ),
@@ -383,9 +383,9 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
             GeoDataFrame(
                 {
                     "parallel_group": [1, 1],
-                    "__direction": [270.0, 270.0],
+                    "parallel_direction": [270.0, 270.0],
                     "parallel_with": [{1}, {0}],
-                    "__id": [0, 1],
+                    "parallel_id": [0, 1],
                 },
                 geometry=[
                     LineString([[0, 0], [1, 0]]),
@@ -406,9 +406,9 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
             GeoDataFrame(
                 {
                     "parallel_group": [],
-                    "__direction": [],
+                    "parallel_direction": [],
                     "parallel_with": [],
-                    "__id": [],
+                    "parallel_id": [],
                 },
                 geometry=[],
             ),
@@ -426,9 +426,9 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
             GeoDataFrame(
                 {
                     "parallel_group": [1, 1],
-                    "__direction": [270.0, 315.0],
+                    "parallel_direction": [270.0, 315.0],
                     "parallel_with": [{1}, {0}],
-                    "__id": [0, 1],
+                    "parallel_id": [0, 1],
                 },
                 geometry=[
                     LineString([[0, 0], [1, 0]]),
@@ -452,9 +452,9 @@ def test_classify_polygons_by_size_of_minimum_bounding_rectangle_raises_on_inval
             GeoDataFrame(
                 {
                     "parallel_group": [1, 1, 1, 2, 2],
-                    "__direction": [270.0, 270.0, 270.0, 270.0, 270.0],
+                    "parallel_direction": [270.0, 270.0, 270.0, 270.0, 270.0],
                     "parallel_with": [{1, 2}, {0, 2}, {1, 0}, {4}, {3}],
-                    "__id": [0, 1, 2, 3, 4],
+                    "parallel_id": [0, 1, 2, 3, 4],
                 },
                 geometry=[
                     LineString([[0, 0], [1, 0]]),
@@ -483,10 +483,12 @@ def test_flag_parallel_lines(
     expected: GeoDataFrame,
 ):
     if expected.empty:
-        expected["__direction"] = expected["__direction"].astype("float64")
+        expected["parallel_direction"] = expected["parallel_direction"].astype(
+            "float64"
+        )
         expected["parallel_with"] = expected["parallel_with"].astype("object")
         expected["parallel_group"] = expected["parallel_group"].astype("int64")
-        expected["__id"] = expected["__id"].astype("int64")
+        expected["parallel_id"] = expected["parallel_id"].astype("int64")
 
     result = flag_parallel_lines(
         input_gdf,
@@ -516,7 +518,7 @@ def test_flag_parallel_lines(
             1,
             10,
             0,
-            GeoDataFrame(),
+            GeoDataFrame({"parallel_direction": []}, geometry=[]),
         ),
         (  # no_parallel_lines
             GeoDataFrame(
@@ -527,7 +529,7 @@ def test_flag_parallel_lines(
             1,
             10,
             0,
-            GeoDataFrame(),
+            GeoDataFrame({"parallel_direction": []}, geometry=[]),
         ),
         (  # two_parallel_lines
             GeoDataFrame(
@@ -541,7 +543,7 @@ def test_flag_parallel_lines(
             0,
             GeoDataFrame(
                 {
-                    "__direction": [270.0],
+                    "parallel_direction": [270.0],
                 },
                 geometry=[
                     Polygon(
@@ -566,7 +568,7 @@ def test_flag_parallel_lines(
             1,
             10,
             0,
-            GeoDataFrame(),
+            GeoDataFrame({"parallel_direction": []}, geometry=[]),
         ),
         (  # in_direction_difference_bounds
             GeoDataFrame(
@@ -580,7 +582,7 @@ def test_flag_parallel_lines(
             0,
             GeoDataFrame(
                 {
-                    "__direction": [290.0],
+                    "parallel_direction": [290.0],
                 },
                 geometry=[
                     Polygon(
@@ -610,7 +612,7 @@ def test_flag_parallel_lines(
             0,
             GeoDataFrame(
                 {
-                    "__direction": [270.0, 270.0],
+                    "parallel_direction": [270.0, 270.0],
                 },
                 geometry=[
                     Polygon(
@@ -646,14 +648,14 @@ def test_flag_parallel_lines(
         "multiple_parallel_lines",
     ],
 )
-def test_get_parallel_line_areas(
+def test_get_polygons_for_parallel_lines(
     input_gdf: GeoDataFrame,
     parallel_distance: float,
     allowed_direction_difference: float,
     segmentize_distance: float,
     expected: GeoDataFrame,
 ):
-    result = get_parallel_line_areas(
+    result = get_polygons_for_parallel_lines(
         input_gdf,
         parallel_distance,
         allowed_direction_difference=allowed_direction_difference,
