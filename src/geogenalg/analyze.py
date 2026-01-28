@@ -134,7 +134,7 @@ def flag_parallel_lines(
     gdf[column_parallel_check] = gdf.geometry.buffer(
         parallel_distance, cap_style="flat"
     ).buffer(0.01, cap_style="square")
-    gdf[column_parallel_with] = [set() for _ in range(len(gdf.index))]
+    gdf[column_parallel_with] = None
     gdf[column_id] = gdf.index
 
     for index, row in gdf.iterrows():
@@ -156,10 +156,9 @@ def flag_parallel_lines(
         if crossing_lines.empty:
             continue
 
-        for crossing_index in crossing_lines.index:
-            gdf[column_parallel_with].to_numpy()[index].add(crossing_index)
+        gdf[column_parallel_with].to_numpy()[index] = set(crossing_lines.index)
 
-    gdf = gdf.loc[gdf[column_parallel_with].apply(len) != 0]
+    gdf = gdf.loc[gdf[column_parallel_with].notna()]
 
     _group_parallel_lines(
         gdf,
@@ -170,7 +169,7 @@ def flag_parallel_lines(
 
     gdf = gdf.drop(column_parallel_check, axis=1)
 
-    if len(gdf.index) == 0:
+    if gdf.empty:
         return _empty_gdf()
 
     return gdf
