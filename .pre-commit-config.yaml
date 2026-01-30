@@ -48,3 +48,20 @@ repos:
     hooks:
       - id: gitlint
         stages: [commit-msg]
+
+  # Custom hook to catch any .gpkg-wal and .gpkg-shm files in the testdata
+  # directory. This is useful because if you have a testdata file open in
+  # another program and make any edits to it, they are not immediately
+  # saved to the main .gpkg file. This can lead to a situation where
+  # tests might pass on your machine because the temporary files exist
+  # but since the temporary files are .gitignored a commit might not
+  # include the latest changes to the main .gpkg file, causing tests to
+  # fail in the remote repository and other developers' machines.
+  - repo: local
+    hooks:
+      - id: temporary-geopackage-files
+        name: check-temp-files
+        entry: test/check_temp_files.py
+        language: python
+        types: [file]
+        pass_filenames: false
