@@ -2,8 +2,8 @@
 #
 #  This file is part of geogen-algorithms.
 #
-#  This source code is licensed under the MIT license found in the
-#  LICENSE file in the root directory of this source tree.
+#  SPDX-License-Identifier: MIT
+
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -15,7 +15,11 @@ from geogenalg.continuity import (
     flag_connections,
 )
 from geogenalg.core.exceptions import MissingReferenceError
-from geogenalg.core.geometry import LineExtendFrom, extend_line_to_nearest
+from geogenalg.core.geometry import (
+    LineExtendFrom,
+    assign_nearest_z,
+    extend_line_to_nearest,
+)
 from geogenalg.selection import remove_close_line_segments
 from geogenalg.split import explode_and_hash_id
 
@@ -63,8 +67,7 @@ class GeneralizeSharedPaths(BaseAlgorithm):
         if self.reference_key in reference_data:
             reference_gdf = reference_data[self.reference_key]
         else:
-            msg = "Reference data is mandatory."
-            raise MissingReferenceError(msg)
+            raise MissingReferenceError
 
         gdf = flag_connections(
             data,
@@ -124,6 +127,8 @@ class GeneralizeSharedPaths(BaseAlgorithm):
             lambda columns: _extend(*columns),
             axis=1,
         )
+
+        gdf = assign_nearest_z(data, gdf)
 
         return gdf.drop(
             [column for column in gdf.columns if column not in data.columns],

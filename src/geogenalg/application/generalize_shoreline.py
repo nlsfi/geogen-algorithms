@@ -59,8 +59,7 @@ class GeneralizeShoreline(BaseAlgorithm):
         if self.reference_key in reference_data:
             water_areas_gdf = reference_data[self.reference_key]
         else:
-            msg = "Reference data is missing."
-            raise MissingReferenceError(msg)
+            raise MissingReferenceError
 
         new_shoreline = water_areas_gdf.geometry.boundary.to_frame()
         new_shoreline = new_shoreline.explode()

@@ -9,29 +9,28 @@ from pathlib import Path
 
 from conftest import IntegrationTest
 
-from geogenalg.application.generalize_roads import GeneralizeRoads
-from geogenalg.testing import (
-    GeoPackagePath,
-)
+from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
+from geogenalg.testing import GeoPackagePath
 
 UNIQUE_ID_COLUMN = "kmtk_id"
 
 
-def test_generalize_roads(
+def test_generalize_shared_paths(
     testdata_path: Path,
 ) -> None:
     gpkg = GeoPackagePath(testdata_path / "roads.gpkg")
 
     IntegrationTest(
-        input_uri=gpkg.to_input("road_link"),
-        control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeRoads(
-            threshold_distance=10.0,
-            threshold_length=75.0,
+        input_uri=gpkg.to_input("shared_path_link"),
+        control_uri=gpkg.to_input("control_shared_paths"),
+        algorithm=GeneralizeSharedPaths(
+            detection_distance=25.0,
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
+        # Use control from GeneralizeRoads test as reference, as these are intended
+        # to be used sequentially.
         reference_uris={
-            "path": gpkg.to_input("path"),
+            "roads": gpkg.to_input("control"),
         },
-        check_missing_reference=False,
+        check_missing_reference=True,
     ).run()

@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
@@ -12,9 +11,12 @@ from typing import Any, ClassVar
 
 from geopandas import GeoDataFrame
 from pandas import Series, concat
+from shapely import Point
+from shapely.geometry import Polygon
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.cluster import get_cluster_centroids
+from geogenalg.core.geometry import mean_z
 
 
 @supports_identity
@@ -52,7 +54,16 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
         polygons: GeoDataFrame,
     ) -> GeoDataFrame:
         gdf = polygons.loc[polygons.geometry.area < self.polygon_min_area].copy()
-        gdf.geometry = gdf.geometry.apply(lambda geom: geom.point_on_surface())
+
+        def _to_point(geom: Polygon) -> Point:
+            point = geom.point_on_surface()
+            if geom.has_z:
+                z = mean_z(geom)
+                point = Point(point.x, point.y, z)
+
+            return point
+
+        gdf.geometry = gdf.geometry.apply(_to_point)
 
         return gdf
 
