@@ -216,6 +216,12 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["test"]
+filterwarnings = [
+    # Occurs in pyogrio, can't really be controlled on our side.
+    "ignore:The 'shapely.geos' module is deprecated:DeprecationWarning",
+    # Occurs in pyogrio (or really GDAL), caused by test data having timestamps with non-UTC timezone.
+    "ignore:Non-conformant content for record:RuntimeWarning",
+]
 
 [tool.coverage.paths]
 source = ["src", "**/site-packages"]
