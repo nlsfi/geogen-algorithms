@@ -19,6 +19,7 @@ from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.merge import (
     buffer_and_merge_polygons,
     dissolve_and_inherit_attributes,
+    dissolve_polygon_layers,
     merge_connecting_lines_by_attribute,
 )
 
@@ -440,3 +441,29 @@ def test_buffer_and_merge_polygons_invalid_geometry_type():
             input_gdf=GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:3067"),
             buffer_distance=1.0,
         )
+
+
+def test_dissolve_polygon_layers_with_valid_input():
+    """Happy path: two simple polygons that should dissolve into one."""
+
+    poly1 = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+    poly2 = Polygon([(1, 0), (2, 0), (2, 1), (1, 1)])
+
+    gdf1 = GeoDataFrame(geometry=[poly1], crs="EPSG:3067")
+    gdf2 = GeoDataFrame(geometry=[poly2], crs="EPSG:3067")
+
+    result = dissolve_polygon_layers(input_gdfs=[gdf1, gdf2])
+
+    assert len(result) == 1
+    assert result.geometry.iloc[0].is_valid
+    assert result.crs.to_string() == "EPSG:3067"
+
+
+def test_dissolve_polygon_layers_rejects_invalid_geometry():
+    """Fails when input contains non-polygon geometries."""
+
+    point = Point(0, 0)
+    gdf = GeoDataFrame(geometry=[point], crs="EPSG:3067")
+
+    with pytest.raises(GeometryTypeError):
+        dissolve_polygon_layers(input_gdfs=[gdf])
