@@ -97,10 +97,13 @@ class IntegrationTest:
             AssertionError: If test fails.
 
         """
-        input_data, _reference_data, result, control = self.get_test_gdfs()
+        input_data, input_data_before, _, result, control = self.get_test_gdfs()
 
         assert input_data.crs == result.crs
         assert input_data.crs == control.crs
+
+        # Ensure input data was not modified.
+        assert_geodataframe_equal(input_data, input_data_before)
 
         # TODO: change these to failure states? However, that would
         # require changes to some algorithms, so only warn for now.
