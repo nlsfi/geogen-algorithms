@@ -53,6 +53,7 @@ class TestGeoDataFrames(NamedTuple):
     """Convenience class for more ergonomic integration tests."""
 
     input_data: GeoDataFrame
+    input_data_before: GeoDataFrame
     reference_data: dict[str, GeoDataFrame]
     result: GeoDataFrame
     control: GeoDataFrame
@@ -203,6 +204,8 @@ def get_test_gdfs(
             layer=input_uri.layer_name,
         )
 
+    input_data_before = input_data.copy()
+
     result = get_alg_results_from_geopackage(
         alg,
         input_data,
@@ -218,6 +221,7 @@ def get_test_gdfs(
 
     return TestGeoDataFrames(
         input_data,
+        input_data_before,
         reference_data,
         result,
         control,
