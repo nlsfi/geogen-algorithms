@@ -3,11 +3,10 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
-
 from typing import Literal
 
 from geopandas import GeoDataFrame
+from pandas import concat
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString
 
