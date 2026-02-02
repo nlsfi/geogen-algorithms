@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from dataclasses import dataclass
 from typing import ClassVar, override
 
@@ -11,7 +10,7 @@ from geopandas import GeoDataFrame
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import MissingReferenceError
-from geogenalg.identity import hash_duplicate_indexes
+from geogenalg.split import explode_and_hash_id
 
 
 @supports_identity
@@ -88,4 +87,6 @@ class KeepIntersection(BaseAlgorithm):
         result = result.set_index("__index")
         result.index.name = index_name
 
-        return hash_duplicate_indexes(result, "keepintersection")
+        # Sometimes gdf.overlay results in multiple single geometries, sometimes
+        # in multigeometries. Therefore explode and hash.
+        return explode_and_hash_id(result, "keepintersection")

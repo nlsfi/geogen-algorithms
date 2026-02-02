@@ -42,11 +42,4 @@ def explode_and_hash_id(
         msg = "GeoDataFrame must have a string index."
         raise ValueError(msg)
 
-    length_before = len(data.index)
-    gdf = data.explode()
-
-    if len(gdf.index) == length_before:
-        # Nothing exploded, no need to keep going.
-        return gdf
-
-    return hash_duplicate_indexes(gdf, hash_prefix)
+    return hash_duplicate_indexes(data.explode(), hash_prefix)
