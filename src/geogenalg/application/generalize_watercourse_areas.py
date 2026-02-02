@@ -9,6 +9,7 @@ from typing import ClassVar
 from geopandas import GeoDataFrame
 
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
+from geogenalg.split import explode_and_hash_id
 from geogenalg.transform import thin_polygon_sections_to_lines
 
 
@@ -44,18 +45,16 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     ) -> GeoDataFrame:
         generalized = super()._execute(data, reference_data)
 
-        # TODO: ID handling:
-        # * handle hashing old ids (use old_ids_column argument in
-        #   thin_polygon_sections_to_lines)
-        # * thin_polygon_sections can give MultiPolygons. These need
-        #   to be exploded into new features and their IDs handled.
-        # * do Z values need to be recalculated?
-
-        return thin_polygon_sections_to_lines(
+        result = thin_polygon_sections_to_lines(
             input_gdf=generalized,
             threshold=self.line_transform_width,
             min_line_length=self.line_min_length,
             min_new_section_length=self.min_new_section_length,
             min_new_section_area=self.min_area,
             width_check_distance=self.width_check_distance,
+        )
+
+        return explode_and_hash_id(
+            result,
+            "watercourseareas",
         )
