@@ -130,6 +130,18 @@ class IntegrationTest:
             msg = "Control data has mixed 2.5D and 2D geometries."
             raise AssertionError(msg)
 
+        input_has_only_single_geometries = all(
+            "Multi" not in geom_type
+            for geom_type in input_data.geometry.geom_type.values
+        )
+        result_has_only_single_geometries = all(
+            "Multi" not in geom_type for geom_type in result.geometry.geom_type.values
+        )
+
+        if input_has_only_single_geometries and not result_has_only_single_geometries:
+            msg = "Input has only single geometries but result does not."
+            raise AssertionError(msg)
+
         assert_geodataframe_equal(
             result,
             control,
