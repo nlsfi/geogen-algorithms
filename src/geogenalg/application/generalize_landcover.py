@@ -11,7 +11,7 @@ from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
 
 from geogenalg.application import BaseAlgorithm
-from geogenalg.attributes import inherit_attributes
+from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.selection import remove_small_holes, remove_small_polygons
 
@@ -37,8 +37,10 @@ class GeneralizeLandcover(BaseAlgorithm):
     - Removes holes with area under given `hole_threshold`
     """
 
-    buffer_constant: float = 10.0
-    """Constant used for buffering polygons."""
+    positive_buffer: float = 10.0
+    """Buffer to close narrow gaps."""
+    negative_buffer: float = -10.0
+    """Negative buffer to remove narrow parts."""
     simplification_tolerance: float = 5.0
     """Tolerance used for geometry simplification."""
     area_threshold: float = 2500.0
@@ -47,6 +49,8 @@ class GeneralizeLandcover(BaseAlgorithm):
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""
+    group_by: str | list[str] | None = None
+    """Column(s) whose values define the groups to be dissolved."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
 
@@ -62,18 +66,22 @@ class GeneralizeLandcover(BaseAlgorithm):
                 distance, cap_style="square", join_style="bevel"
             )
 
-        # Create a buffer of size buffer_constant to close narrow gaps between polygons
-        _buffer(result_gdf, self.buffer_constant)
-        result_gdf = result_gdf.dissolve(as_index=False)
+        # Create a positive_buffer to close narrow gaps between polygons
+        _buffer(result_gdf, self.positive_buffer)
+        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by)
 
-        # Create a double negative buffer to remove narrow polygon parts
-        _buffer(result_gdf, -2 * self.buffer_constant)
+        # Create a negative buffer to restore polygons back to their original size and
+        # remove narrow polygon parts
+        negative_buffer = -abs(self.negative_buffer)
+        total_negative_buffer = negative_buffer - self.positive_buffer
+        _buffer(result_gdf, total_negative_buffer)
 
         # Restore polygons to their original size with a positive buffer
-        _buffer(result_gdf, self.buffer_constant)
+        _buffer(result_gdf, -negative_buffer)
 
-        result_gdf = result_gdf.dissolve(as_index=False)
+        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by)
         result_gdf = result_gdf.explode(index_parts=False)
+        result_gdf = inherit_attributes_from_largest(data, result_gdf, "old_ids")
 
         # Simplify the polygons
         result_gdf.geometry = result_gdf.geometry.simplify(
@@ -91,7 +99,7 @@ class GeneralizeLandcover(BaseAlgorithm):
         result_gdf = remove_small_holes(result_gdf, self.hole_threshold)
 
         # Assign nearst z values from source gdf
-        result_gdf = assign_nearest_z(data, result_gdf)
+        return assign_nearest_z(data, result_gdf)
 
-        # Inherit attributes from source gdf
-        return inherit_attributes(data, result_gdf)
+        # TODO: Ensure polygons do not overlap and there are no narrow gaps between them
+        # (e.g. using GEOS CoverageCleaner)
