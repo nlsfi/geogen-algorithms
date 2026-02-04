@@ -379,6 +379,7 @@ def build_app() -> None:
         ignored_types_for_cli = (
             dict[str, Callable[[Series], Any] | str] | None,
             list[int | str],
+            str | list[str] | None,
         )
         argspec = getfullargspec(alg)
 
