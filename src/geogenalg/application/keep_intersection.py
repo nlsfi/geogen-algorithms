@@ -79,7 +79,7 @@ class KeepIntersection(BaseAlgorithm):
 
         # Create GeoDataFrame with only geometries for mask so its attributes
         # are not inherited.
-        mask_gdf = GeoDataFrame(mask_data.geometry)
+        mask_gdf = GeoDataFrame(geometry=mask_data.geometry, crs=mask_data.geometry.crs)
 
         gdf = data.copy()
         gdf["__index"] = gdf.index
