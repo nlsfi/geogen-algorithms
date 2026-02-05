@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def testdata_path() -> Path:
-    return Path(__file__).resolve().parent / "testdata"
+    return Path(__file__).resolve().parent.parent.parent / "test/testdata"
 
 
 def main() -> int:
@@ -27,7 +27,10 @@ def main() -> int:
             + "\n\n"
         )
         sys.stderr.write(
-            """This is likely because the file is open in a program. Edits made to the file might not entirely be saved yet. Make sure the edits are permanently saved to the main GeoPackage file before commiting."""
+            "This is likely because the file is open in a program. "
+            + "Edits made to the file might not entirely be saved yet. "
+            + "Make sure the edits are permanently saved to the main "
+            + "GeoPackage file before commiting.\n"
         )
 
         return 1
