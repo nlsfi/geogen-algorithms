@@ -50,7 +50,7 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
 
     Returns:
     -------
-        Two GeoDataFrame s containing new line features and remaining polygon
+        Two GeoDataFrames containing new line features and remaining polygon
         features, with thin sections removed, in that order.
 
     """
