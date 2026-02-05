@@ -7,12 +7,16 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
+from pandas import concat
 
+from geogenalg.application import supports_identity
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
+from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.split import explode_and_hash_id
 from geogenalg.transform import thin_polygon_sections_to_lines
 
 
+@supports_identity
 @dataclass(frozen=True)
 class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     """Generalize polygonal watercourse areas.
@@ -45,16 +49,27 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     ) -> GeoDataFrame:
         generalized = super()._execute(data, reference_data)
 
-        result = thin_polygon_sections_to_lines(
+        lines, polygons = thin_polygon_sections_to_lines(
             input_gdf=generalized,
             threshold=self.line_transform_width,
             min_line_length=self.line_min_length,
             min_new_section_length=self.min_new_section_length,
             min_new_section_area=self.min_area,
             width_check_distance=self.width_check_distance,
+            old_ids_column="old_ids_temp",
         )
 
-        return explode_and_hash_id(
-            result,
-            "watercourseareas",
+        polygons = explode_and_hash_id(polygons, "watercourseareas").drop(
+            "old_ids_temp", axis=1
+        )
+        lines = hash_index_from_old_ids(
+            lines, "watercourseareas", old_ids_column="old_ids_temp"
+        )
+        lines = hash_duplicate_indexes(lines, "watercourseareas")
+
+        return concat(
+            [
+                lines,
+                polygons,
+            ]
         )
