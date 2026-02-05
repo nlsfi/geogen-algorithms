@@ -29,8 +29,7 @@ dynamic = [
 ]
 dependencies = [
     "cartagen>=1.0.2",
-    "geopandas==1.1.1",
-    "matplotlib==3.9.2",
+    "geopandas==1.1.2",
     "networkx==3.4.2",
     "pygeoops==0.4.0",
     "scikit-learn==1.6.1",
