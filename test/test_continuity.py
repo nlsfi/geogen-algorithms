@@ -3,17 +3,18 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from collections import defaultdict
 
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
+from shapely import box
 from shapely.geometry import LineString, MultiLineString
 
 from geogenalg.continuity import (
     check_line_connections,
     check_reference_line_connections,
+    connect_lines_to_polygon_centroids,
     connect_nearby_endpoints,
     detect_dead_ends,
     find_all_endpoints,
@@ -577,4 +578,89 @@ def test_flag_connections_to_reference(
         flag_connections_to_reference(input_gdf, reference_gdf),
         expected_gdf,
         check_like=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "source_lines",
+        "reference_polygons",
+        "expected",
+    ),
+    [
+        (
+            GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
+            GeoDataFrame(geometry=[box(1, 0, 2, 1)]),
+            GeoDataFrame(geometry=[LineString([[0, 0], [1, 0], [1.5, 0.5]])]),
+        ),
+        (
+            GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
+            GeoDataFrame(geometry=[box(-1, 0, 0, 1)]),
+            GeoDataFrame(geometry=[LineString([[-0.5, 0.5], [0, 0], [1, 0]])]),
+        ),
+        (
+            GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
+            GeoDataFrame(
+                geometry=[
+                    box(1, 0, 2, 1),
+                    box(-1, 0, 0, 1),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[LineString([[-0.5, 0.5], [0, 0], [1, 0], [1.5, 0.5]])]
+            ),
+        ),
+        (
+            GeoDataFrame(geometry=[LineString([[0.25, 0], [0.75, 0]])]),
+            GeoDataFrame(
+                geometry=[
+                    box(1, 0, 2, 1),
+                    box(-1, 0, 0, 1),
+                ]
+            ),
+            GeoDataFrame(geometry=[LineString([[0.25, 0], [0.75, 0]])]),
+        ),
+        (
+            GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
+            GeoDataFrame(
+                geometry=[
+                    box(1, 0, 2, 1),
+                    box(1, 0, 50, 50),
+                ]
+            ),
+            GeoDataFrame(geometry=[LineString([[0, 0], [1, 0], [1.5, 0.5]])]),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                ]
+            ),
+            GeoDataFrame(geometry=[box(1, 0, 2, 1)]),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0], [1.5, 0.5]]),
+                    LineString([[0, 1], [1, 1], [1.5, 0.5]]),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "connect_from_end",
+        "connect_from_start",
+        "connect_from_both",
+        "connect_from_none",
+        "multiple_touching",
+        "connect_multiple",
+    ],
+)
+def test_connect_lines_to_polygon_centroids(
+    source_lines: GeoDataFrame,
+    reference_polygons: GeoDataFrame,
+    expected: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        connect_lines_to_polygon_centroids(source_lines, reference_polygons),
+        expected,
     )

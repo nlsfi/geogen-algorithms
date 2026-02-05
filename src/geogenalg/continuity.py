@@ -11,7 +11,11 @@ from pandas import concat
 from shapely import force_2d
 from shapely.geometry import LineString, MultiLineString, Point
 
-from geogenalg.core.geometry import get_topological_points
+from geogenalg.core.geometry import (
+    LineExtendFrom,
+    extend_line_to_nearest,
+    get_topological_points,
+)
 
 
 def find_all_endpoints(
@@ -444,5 +448,59 @@ def flag_connections_to_reference(
         reference_union
     )
     gdf[end_connected_column] = gdf[end_connected_column].intersects(reference_union)
+
+    return gdf
+
+
+def connect_lines_to_polygon_centroids(
+    source_lines: GeoDataFrame,
+    reference_polygons: GeoDataFrame,
+) -> GeoDataFrame:
+    """Extend LineStrings in a GeoDataFrame to touching polygons centroid.
+
+    Line will be extended either from its start or end point if either
+    touch a polygon in the reference dataset.
+
+    If the line does not touch a polygon at all, it will not change.
+
+    Args:
+    ----
+        source_lines: Input data containing LineStrings.
+        reference_polygons: Input data containing Polygons.
+
+    Returns:
+    -------
+        GeoDataFrame with extended lines.
+
+    """
+    gdf = source_lines.copy()
+
+    def _extend_line(line: LineString) -> LineString:
+        start = Point(line.coords[0])
+        end = Point(line.coords[-1])
+
+        start_polys = reference_polygons.loc[reference_polygons.geometry.touches(start)]
+        end_polys = reference_polygons.loc[reference_polygons.geometry.touches(end)]
+
+        if not start_polys.empty:
+            # Because in theory the start/end point might touch two different
+            # polygons, extend to the nearest point in the MultiPoint union of
+            # all their centroids.
+            line = extend_line_to_nearest(
+                line,
+                start_polys.centroid.union_all(),
+                LineExtendFrom.START,
+            )
+
+        if not end_polys.empty:
+            line = extend_line_to_nearest(
+                line,
+                end_polys.centroid.union_all(),
+                LineExtendFrom.END,
+            )
+
+        return line
+
+    gdf.geometry = gdf.geometry.apply(_extend_line)
 
     return gdf
