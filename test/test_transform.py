@@ -15,7 +15,7 @@ from geogenalg.transform import thin_polygon_sections_to_lines
 
 
 @pytest.mark.parametrize(
-    ("input_gdf", "expected", "threshold"),
+    ("input_gdf", "expected_lines", "expected_polygons", "threshold"),
     [
         (
             GeoDataFrame(
@@ -27,6 +27,7 @@ from geogenalg.transform import thin_polygon_sections_to_lines
                     box(0, 0, 100, 20),
                 ],
             ),
+            GeoDataFrame(columns=["id", "attribute", "__old_ids"], geometry=[]),
             GeoDataFrame(
                 {
                     "id": [1],
@@ -57,6 +58,7 @@ from geogenalg.transform import thin_polygon_sections_to_lines
                 },
                 geometry=[LineString([[10, 10], [90, 10]])],
             ),
+            GeoDataFrame(columns=["id", "attribute", "__old_ids"], geometry=[]),
             100,
         ),
         (
@@ -82,23 +84,34 @@ from geogenalg.transform import thin_polygon_sections_to_lines
             ),
             GeoDataFrame(
                 {
-                    "id": [3, 2, 1, 3],
+                    "id": [3, 2],
                     "attribute": [
                         "section turns to line",
                         "turns to line",
-                        "remains a polygon",
-                        "section turns to line",
                     ],
                     "__old_ids": [
                         (3,),
                         (2,),
-                        nan,
-                        nan,
                     ],
                 },
                 geometry=[
                     LineString([[105, 133.49107142857142], [105, 237.5]]),
                     LineString([[55, 55], [55, 145]]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "id": [1, 3],
+                    "attribute": [
+                        "remains a polygon",
+                        "section turns to line",
+                    ],
+                    "__old_ids": [
+                        None,
+                        None,
+                    ],
+                },
+                geometry=[
                     box(0, 0, 100, 20),
                     MultiPolygon(
                         [
@@ -123,18 +136,19 @@ from geogenalg.transform import thin_polygon_sections_to_lines
         ),
     ],
     ids=[
-        "no thin sections",
-        "only thin sections",
+        "no_thin_sections",
+        "only_thin_sections",
         "mixed",
     ],
 )
 def test_thin_polygon_sections_to_lines(
     input_gdf: GeoDataFrame,
-    expected: GeoDataFrame,
+    expected_lines: GeoDataFrame,
+    expected_polygons: GeoDataFrame,
     threshold: float,
 ):
     input_gdf = input_gdf.set_index("id")
-    modified = thin_polygon_sections_to_lines(
+    modified_lines, modified_polygons = thin_polygon_sections_to_lines(
         input_gdf,
         threshold=threshold,
         min_line_length=10,
@@ -142,6 +156,8 @@ def test_thin_polygon_sections_to_lines(
         min_new_section_area=250,
         old_ids_column="__old_ids",
     )
-    expected = expected.set_index("id")
+    expected_lines = expected_lines.set_index("id")
+    expected_polygons = expected_polygons.set_index("id")
 
-    assert_geodataframe_equal(modified, expected, check_like=True)
+    assert_geodataframe_equal(modified_lines, expected_lines, check_like=True)
+    assert_geodataframe_equal(modified_polygons, expected_polygons, check_like=True)
