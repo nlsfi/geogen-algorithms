@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, cast
 
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import nan
-from pandas import concat
 from pygeoops import centerline
 
 from geogenalg.attributes import inherit_attributes_from_largest
@@ -31,7 +30,7 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
     *,
     width_check_distance: float = 10.0,
     old_ids_column: str | None = None,
-) -> GeoDataFrame:
+) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Convert thin sections of polygon features to linestrings.
 
     New line features inherit attributes from largest intersecting polygon.
@@ -51,8 +50,8 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
 
     Returns:
     -------
-        GeoDataFrame containing new line features and remaining polygon
-        features, with thin sections removed.
+        Two GeoDataFrame s containing new line features and remaining polygon
+        features, with thin sections removed, in that order.
 
     """
     gdf = input_gdf.copy()
@@ -80,7 +79,7 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         if old_ids_column is not None:
             gdf[old_ids_column] = nan
 
-        return gdf
+        return GeoDataFrame(columns=gdf.columns, crs=gdf.crs), gdf
 
     # Create a polygonal mask from lines which have been determined to be long
     # enough. This is used to remove thin sections from the polygons.
@@ -122,11 +121,11 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
     # Extract new lines from original, non-segmentized centerline
     new_lines = full_centerline.difference(gdf.geometry.union_all())
 
-    if new_lines.is_empty:
-        if old_ids_column is not None:
-            gdf[old_ids_column] = nan
+    if old_ids_column is not None:
+        gdf[old_ids_column] = None
 
-        return gdf
+    if new_lines.is_empty:
+        return GeoDataFrame(columns=gdf.columns, crs=gdf.crs), gdf
 
     new_line_features = GeoDataFrame(
         geometry=GeoSeries(
@@ -141,4 +140,4 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         old_ids_column,
     )
 
-    return concat([new_line_features, gdf])
+    return new_line_features, gdf
