@@ -185,6 +185,13 @@ geopandas = "gpd"
     "PLR0917", # too-many-positional-arguments
 ]
 
+"tools/*" = [
+    "INP001",
+    "D103", # Missing docstring in public function
+    "D100", # Missing docstring in public module
+    "T201", # `print` found
+]
+
 [tool.flake8]
 spellcheck-targets = "names"
 dictionaries = "en_US,python,technical,pandas"

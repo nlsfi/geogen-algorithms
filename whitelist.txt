@@ -57,6 +57,7 @@ nodata
 polygonize
 pygeoops
 rect
+rglob
 segmentize
 segmentized
 shapelysmooth
@@ -66,6 +67,7 @@ sindex
 sklearn
 sqrt
 starmap
+testdata
 tolist
 topo
 typer
