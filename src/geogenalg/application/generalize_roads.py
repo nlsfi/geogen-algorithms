@@ -50,12 +50,12 @@ class GeneralizeRoads(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        data = data.copy()
+        gdf = data.copy()
 
-        input_gdf_columns = list(data.columns)
+        input_gdf_columns = list(gdf.columns)
 
         connected_roads, unconnected_roads = check_line_connections(
-            data, self.threshold_distance, CONNECTION_INFO_COLUMN
+            gdf, self.threshold_distance, CONNECTION_INFO_COLUMN
         )
         if list(reference_data.values()) and unconnected_roads is not None:
             roads_connected_to_reference, completely_unconnected_roads = (
@@ -74,13 +74,13 @@ class GeneralizeRoads(BaseAlgorithm):
                         connected_roads,
                         roads_connected_to_reference,
                         completely_unconnected_roads[
-                            completely_unconnected_roads["geometry"].length
+                            completely_unconnected_roads.geometry.length
                             > self.threshold_length
                         ],
                     ]
                 ),
-                geometry="geometry",
-                crs=data.crs,
+                geometry=gdf.geometry.name,
+                crs=gdf.crs,
             )
 
         normal_roads, dead_end_roads = detect_dead_ends(
@@ -92,11 +92,12 @@ class GeneralizeRoads(BaseAlgorithm):
         )
         roads = GeoDataFrame(
             concat([normal_roads, inspected_dead_end_candidates]),
-            geometry="geometry",
-            crs=data.crs,
+            geometry=gdf.geometry.name,
+            crs=gdf.crs,
         )
-        """Ensure that attribute is boolean and also default to a save road link if
-        there is no data."""
+
+        # Ensure that attribute is boolean and also default to a save road link
+        # if there is no data
         roads[DEAD_END_CONN_INFO_COLUMN] = (
             roads[DEAD_END_CONN_INFO_COLUMN].astype("boolean").fillna(True)  # noqa: FBT003
         )
@@ -108,19 +109,19 @@ class GeneralizeRoads(BaseAlgorithm):
             roads[DEAD_END_INFO_COLUMN] & (~roads[DEAD_END_CONN_INFO_COLUMN])
         ]
         long_enough_dead_ends = roads_to_generalize[
-            roads_to_generalize["geometry"].length > self.threshold_length
+            roads_to_generalize.geometry.length > self.threshold_length
         ]
 
         generalized_roads = concat([roads_to_keep, long_enough_dead_ends])
-
-        return GeoDataFrame(
-            generalized_roads.drop(
-                columns=[
-                    column
-                    for column in list(generalized_roads.columns)
-                    if column not in input_gdf_columns
-                ]
-            ),
-            geometry="geometry",
-            crs=data.crs,
+        generalized_roads = generalized_roads.drop(
+            [
+                column
+                for column in generalized_roads.columns
+                if column not in input_gdf_columns
+            ],
+            axis=1,
         )
+        generalized_roads = GeoDataFrame(generalized_roads)
+        generalized_roads = generalized_roads.set_geometry(gdf.geometry.name)
+
+        return generalized_roads.set_crs(gdf.crs)
