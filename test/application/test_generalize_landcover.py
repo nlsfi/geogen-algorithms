@@ -44,22 +44,23 @@ def test_generalize_landcover_50k(
     testdata_path: Path,
 ) -> None:
     """
-    Test generalizing landcover with cultivated land class
+    Test generalizing landcover with marshes
     """
-    input_path = testdata_path / "marshes_small_area.gpkg"
+    input_path = testdata_path / "marshes.gpkg"
     input_data = read_gdf_from_file_and_set_index(
         input_path,
         UNIQUE_ID_COLUMN,
-        layer="mtk_marshes",
+        layer="marsh",
     )
 
     temp_dir = TemporaryDirectory()
     output_path = Path(temp_dir.name) / "generalized_marshes.gpkg"
 
     algorithm = GeneralizeLandcover(
-        buffer_constant=20,
-        simplification_tolerance=30,
-        area_threshold=7500,
+        positive_buffer=25,
+        negative_buffer=-10,
+        simplification_tolerance=15,
+        area_threshold=5000,
         hole_threshold=5000,
         smoothing=True,
     )
@@ -69,7 +70,7 @@ def test_generalize_landcover_50k(
     )
 
     control_marshes: GeoDataFrame = read_gdf_from_file_and_set_index(
-        input_path, UNIQUE_ID_COLUMN, layer="generalized_marshes"
+        input_path, "index", layer="generalized_marsh"
     )
 
     control_marshes = control_marshes.sort_values("geometry").reset_index(drop=True)
@@ -87,9 +88,10 @@ def test_generalize_landcover_invalid_geometry_type() -> None:
     gdf = GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
 
     algorithm = GeneralizeLandcover(
-        buffer_constant=20,
-        simplification_tolerance=30,
-        area_threshold=7500,
+        positive_buffer=25,
+        negative_buffer=-10,
+        simplification_tolerance=15,
+        area_threshold=5000,
         hole_threshold=5000,
         smoothing=True,
     )
