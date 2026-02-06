@@ -645,14 +645,30 @@ def test_flag_connections_to_reference(
                 ]
             ),
         ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0.5, 0], [0.5, -1], [0, -1], [0, 0]]),
+                ]
+            ),
+            GeoDataFrame(geometry=[box(0, 0, 1, 1)]),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [[0.5, 0.5], [0.5, 0], [0.5, -1], [0, -1], [0, 0], [0.5, 0.5]]
+                    ),
+                ]
+            ),
+        ),
     ],
     ids=[
         "connect_from_end",
         "connect_from_start",
         "connect_from_both",
         "connect_from_none",
-        "multiple_touching",
+        "line_touches_two_polygons",
         "connect_multiple",
+        "both_ends_touch_same_polygon",
     ],
 )
 def test_connect_lines_to_polygon_centroids(

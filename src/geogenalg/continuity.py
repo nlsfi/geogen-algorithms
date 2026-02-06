@@ -482,6 +482,20 @@ def connect_lines_to_polygon_centroids(
         start_polys = reference_polygons.loc[reference_polygons.geometry.touches(start)]
         end_polys = reference_polygons.loc[reference_polygons.geometry.touches(end)]
 
+        # Handle special case of line beginning and ending at the same polygon.
+        if (start_polys.shape[0] == 1 and end_polys.shape[0] == 1) and (
+            start_polys.geometry.to_numpy()[0] is end_polys.geometry.to_numpy()[0]
+        ):
+            # Extend from both ends, this has to be done instead of doing it in
+            # steps (as below), because shapely.linemerge might change the
+            # direction of the line, preventing the other end from being
+            # extended.
+            return extend_line_to_nearest(
+                line,
+                start_polys.centroid.union_all(),
+                LineExtendFrom.BOTH,
+            )
+
         if not start_polys.empty:
             # Because in theory the start/end point might touch two different
             # polygons, extend to the nearest point in the MultiPoint union of

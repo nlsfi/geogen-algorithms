@@ -970,6 +970,20 @@ def test_move_to_point():
                 [[0, 0], [1, 0], [1, 1], [0.5, 1]]
             ),  # expected (shouldn't change)
         ),
+        (
+            LineString([[0.5, 0.5], [1, 0.5], [1, 0]]),
+            Point(0.5, 0.5),
+            LineExtendFrom.END,
+            0.0,  # tolerance
+            LineString([[0.5, 0.5], [1, 0.5], [1, 0], [0.5, 0.5]]),  # expected
+        ),
+        (
+            LineString([[1, 0.5], [1, 0], [0.5, 0.5]]),
+            Point(0.5, 0.5),
+            LineExtendFrom.START,
+            0.0,  # tolerance
+            LineString([[0.5, 0.5], [1, 0.5], [1, 0], [0.5, 0.5]]),  # expected
+        ),
     ],
     ids=[
         "line_to_point-end-no_tolerance",
@@ -980,6 +994,8 @@ def test_move_to_point():
         "line_to_line",
         "line_to_polygon",
         "crosses",
+        "extend_to_form_ring-end",
+        "extend_to_form_ring-start",
     ],
 )
 def test_extend_line_to_nearest(
