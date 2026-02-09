@@ -10,12 +10,14 @@ from typing import ClassVar
 from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
 
-from geogenalg.application import BaseAlgorithm
+from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.geometry import assign_nearest_z
+from geogenalg.identity import hash_index_from_old_ids
 from geogenalg.selection import remove_small_holes, remove_small_polygons
 
 
+@supports_identity
 @dataclass(frozen=True)
 class GeneralizeLandcover(BaseAlgorithm):
     """Generalize polygon data representing a land cover class.
@@ -82,6 +84,7 @@ class GeneralizeLandcover(BaseAlgorithm):
         result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by)
         result_gdf = result_gdf.explode(index_parts=False)
         result_gdf = inherit_attributes_from_largest(data, result_gdf, "old_ids")
+        result_gdf = hash_index_from_old_ids(result_gdf, "landcover", "old_ids")
 
         # Simplify the polygons
         result_gdf.geometry = result_gdf.geometry.simplify(

@@ -46,7 +46,7 @@ def test_generalize_landcover_50k(
     """
     Test generalizing landcover with marshes
     """
-    input_path = testdata_path / "marshes.gpkg"
+    input_path = testdata_path / "marshes_2.gpkg"
     input_data = read_gdf_from_file_and_set_index(
         input_path,
         UNIQUE_ID_COLUMN,
@@ -66,11 +66,11 @@ def test_generalize_landcover_50k(
     )
     algorithm.execute(input_data, {}).to_file(output_path, layer="marshes_50k")
     result_marshes = read_gdf_from_file_and_set_index(
-        output_path, "index", layer="marshes_50k"
+        output_path, UNIQUE_ID_COLUMN, layer="marshes_50k"
     )
 
     control_marshes: GeoDataFrame = read_gdf_from_file_and_set_index(
-        input_path, "index", layer="generalized_marsh"
+        input_path, UNIQUE_ID_COLUMN, layer="generalized_marsh"
     )
 
     control_marshes = control_marshes.sort_values("geometry").reset_index(drop=True)
