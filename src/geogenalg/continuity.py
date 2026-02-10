@@ -140,7 +140,7 @@ def check_line_connections(
     results = []
 
     for idx, row in gdf.iterrows():
-        line = row.geometry
+        line = row[gdf.geometry.name]
 
         first_point = Point(line.coords[0])
         last_point = Point(line.coords[-1])
@@ -196,7 +196,7 @@ def check_reference_line_connections(  # noqa: SC200
     other_lines = GeoDataFrame(other_lines)
 
     for _idx, row in gdf.iterrows():
-        line = row.geometry
+        line = row[gdf.geometry.name]
 
         # Extract first and last points of the line
         first_point = Point(line.coords[0])
@@ -250,7 +250,7 @@ def detect_dead_ends(
     last_point_connected = []
 
     for idx, row in gdf.iterrows():
-        line = row.geometry
+        line = row[gdf.geometry.name]
 
         first_point = Point(line.coords[0])
         last_point = Point(line.coords[-1])
@@ -308,10 +308,10 @@ def inspect_dead_end_candidates(
     """
     new_connection = []
     other_lines = GeoDataFrame(concat(reference_gdf_list))
-    gdf = GeoDataFrame(gdf, geometry="geometry")
+    gdf = GeoDataFrame(gdf, geometry=gdf.geometry.name)
 
     for _idx, row in gdf.iterrows():
-        line = row.geometry
+        line = row[gdf.geometry.name]
 
         # Extract first and last points of the line
         if row["first_intersects"]:
