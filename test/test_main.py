@@ -195,6 +195,10 @@ def test_main():
             "test_string",
             "test_string",
         ),
+        (
+            "-10",
+            -10,
+        ),
     ],
     ids=[
         "str_to_int",
@@ -203,6 +207,7 @@ def test_main():
         "special_encoding_float",
         "float",
         "stays_str",
+        "negative",
     ],
 )
 def test_int_or_str_list(input_string: str, expected: NamedGeoPackageURI):

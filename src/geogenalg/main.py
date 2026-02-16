@@ -179,15 +179,19 @@ def int_or_str_list(value: str) -> int | str:
     if value.startswith("str:") and len(value) > 4:  # noqa: PLR2004
         integer_part = value[4:]
 
-        if integer_part.isdigit():
-            return integer_part
+        try:
+            # This might be redundant, maybe you could do just some kind of nop
+            # call here, but I got worried that could be optimized out, which
+            # that's the reason for the funny looking assignments here.
+            integer = int(integer_part)
+            return str(integer)
+        except ValueError:
+            return value
 
-        return value
-
-    if value.isdigit():
+    try:
         return int(value)
-
-    return value
+    except ValueError:
+        return value
 
 
 def get_class_attribute_docstrings(cls: type[Any]) -> dict[str, str]:
