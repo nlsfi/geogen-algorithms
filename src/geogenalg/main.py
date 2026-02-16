@@ -75,6 +75,16 @@ class NamedGeoPackageURI:
     uri: GeoPackageURI
 
 
+@dataclass(frozen=True)
+class TransformedTypeInformation:
+    """Class to describe how to transform an unsupported type to a supported one."""
+
+    transformed_type: type
+    parser: Callable[[str], Any]
+    custom_default: Any
+    extra_parse_help: str
+
+
 def geopackage_uri(value: str) -> GeoPackageURI:
     """Parse string into GeoPackageURI.
 
@@ -149,6 +159,35 @@ def named_geopackage_uri(value: str) -> NamedGeoPackageURI:
     uri = geopackage_uri(split[1])
 
     return NamedGeoPackageURI(name=name, uri=uri)
+
+
+def int_or_str_list(value: str) -> int | str:
+    """Parse string into an int if possible, keep as is otherwise.
+
+    If value is encoded as f.e. str:10 the returned type will be a string
+    "10".
+
+    Args:
+    ----
+        value: string to parse
+
+    Returns:
+    -------
+        Parsed int or string.
+
+    """
+    if value.startswith("str:") and len(value) > 4:  # noqa: PLR2004
+        integer_part = value[4:]
+
+        if integer_part.isdigit():
+            return integer_part
+
+        return value
+
+    if value.isdigit():
+        return int(value)
+
+    return value
 
 
 def get_class_attribute_docstrings(cls: type[Any]) -> dict[str, str]:
@@ -306,7 +345,7 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
 app = typer.Typer()
 
 
-def build_app() -> None:
+def build_app() -> None:  # noqa: PLR0914
     """Add commands to typer app from algorithms.
 
     Exists as a separate function mainly to enable running CLI test.
@@ -376,10 +415,23 @@ def build_app() -> None:
 
         # This should include any parameter types which are unnecessary/too
         # complex to support entering in the CLI.
-        ignored_types_for_cli = (
-            dict[str, Callable[[Series], Any] | str] | None,
-            list[int | str],
-        )
+        ignored_types_for_cli = (dict[str, Callable[[Series], Any] | str] | None,)
+
+        # Transform certain types defined on the algorithm-level to a helper
+        # type with a custom parser.
+        transformed_types_for_cli: dict[type, TransformedTypeInformation] = {
+            list[int | str]: TransformedTypeInformation(
+                transformed_type=list[Any],
+                parser=int_or_str_list,
+                custom_default=[],
+                extra_parse_help=(
+                    "Either an integer or a string. Can be specified multiple times. "
+                    + "If you need to pass an integer as a string, you can add do so "
+                    + "by appending str: in front of the integer, i.e. str:10."
+                ),
+            ),
+        }
+
         argspec = getfullargspec(alg)
 
         fields = argspec.args
@@ -408,10 +460,30 @@ def build_app() -> None:
 
             field_name = field
 
-            type_annotation = Annotated[
-                type_annotation,
-                typer.Option(help=docstring),
-            ]
+            if type_annotation in transformed_types_for_cli:
+                transform_information = transformed_types_for_cli[type_annotation]
+
+                help_str = (
+                    docstring
+                    if not transform_information.extra_parse_help
+                    else docstring + f" {transform_information.extra_parse_help}"
+                )
+
+                type_annotation = Annotated[
+                    transform_information.transformed_type,
+                    typer.Option(
+                        parser=transform_information.parser,
+                        help=help_str,
+                    ),
+                ]
+
+                if transform_information.custom_default is not None:
+                    default = transform_information.custom_default
+            else:
+                type_annotation = Annotated[
+                    type_annotation,
+                    typer.Option(help=docstring),
+                ]
 
             parameters.append(
                 Parameter(

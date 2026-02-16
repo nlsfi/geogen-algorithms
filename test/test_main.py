@@ -18,6 +18,7 @@ from geogenalg.main import (
     geopackage_uri,
     get_basealgorithm_attribute_docstrings,
     get_class_attribute_docstrings,
+    int_or_str_list,
     named_geopackage_uri,
 )
 
@@ -165,3 +166,44 @@ def test_main():
     )
 
     assert result.exit_code == 0
+
+
+@pytest.mark.parametrize(
+    ("input_string", "expected"),
+    [
+        (
+            "100",
+            100,
+        ),
+        (
+            "str:100",
+            "100",
+        ),
+        (
+            "str:100:",
+            "str:100:",
+        ),
+        (
+            "str:100.0",
+            "str:100.0",
+        ),
+        (
+            "100.0",
+            "100.0",
+        ),
+        (
+            "test_string",
+            "test_string",
+        ),
+    ],
+    ids=[
+        "str_to_int",
+        "special_encoding",
+        "special_encoding_but_not_integer",
+        "special_encoding_float",
+        "float",
+        "stays_str",
+    ],
+)
+def test_int_or_str_list(input_string: str, expected: NamedGeoPackageURI):
+    assert int_or_str_list(input_string) == expected
