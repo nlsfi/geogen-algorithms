@@ -3,6 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+from typing import Literal
 
 import pytest
 from geopandas import GeoDataFrame
@@ -110,7 +111,7 @@ def test_inherit_attributes(
 
 
 @pytest.mark.parametrize(
-    ("source_gdf", "target_gdf", "expected_gdf"),
+    ("source_gdf", "target_gdf", "expected_gdf", "measure_by"),
     [
         (
             GeoDataFrame(
@@ -147,6 +148,7 @@ def test_inherit_attributes(
                     LineString([[9, 9], [10, 10]]),
                 ],
             ),
+            "area",
         ),
         (
             GeoDataFrame(
@@ -180,22 +182,62 @@ def test_inherit_attributes(
                     LineString([[5.5, 5.5], [8, 5.5]]),
                 ],
             ),
+            "area",
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "other": [111111, 222222, 333333],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [2, 1]]),
+                    LineString([[5, 5], [6, 5]]),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 2, 2),
+                    box(5, 5, 6, 6),
+                ]
+            ),
+            GeoDataFrame(
+                {
+                    "id": [2, 3],
+                    "other": [222222, 333333],
+                    "__old_ids": [
+                        (2, 1),
+                        (3,),
+                    ],
+                },
+                geometry=[
+                    box(0, 0, 2, 2),
+                    box(5, 5, 6, 6),
+                ],
+            ),
+            "length",
         ),
     ],
     ids=[
-        "no multiple intersections",
-        "some multiple intersections",
+        "no_multiple_intersections",
+        "some_multiple_intersections",
+        "polygons_inherit_from_lines",
     ],
 )
 def test_inherit_attributes_from_largest(
     source_gdf: GeoDataFrame,
     target_gdf: GeoDataFrame,
     expected_gdf: GeoDataFrame,
+    measure_by: Literal["area", "length"],
 ):
     source_gdf = source_gdf.set_index("id")
     expected_gdf = expected_gdf.set_index("id")
     result = inherit_attributes_from_largest(
-        source_gdf, target_gdf, old_ids_column="__old_ids"
+        source_gdf,
+        target_gdf,
+        old_ids_column="__old_ids",
+        measure_by=measure_by,
     )
     assert_geodataframe_equal(
         result,

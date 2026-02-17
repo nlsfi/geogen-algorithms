@@ -3,6 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+from typing import Literal
 
 from geopandas import GeoDataFrame
 
@@ -62,6 +63,8 @@ def inherit_attributes_from_largest(
     source_gdf: GeoDataFrame,
     target_gdf: GeoDataFrame,
     old_ids_column: str | None = None,
+    *,
+    measure_by: Literal["area", "length"] = "area",
 ) -> GeoDataFrame:
     """Copy attributes from a intersecting feature from source GeoDataFrame.
 
@@ -70,10 +73,12 @@ def inherit_attributes_from_largest(
 
     Args:
     ----
-        source_gdf: GeoDataFrame containing polygons with original attributes
+        source_gdf: GeoDataFrame containing features with original attributes
         target_gdf: GeoDataFrame with new geometries that need inherited attributes
         old_ids_column: If not None, indexes of all intersecting source features
             will be saved as a tuple to a column by this name.
+        measure_by: How to measure which feature is largest, area for polygons
+            or length for lines (or perimeter length for polygons).
 
     Returns:
     -------
@@ -81,34 +86,39 @@ def inherit_attributes_from_largest(
 
     """
     new_features = []
-    for _, line in target_gdf.iterrows():
-        intersecting_poly_features = source_gdf.loc[
-            source_gdf.geometry.intersects(line.geometry)
+    for _, feature in target_gdf.iterrows():
+        intersecting_features = source_gdf.loc[
+            source_gdf.geometry.intersects(feature.geometry)
         ].copy()
 
-        if len(intersecting_poly_features.index) == 0:
+        if intersecting_features.empty:
             # TODO: should this give a warning/even error?
             continue
 
-        intersecting_poly_features["__area"] = intersecting_poly_features.geometry.area
-        intersecting_poly_features = intersecting_poly_features.sort_values(
-            "__area",
+        if measure_by == "area":
+            intersecting_features["__temp_size"] = intersecting_features.geometry.area
+        else:
+            intersecting_features["__temp_size"] = intersecting_features.geometry.length
+
+        intersecting_features = intersecting_features.sort_values(
+            "__temp_size",
             ascending=False,
         )
-        intersecting_poly_features = intersecting_poly_features.drop("__area", axis=1)
+        intersecting_features = intersecting_features.drop("__temp_size", axis=1)
 
-        largest_poly_feature = intersecting_poly_features.iloc[0]
+        largest_feature = intersecting_features.iloc[0]
 
-        new_feature = largest_poly_feature.copy()
-        new_feature.geometry = line.geometry
+        new_feature = largest_feature.copy()
+        new_feature.geometry = feature.geometry
 
         if old_ids_column is not None:
             new_feature[old_ids_column] = tuple(
-                intersecting_poly_features.index.to_list(),
+                intersecting_features.index.to_list(),
             )
         new_features.append(new_feature)
 
     output = GeoDataFrame(new_features, crs=target_gdf.crs)
     output.index.name = source_gdf.index.name
+    output.geometry.name = source_gdf.geometry.name
 
     return output
