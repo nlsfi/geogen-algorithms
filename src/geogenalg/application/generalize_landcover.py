@@ -4,7 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
@@ -51,7 +51,7 @@ class GeneralizeLandcover(BaseAlgorithm):
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""
-    group_by: str | list[str] | None = None
+    group_by: list[str] = field(default_factory=list)
     """Column(s) whose values define the groups to be dissolved."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
@@ -70,7 +70,7 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         # Create a positive_buffer to close narrow gaps between polygons
         _buffer(result_gdf, self.positive_buffer)
-        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by)
+        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by or None)
 
         # Create a negative buffer to restore polygons back to their original size and
         # remove narrow polygon parts
@@ -81,7 +81,7 @@ class GeneralizeLandcover(BaseAlgorithm):
         # Restore polygons to their original size with a positive buffer
         _buffer(result_gdf, -negative_buffer)
 
-        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by)
+        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by or None)
         result_gdf = result_gdf.explode(index_parts=False)
         result_gdf = inherit_attributes_from_largest(data, result_gdf, "old_ids")
         result_gdf = hash_index_from_old_ids(result_gdf, "landcover", "old_ids")
