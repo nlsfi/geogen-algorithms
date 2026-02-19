@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 import logging
 from dataclasses import dataclass
 from itertools import combinations
@@ -13,7 +12,7 @@ from geopandas import GeoDataFrame, overlay
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import MissingReferenceError
-from geogenalg.utility.validation import check_gdf_geometry_type
+from geogenalg.split import explode_and_hash_id
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +101,4 @@ class GeneralizeShoreline(BaseAlgorithm):
 
         new_shoreline.index.name = data.index.name
 
-        if not check_gdf_geometry_type(new_shoreline, ["LineString"]):
-            logger.warning("WARNING: not all new features are LineStrings!")
-
-        return new_shoreline
+        return explode_and_hash_id(new_shoreline, hash_prefix="shoreline")
