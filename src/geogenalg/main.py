@@ -80,9 +80,9 @@ class TransformedTypeInformation:
     """Class to describe how to transform an unsupported type to a supported one."""
 
     transformed_type: type
-    parser: Callable[[str], Any]
-    custom_default: Any
-    extra_parse_help: str
+    parser: Callable[[str], Any] | None = None
+    custom_default: Any | None = None
+    extra_parse_help: str | None = None
 
 
 def geopackage_uri(value: str) -> GeoPackageURI:
@@ -433,6 +433,10 @@ def build_app() -> None:  # noqa: PLR0914
                     + "If you need to pass an integer as a string, you can add do so "
                     + "by appending str: in front of the integer, i.e. str:10."
                 ),
+            ),
+            list[str]: TransformedTypeInformation(
+                transformed_type=list[str],
+                custom_default=[],
             ),
         }
 
