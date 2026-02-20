@@ -40,7 +40,7 @@ def merge_connecting_lines_by_attribute(
     """
     merged_records: list[dict] = []
 
-    for _, group in input_gdf.groupby(attribute):
+    for _, group in input_gdf.groupby(attribute, dropna=False):
         lines: list[tuple[LineString, dict, str]] = []  # geom, attributes, id
 
         for idx, row in group.iterrows():
@@ -99,7 +99,7 @@ def merge_connecting_lines_by_attribute(
 
 def dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
-    by_column: str | None = None,
+    by_column: str | list[str] | None = None,
     old_ids_column: str = "old_ids",
     inherit_from: Literal["min_id", "most_intersection"] = "most_intersection",
 ) -> GeoDataFrame:
