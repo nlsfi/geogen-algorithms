@@ -242,7 +242,7 @@ def buffer_and_merge_polygons(
         return input_gdf
 
     # 1. Buffer outward
-    buffered = input_gdf.geometry.buffer(buffer_distance)
+    buffered = input_gdf.geometry.buffer(buffer_distance, join_style=3)
 
     # 2. Union all buffered geometries
     merged = buffered.union_all()
@@ -260,7 +260,7 @@ def buffer_and_merge_polygons(
 
     # 4. Buffer inward to restore approximate original size
     out_geoms = [
-        geom.buffer(-buffer_distance)
+        geom.buffer(-buffer_distance, join_style=3)
         for geom in polygons
         if geom is not None and not geom.is_empty
     ]
