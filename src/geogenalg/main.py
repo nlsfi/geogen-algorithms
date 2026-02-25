@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 import os
 from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
 from collections.abc import Callable
@@ -13,6 +12,8 @@ from itertools import pairwise
 from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
+
+from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 
 try:
     import typer
@@ -373,6 +374,7 @@ def build_app() -> None:  # noqa: PLR0914
         "roads": GeneralizeRoads,
         "buildings": GeneralizeBuildings,
         "shared_paths": GeneralizeSharedPaths,
+        "power_lines": GeneralizePowerLines,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
