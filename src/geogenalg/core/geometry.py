@@ -49,6 +49,24 @@ class LineExtendFrom(Enum):
     END = -1
     START = 0
     BOTH = 1
+    NONE = None
+
+    @classmethod
+    def from_bools(cls, *, extend_start: bool, extend_end: bool) -> "LineExtendFrom":
+        """Construct enum from boolean values.
+
+        Returns
+        -------
+            Enum object constructed from given values.
+
+        """
+        if extend_start and extend_end:
+            return LineExtendFrom.BOTH
+        if extend_start:
+            return LineExtendFrom.START
+        if extend_end:
+            return LineExtendFrom.END
+        return LineExtendFrom.NONE
 
 
 class Dimensions(NamedTuple):
@@ -536,6 +554,9 @@ def extend_line_to_nearest(
         GeometryOperationError: If merge operation fails to produce LineString.
 
     """
+    if extend_from == LineExtendFrom.NONE:
+        return line
+
     start = Point(line.coords[0])
     end = Point(line.coords[-1])
 
