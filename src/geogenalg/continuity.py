@@ -3,13 +3,15 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from collections import defaultdict
+from collections.abc import Callable
+from typing import Literal, cast
 
 from geopandas import GeoDataFrame
 from pandas import concat
 from shapely import force_2d
-from shapely.geometry import LineString, MultiLineString, Point
+from shapely.geometry import LineString, MultiLineString, Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.geometry import (
     LineExtendFrom,
@@ -479,8 +481,12 @@ def connect_lines_to_polygon_centroids(
         start = Point(line.coords[0])
         end = Point(line.coords[-1])
 
-        start_polys = reference_polygons.loc[reference_polygons.geometry.touches(start)]
-        end_polys = reference_polygons.loc[reference_polygons.geometry.touches(end)]
+        start_polys = reference_polygons.loc[
+            reference_polygons.geometry.intersects(start.buffer(0.1))
+        ]
+        end_polys = reference_polygons.loc[
+            reference_polygons.geometry.intersects(end.buffer(0.1))
+        ]
 
         # Handle special case of line beginning and ending at the same polygon.
         if (start_polys.shape[0] == 1 and end_polys.shape[0] == 1) and (
@@ -518,3 +524,175 @@ def connect_lines_to_polygon_centroids(
     gdf.geometry = gdf.geometry.apply(_extend_line)
 
     return gdf
+
+
+def flag_polygon_centerline_connections(
+    data: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
+    polygon_geometry_column: str,
+    *,
+    start_connected_column: str = "__start_connected",
+    end_connected_column: str = "__end_connected",
+) -> GeoDataFrame:
+    """Flag which "end" of a polygon is connected to reference data.
+
+    Input data should contain LineStrings in the geometry column, formed
+    as the centerline of a polygon, which should be in its own column.
+
+    Args:
+    ----
+        data: Input GeoDataFrame, should have LineStrings in the active
+            geometry column, and corresponding polygons in another column.
+        reference_gdf: Reference GeoDataFrame to which connections are checked
+            against.
+        polygon_geometry_column: Name of geometry column containing polygons
+            from which the centerline geometry in the active geometry column was
+            formed.
+        start_connected_column: Name of boolean Series which will be added to
+            output, tells whether the polygon edge close to the first vertex of the
+            linestring is connected to reference data.
+        end_connected_column: Name of boolean Series which will be added to
+            output, tells whether the polygon edge close to the last vertex of the
+            linestring is connected to reference data.
+
+    Returns:
+    -------
+        GeoDataFrame with boolean Series added, telling which ends each polygon is
+        connected to the reference dataset, if either.
+
+    """
+    gdf = data.copy()
+
+    reference_union = reference_gdf.union_all()
+
+    def _process(
+        centerline: LineString,
+        original_polygon: Polygon,
+        end: Literal[0, -1],
+    ) -> bool:
+        point = Point(centerline.coords[end])
+        buffered = point.buffer(50)
+
+        polygon = original_polygon.intersection(buffered)
+
+        return polygon.intersects(reference_union)
+
+    gdf[start_connected_column] = gdf[
+        [gdf.geometry.name, polygon_geometry_column]
+    ].apply(
+        lambda columns: _process(
+            columns[gdf.geometry.name],
+            columns[polygon_geometry_column],
+            end=0,
+        ),
+        axis=1,
+    )
+    gdf[end_connected_column] = gdf[[gdf.geometry.name, polygon_geometry_column]].apply(
+        lambda columns: _process(
+            columns[gdf.geometry.name],
+            columns[polygon_geometry_column],
+            end=-1,
+        ),
+        axis=1,
+    )
+
+    return gdf
+
+
+def process_lines_and_reconnect(
+    data: GeoDataFrame,
+    process_function: Callable[[GeoDataFrame], GeoDataFrame],
+    reconnect_to: GeoDataFrame | BaseGeometry,
+    *,
+    length_tolerance: float = 0.0,
+) -> GeoDataFrame:
+    """Do something to lines and reconnect them to reference data.
+
+    Args:
+    ----
+        data: Input GeoDataFrame with LineStrings.
+        process_function: Function which will be called to modify the `data`
+            GeoDataFrame.
+        reconnect_to: Geometry or GeoDataFrame to which lines whose connection
+            was broken will be reconnected to.
+        length_tolerance: If the would-be reconnected line segment is above
+            this length it will not be reconnected.
+
+    Returns:
+    -------
+        Processed and reconnected GeoDataFrame.
+
+    """
+    gdf = cast("GeoDataFrame", data.copy())
+    boundaries = gdf.boundary.union_all()
+    gdf = flag_connections(
+        gdf,
+        start_connected_column="__start_connected_before",
+        end_connected_column="__end_connected_before",
+    )
+
+    gdf = process_function(gdf)
+
+    gdf = flag_connections(
+        gdf,
+        start_connected_column="__start_connected_after",
+        end_connected_column="__end_connected_after",
+    )
+
+    gdf["__start_was_cut"] = gdf.geometry.apply(
+        lambda geom: force_2d(Point(geom.coords[0]))
+    )
+    gdf["__end_was_cut"] = gdf.geometry.apply(
+        lambda geom: force_2d(Point(geom.coords[-1]))
+    )
+    data_union = data.union_all().buffer(0.1)
+    gdf["__start_was_cut"] = gdf["__start_was_cut"].intersects(data_union) & gdf[
+        "__start_was_cut"
+    ].disjoint(boundaries)
+    gdf["__end_was_cut"] = gdf["__end_was_cut"].intersects(data_union) & gdf[
+        "__end_was_cut"
+    ].disjoint(boundaries)
+
+    # Effectively this checks which connections have been broken
+    # in the process function.
+    gdf["__extend_start"] = (
+        gdf["__start_connected_before"] != gdf["__start_connected_after"]
+    ) | gdf["__start_was_cut"]
+
+    gdf["__extend_end"] = (
+        gdf["__end_connected_before"] != gdf["__end_connected_after"]
+    ) | gdf["__end_was_cut"]
+
+    connect_to = (
+        reconnect_to
+        if isinstance(reconnect_to, BaseGeometry)
+        else reconnect_to.union_all()
+    )
+
+    if not gdf.empty:
+        gdf.geometry = gdf[["__extend_start", "__extend_end", gdf.geometry.name]].apply(
+            lambda columns: extend_line_to_nearest(
+                columns[gdf.geometry.name],
+                connect_to,
+                LineExtendFrom.from_bools(
+                    extend_start=columns["__extend_start"],
+                    extend_end=columns["__extend_end"],
+                ),
+                length_tolerance,
+            ),
+            axis=1,
+        )
+
+    return gdf.drop(
+        [
+            "__start_connected_before",
+            "__end_connected_before",
+            "__start_connected_after",
+            "__end_connected_after",
+            "__extend_start",
+            "__extend_end",
+            "__start_was_cut",
+            "__end_was_cut",
+        ],
+        axis=1,
+    )
