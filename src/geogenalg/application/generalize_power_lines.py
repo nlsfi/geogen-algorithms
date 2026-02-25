@@ -44,6 +44,7 @@ class GeneralizePowerLines(BaseAlgorithm):
     - Merges parallel power lines
     - Ensures network connectivity with power stations
     - Removes short lines
+    - Removes lower priority lines which are close to higher priority lines
     - Simplifies lines
     """
 
