@@ -3,13 +3,13 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
+from typing import Literal
 
 import geopandas as gpd
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
-from shapely import MultiLineString, concave_hull
+from shapely import MultiLineString, concave_hull, convex_hull
 from shapely.geometry import LineString, Polygon
 
 from geogenalg.core.exceptions import GeometryTypeError
@@ -181,6 +181,7 @@ def get_polygons_for_parallel_lines(
     *,
     allowed_direction_difference: float = 10,
     segmentize_distance: float = 50,
+    polygonize_function: Literal["concave", "convex"] = "concave",
 ) -> GeoDataFrame:
     """Find areas with parallel lines.
 
@@ -193,6 +194,8 @@ def get_polygons_for_parallel_lines(
         segmentize_distance: Interval at which parallel lines are checked for,
             the lower the number the more precise result, with the cost of
             performance.
+        polygonize_function: Whether polygonization of parallel lines will be
+            done with the stricter concave hull or convex hull.
 
     Returns:
     -------
@@ -224,7 +227,11 @@ def get_polygons_for_parallel_lines(
 
         geoms = [geom, *list(others.geometry)]
 
-        return concave_hull(MultiLineString(geoms))
+        return (
+            concave_hull(MultiLineString(geoms))
+            if polygonize_function == "concave"
+            else convex_hull(MultiLineString(geoms))
+        )
 
     parallels.geometry = parallels[
         [column_parallel_with, parallels.geometry.name]
