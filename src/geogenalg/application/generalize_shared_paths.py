@@ -69,6 +69,7 @@ class GeneralizeSharedPaths(BaseAlgorithm):
         else:
             raise MissingReferenceError
 
+        # TODO: Refactor this to use process_lines_and_reconnect()!
         gdf = flag_connections(
             data,
             start_connected_column="__start_connected_before",
