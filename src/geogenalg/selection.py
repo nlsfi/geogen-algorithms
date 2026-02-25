@@ -3,9 +3,9 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from collections import defaultdict
 from typing import TYPE_CHECKING
+from warnings import catch_warnings
 
 from geopandas import GeoDataFrame
 from shapely.geometry import MultiPolygon, Polygon
@@ -334,9 +334,9 @@ def remove_close_line_segments(
 
     """
     if not check_gdf_geometry_type(
-        lines, ["LineString", "MultiLineString"]
+        lines, {"LineString", "MultiLineString"}
     ) or not check_gdf_geometry_type(
-        reference_lines, ["LineString", "MultiLineString"]
+        reference_lines, {"LineString", "MultiLineString"}
     ):
         msg = "remove_close_line_segments expects only line geometries."
         raise GeometryTypeError(msg)
@@ -345,7 +345,9 @@ def remove_close_line_segments(
     result.geometry = lines.difference(
         reference_lines.buffer(buffer_size).union_all(),
     )
-    return result.loc[~result.geometry.is_empty & result.geometry.notna()]
+
+    with catch_warnings(category=UserWarning, action="ignore"):
+        return result.loc[~result.geometry.is_empty & result.geometry.notna()]
 
 
 def remove_short_lines(lines: GeoDataFrame, length_threshold: float) -> GeoDataFrame:
@@ -369,7 +371,7 @@ def remove_short_lines(lines: GeoDataFrame, length_threshold: float) -> GeoDataF
             than line geometries.
 
     """
-    if not check_gdf_geometry_type(lines, ["LineString", "MultiLineString"]):
+    if not check_gdf_geometry_type(lines, {"LineString", "MultiLineString"}):
         msg = "remove_short_lines expects only line geometries."
         raise GeometryTypeError(msg)
 
