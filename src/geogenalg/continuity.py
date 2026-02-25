@@ -606,7 +606,7 @@ def process_lines_and_reconnect(
     *,
     length_tolerance: float = 0.0,
 ) -> GeoDataFrame:
-    """Do something to lines and reconnect them to reference data.
+    """Do something to lines and if connections break reconnect them to reference data.
 
     Args:
     ----

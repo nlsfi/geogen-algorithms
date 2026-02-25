@@ -4,12 +4,16 @@
 #
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
+from collections.abc import Callable
 
 import pytest
 from geopandas import GeoDataFrame
+from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
+from geopandas.tools import overlay
 from shapely import box
 from shapely.geometry import LineString, MultiLineString
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.continuity import (
     check_line_connections,
@@ -20,8 +24,10 @@ from geogenalg.continuity import (
     find_all_endpoints,
     flag_connections,
     flag_connections_to_reference,
+    flag_polygon_centerline_connections,
     get_paths_along_roads,
     inspect_dead_end_candidates,
+    process_lines_and_reconnect,
 )
 
 
@@ -679,4 +685,383 @@ def test_connect_lines_to_polygon_centroids(
     assert_geodataframe_equal(
         connect_lines_to_polygon_centroids(source_lines, reference_polygons),
         expected,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "reference_gdf",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    box(0, -1, 2, 0),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                    "__start_connected": [True],
+                    "__end_connected": [False],
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    box(0, 100, 2, 101),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                    "__start_connected": [False],
+                    "__end_connected": [True],
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    box(0, -1, 2, 0),
+                    box(0, 100, 2, 101),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                    "__start_connected": [True],
+                    "__end_connected": [True],
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    box(5, -1, 10, 0),
+                    box(5, 100, 10, 101),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 100),
+                        ]
+                    ),
+                    "__start_connected": [False],
+                    "__end_connected": [False],
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 99],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 1000),
+                        ]
+                    ),
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 999],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    box(2, 100, 4, 101),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries(
+                        [
+                            box(0, 0, 2, 1000),
+                        ]
+                    ),
+                    "__start_connected": [False],
+                    "__end_connected": [False],
+                },
+                geometry=[
+                    LineString(
+                        [
+                            [1, 1],
+                            [1, 999],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "start_connected",
+        "end_connected",
+        "both_connected",
+        "none_connected",
+        "polygon_on_side_no_connection",
+    ],
+)
+def test_flag_polygon_centerline_connections(
+    input_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        flag_polygon_centerline_connections(
+            input_gdf,
+            reference_gdf,
+            "polygon",
+        ),
+        expected_gdf,
+        check_like=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "process_function",
+        "reconnect_to",
+        "expected_gdf",
+        "length_tolerance",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            lambda gdf: gdf.drop(1).copy().reset_index(drop=True),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[-5, 5], [5, 5]]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0], [1, 5]]),
+                    LineString([[2, 5], [2, 0], [3, 0]]),
+                ],
+            ),
+            0.0,
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            lambda gdf: overlay(
+                gdf, GeoDataFrame(geometry=[box(1.25, -1, 1.75, 1)]), how="difference"
+            )
+            .explode()
+            .reset_index(drop=True),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[-5, 5], [5, 5]]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [1.25, 0], [1.25, 5]]),
+                    LineString([[1.75, 5], [1.75, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            0.0,
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            lambda gdf: gdf,
+            GeoDataFrame(
+                geometry=[
+                    LineString([[-5, 5], [5, 5]]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            0.0,
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            lambda gdf: gdf.drop(1).copy().reset_index(drop=True),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[-5, 5], [5, 5]]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            1.0,
+        ),
+    ],
+    ids=[
+        "reconnect_two",
+        "reconnect_cut_line",
+        "no_changes",
+        "tolerance",
+    ],
+)
+def test_process_lines_and_reconnect(
+    input_gdf: GeoDataFrame,
+    process_function: Callable[[GeoDataFrame], GeoDataFrame],
+    reconnect_to: GeoDataFrame | BaseGeometry,
+    expected_gdf: GeoDataFrame,
+    length_tolerance: float,
+):
+    assert_geodataframe_equal(
+        process_lines_and_reconnect(
+            input_gdf,
+            process_function,
+            reconnect_to,
+            length_tolerance=length_tolerance,
+        ),
+        expected_gdf,
     )
