@@ -100,6 +100,10 @@ class BaseAlgorithm(ABC):
         if output.geometry.name != data.geometry.name:
             output = output.rename_geometry(data.geometry.name)
 
+        # Ensure the output has the same index name as the input data
+        if output.index.name != data.index.name:
+            output.index.name = data.index.name
+
         if getattr(self, _SUPPORTS_IDENTITY_ATTR, False):
             return output
         return reset_with_random_hash_index(output)
