@@ -309,7 +309,11 @@ def inspect_dead_end_candidates(
 
     """
     new_connection = []
-    other_lines = GeoDataFrame(concat(reference_gdf_list))
+    other_lines = (
+        GeoDataFrame(concat(reference_gdf_list))
+        if reference_gdf_list
+        else GeoDataFrame(geometry=[])
+    )
     gdf = GeoDataFrame(gdf, geometry=gdf.geometry.name)
 
     for _idx, row in gdf.iterrows():
