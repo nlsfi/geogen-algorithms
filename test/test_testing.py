@@ -31,9 +31,11 @@ def test_assert_gdf_equal_save_diff_geom():
 
     gdf_result = GeoDataFrame(
         geometry=[box(0.5, 0.5, 1.5, 1.5)],
+        crs="EPSG:3857",
     )
     gdf_control = GeoDataFrame(
         geometry=[box(0, 0, 1, 1)],
+        crs="EPSG:3857",
     )
 
     with pytest.raises(AssertionError):
@@ -67,6 +69,7 @@ def test_assert_gdf_equal_save_diff_geom():
                 ]
             )
         ],
+        crs="EPSG:3857",
     )
     assert_geodataframe_equal(geomdiff, geomdiff_expected)
 
