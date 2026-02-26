@@ -170,7 +170,7 @@ def check_line_connections(
 
 
 def check_reference_line_connections(  # noqa: SC200
-    gdf: GeoDataFrame,
+    input_gdf: GeoDataFrame,
     threshold_distance: float,
     reference_gdf_list: list[GeoDataFrame],
     connection_info_column: str = "is_connected",
@@ -179,11 +179,11 @@ def check_reference_line_connections(  # noqa: SC200
 
     Args:
     ----
-        gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
-        threshold_distance (float): the max gap allowed for lines to
+        input_gdf: input GeoDataFrame consisting of Linestrings.
+        threshold_distance: the max gap allowed for lines to
             be considered connected.
-        reference_gdf_list (list): list of reference GeoDataFrames to which the
-        connection_info_column (str): name of the attribute column where the info
+        reference_gdf_list: list of reference GeoDataFrames to which the
+        connection_info_column: name of the attribute column where the info
             about connectedness is stored as a boolean
 
     Returns:
@@ -194,8 +194,13 @@ def check_reference_line_connections(  # noqa: SC200
 
     """
     results = []
-    other_lines = concat(reference_gdf_list)
-    other_lines = GeoDataFrame(other_lines)
+    other_lines = (
+        GeoDataFrame(concat(reference_gdf_list))
+        if reference_gdf_list
+        else GeoDataFrame(geometry=[])
+    )
+
+    gdf = input_gdf.copy()
 
     for _idx, row in gdf.iterrows():
         line = row[gdf.geometry.name]
@@ -227,7 +232,7 @@ def check_reference_line_connections(  # noqa: SC200
 
 
 def detect_dead_ends(
-    gdf: GeoDataFrame,
+    input_gdf: GeoDataFrame,
     threshold_distance: float,
     dead_end_info_column: str = "dead_end",
 ) -> tuple[GeoDataFrame, GeoDataFrame]:
@@ -235,10 +240,10 @@ def detect_dead_ends(
 
     Args:
     ----
-        gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
-        threshold_distance (float): the max gap allowed for lines to
+        input_gdf: input GeoDataFrame consisting of Linestrings.
+        threshold_distance: the max gap allowed for lines to
             be considered connected.
-        dead_end_info_column (str): Column name for the dead end information.
+        dead_end_info_column: Column name for the dead end information.
 
     Returns:
     -------
@@ -247,6 +252,8 @@ def detect_dead_ends(
         GeoDataFrame.
 
     """
+    gdf = input_gdf.copy()
+
     dead_ends = []
     first_point_connected = []
     last_point_connected = []
