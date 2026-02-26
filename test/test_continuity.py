@@ -215,7 +215,7 @@ def test_check_line_connections(
     (
         "input_gdf",
         "threshold_distance",
-        "reference_gdf_list",
+        "reference_gdfs",
         "expected_number_of_connected",
         "expected_number_of_unconnected",
     ),
@@ -280,12 +280,12 @@ def test_check_line_connections(
 def test_check_reference_line_connections(
     input_gdf: GeoDataFrame,
     threshold_distance: float,
-    reference_gdf_list: list[GeoDataFrame],
+    reference_gdfs: list[GeoDataFrame],
     expected_number_of_connected: int,
     expected_number_of_unconnected: int,
 ):
     result = check_reference_line_connections(
-        input_gdf, threshold_distance, reference_gdf_list
+        input_gdf, threshold_distance, reference_gdfs
     )
     assert isinstance(result[0], GeoDataFrame)
     assert isinstance(result[1], GeoDataFrame)
@@ -332,7 +332,7 @@ def test_inspect_dead_end_candidates():
     result = inspect_dead_end_candidates(
         gdf,
         threshold_distance=0.1,
-        reference_gdf_list=[reference],
+        reference_gdfs=[reference],
     )
 
     assert "dead_end_connects_to_ref_gdf" in result.columns
