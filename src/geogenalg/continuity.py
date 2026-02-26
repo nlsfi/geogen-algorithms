@@ -175,7 +175,7 @@ def check_line_connections(
 def check_reference_line_connections(  # noqa: SC200
     input_gdf: GeoDataFrame,
     threshold_distance: float,
-    reference_gdf_list: list[GeoDataFrame],
+    reference_gdfs: list[GeoDataFrame],
     connection_info_column: str = "is_connected",
 ) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Check the connections of linestrings with respect to lines on the GeoDataFrame.
@@ -185,7 +185,7 @@ def check_reference_line_connections(  # noqa: SC200
         input_gdf: input GeoDataFrame consisting of Linestrings.
         threshold_distance: the max gap allowed for lines to
             be considered connected.
-        reference_gdf_list: list of reference GeoDataFrames to which the
+        reference_gdfs: list of reference GeoDataFrames to which the
         connection_info_column: name of the attribute column where the info
             about connectedness is stored as a boolean
 
@@ -198,8 +198,8 @@ def check_reference_line_connections(  # noqa: SC200
     """
     results = []
     other_lines = (
-        GeoDataFrame(concat(reference_gdf_list))
-        if reference_gdf_list
+        GeoDataFrame(concat(reference_gdfs))
+        if reference_gdfs
         else GeoDataFrame(geometry=[])
     )
 
@@ -296,7 +296,7 @@ def detect_dead_ends(
 def inspect_dead_end_candidates(
     gdf: GeoDataFrame,
     threshold_distance: float,
-    reference_gdf_list: list[GeoDataFrame],
+    reference_gdfs: list[GeoDataFrame],
     dead_end_conn_info_column: str = "dead_end_connects_to_ref_gdf",
 ) -> GeoDataFrame:
     """Check the connections of linestrings with respect to lines on the GeoDataFrame.
@@ -306,7 +306,7 @@ def inspect_dead_end_candidates(
         gdf (GeoDataframe): input GeoDataFrame consisting of Linestrings.
         threshold_distance (float): the max gap allowed for lines to
             be considered connected.
-        reference_gdf_list (list): list of reference GeoDataFrames to which the input
+        reference_gdfs (list): list of reference GeoDataFrames to which the input
             GeoDataFrame is compared for connections.
         dead_end_conn_info_column (str): name of the column where the connectedness of
             dead end linestrings are stored
@@ -320,8 +320,8 @@ def inspect_dead_end_candidates(
     """
     new_connection = []
     other_lines = (
-        GeoDataFrame(concat(reference_gdf_list))
-        if reference_gdf_list
+        GeoDataFrame(concat(reference_gdfs))
+        if reference_gdfs
         else GeoDataFrame(geometry=[])
     )
     gdf = GeoDataFrame(gdf, geometry=gdf.geometry.name)
