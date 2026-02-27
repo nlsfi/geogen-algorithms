@@ -126,7 +126,7 @@ from geogenalg.merge import (
         "disjoint_lines_different_classes",
     ],
 )
-def test_merge_lines_with_same_attribute_value_into_one(  # noqa: PLR0917
+def test_merge_lines_with_same_attribute_value_into_one(
     input_gdf: GeoDataFrame,
     attribute: str,
     expected_num_geoms: int,
