@@ -25,7 +25,7 @@ from geogenalg.continuity import (
     flag_connections,
     flag_connections_to_reference,
     flag_polygon_centerline_connections,
-    get_paths_along_roads,
+    get_lines_along_reference_lines,
     inspect_dead_end_candidates,
     process_lines_and_reconnect,
 )
@@ -340,45 +340,162 @@ def test_inspect_dead_end_candidates():
 
 
 @pytest.mark.parametrize(
-    ("gdf_input", "gdf_reference", "detection_distance", "expected_number_along_roads"),
+    (
+        "input_gdf",
+        "reference_gdf",
+        "detection_distance",
+        "length_percentage",
+        "drop_column",
+        "expected_gdf_along_ref",
+        "expected_gdf_independent_of_ref",
+    ),
     [
         (
             GeoDataFrame(
-                geometry=[LineString([(0, 0), (1, 0)]), LineString([(3, 0), (5, 0)])],
-                crs="EPSG:3067",
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(3, 0), (5, 0)]),
+                ],
             ),
-            GeoDataFrame(geometry=[LineString([(0, 0), (10, 0)])], crs="EPSG:3067"),
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                ],
+            ),
             1.0,
-            2,
+            100.0,
+            True,
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(3, 0), (5, 0)]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
         ),
         (
             GeoDataFrame(
-                geometry=[LineString([(0, 0), (1, 0)]), LineString([(2, 0), (3, 0)])],
-                crs="EPSG:3067",
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(2, 0), (3, 0)]),
+                ],
             ),
             GeoDataFrame(
-                geometry=[LineString([(0, 0), (1, 0)])],
-                crs="EPSG:3067",
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                ],
             ),
             1.0,
-            1,
+            100.0,
+            True,
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                ],
+            ),
+            GeoDataFrame(
+                index=[1],
+                geometry=[
+                    LineString([(2, 0), (3, 0)]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(20, 0), (21, 0)]),  # 50% within reference buffer
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 1), (1, 1)]),
+                    LineString([(22.5, -1), (22.5, 1)]),
+                ],
+            ),
+            2.0,
+            75.0,
+            True,
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                ],
+            ),
+            GeoDataFrame(
+                index=[1],
+                geometry=[
+                    LineString([(20, 0), (21, 0)]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(2, 0), (3, 0)]),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                ],
+            ),
+            1.0,
+            100.0,
+            False,
+            GeoDataFrame(
+                {
+                    "along_ref": [True],
+                },
+                geometry=[
+                    LineString([(0, 0), (1, 0)]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "along_ref": [False],
+                },
+                index=[1],
+                geometry=[
+                    LineString([(2, 0), (3, 0)]),
+                ],
+            ),
         ),
     ],
     ids=[
         "both_inside_buffer",
         "one_inside_buffer",
+        "length_percentage",
+        "drop_column",
     ],
 )
-def test_get_paths_along_roads(
-    gdf_input: GeoDataFrame,
-    gdf_reference: GeoDataFrame,
+def test_get_lines_along_reference_lines(
+    input_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
     detection_distance: float,
-    expected_number_along_roads: int,
+    length_percentage: float,
+    drop_column: bool,
+    expected_gdf_along_ref: GeoDataFrame,
+    expected_gdf_independent_of_ref: GeoDataFrame,
 ):
-    result = get_paths_along_roads(gdf_input, gdf_reference, detection_distance)
-    assert isinstance(result[0], GeoDataFrame)
-    assert isinstance(result[1], GeoDataFrame)
-    assert len(result[0].index) == expected_number_along_roads
+    along, independent = get_lines_along_reference_lines(
+        input_gdf,
+        reference_gdf,
+        detection_distance,
+        drop_column=drop_column,
+        length_percentage=length_percentage,
+    )
+
+    assert_geodataframe_equal(
+        along,
+        expected_gdf_along_ref,
+        check_like=True,
+    )
+    assert_geodataframe_equal(
+        independent,
+        expected_gdf_independent_of_ref,
+        check_like=True,
+    )
 
 
 @pytest.mark.parametrize(

@@ -334,18 +334,25 @@ def inspect_dead_end_candidates(
     return gdf
 
 
-def get_paths_along_roads(
-    gdf_input: GeoDataFrame,
-    gdf_reference: GeoDataFrame,
+def get_lines_along_reference_lines(
+    input_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
     detection_distance: float = 25.0,
+    *,
+    drop_column: bool = True,
+    length_percentage: float = 100.0,
 ) -> tuple[GeoDataFrame, GeoDataFrame]:
-    """Flag lines in gdf_input that fall within a buffer around reference roads.
+    """Flag lines that fall within a buffer around reference roads.
 
     Args:
     ----
-        gdf_input: GeoDataFrame with LineString geometries to check.
-        gdf_reference: GeoDataFrame with reference LineStrings.
+        input_gdf: GeoDataFrame with LineString geometries to check.
+        reference_gdf: GeoDataFrame with reference LineStrings.
         detection_distance: Distance to buffer around reference roads.
+        drop_column: Whether "along_ref" column indicating status should
+            be dropped.
+        length_percentage: Minimum percentage of line's length inside the
+            buffer for it to be flagged.
 
     Returns:
     -------
@@ -353,15 +360,35 @@ def get_paths_along_roads(
         whether they reside completely within detection_distance of the reference
         geometries.
 
+    Raises:
+    ------
+        ValueError: If length percentage is not between 0.0 and 100.0.
+
     """
+    if not (0.0 <= length_percentage <= 100.0):  # noqa: PLR2004
+        msg = f"Length percentage must be between 0.0 and 100.0: {length_percentage}"
+        raise ValueError(msg)
+
+    gdf = input_gdf.copy()
+
     # Single geometry for the reference roads buffer
-    buffered_union = gdf_reference.geometry.buffer(detection_distance)
+    buffered_union = reference_gdf.geometry.buffer(detection_distance)
     buffered_union = buffered_union.union_all()
 
-    gdf_input["along_ref"] = gdf_input.geometry.within(buffered_union)
+    if length_percentage == 100.0:  # noqa: PLR2004
+        gdf["along_ref"] = gdf.geometry.within(buffered_union)
+    else:
+        fraction = length_percentage / 100
+        gdf["along_ref"] = (
+            gdf.geometry.intersection(buffered_union).length / gdf.geometry.length
+        ) > fraction
 
-    lines_along_ref = gdf_input.loc[gdf_input["along_ref"]]
-    lines_independent_of_ref = gdf_input.loc[~gdf_input["along_ref"]]
+    lines_along_ref = gdf.loc[gdf["along_ref"]]
+    lines_independent_of_ref = gdf.loc[~gdf["along_ref"]]
+
+    if drop_column:
+        lines_along_ref = lines_along_ref.drop("along_ref", axis=1)
+        lines_independent_of_ref = lines_independent_of_ref.drop("along_ref", axis=1)
 
     return lines_along_ref, lines_independent_of_ref
 
