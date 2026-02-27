@@ -660,6 +660,9 @@ def process_lines_and_reconnect(
 
     gdf = process_function(gdf)
 
+    if gdf.empty:
+        return gdf.drop(["__start_connected_before", "__end_connected_before"], axis=1)
+
     gdf = flag_connections(
         gdf,
         start_connected_column="__start_connected_after",
