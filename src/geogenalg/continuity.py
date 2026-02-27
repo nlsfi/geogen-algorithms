@@ -8,11 +8,13 @@ from collections.abc import Callable
 from typing import Literal, cast
 
 from geopandas import GeoDataFrame
-from pandas import concat
+from pandas import Series, concat
 from shapely import force_2d
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import linemerge
 
+from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
     extend_line_to_nearest,
@@ -696,3 +698,116 @@ def process_lines_and_reconnect(
         ],
         axis=1,
     )
+
+
+def _get_merged_line_connections(
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+) -> GeoDataFrame:
+    merged = GeoDataFrame(
+        geometry=[
+            linemerge(input_gdf.union_all()),
+        ],
+        crs=input_gdf.crs,
+    ).explode()
+
+    merged = flag_connections(
+        merged,
+        start_connected_column="__connected_to_self_start",
+        end_connected_column="__connected_to_self_end",
+    )
+
+    merged = flag_connections_to_reference(
+        merged,
+        reference_network,
+        start_connected_column="__connected_to_network_start",
+        end_connected_column="__connected_to_network_end",
+    )
+
+    merged["__start_connected"] = (
+        merged["__connected_to_self_start"] | merged["__connected_to_network_start"]
+    )
+    merged["__end_connected"] = (
+        merged["__connected_to_self_end"] | merged["__connected_to_network_end"]
+    )
+
+    return merged
+
+
+def flag_contiguous_dead_ends(
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+    *,
+    minimum_length: float = 0.0,
+    part_of_dead_end_column: str = "__part_of_dead_end",
+) -> GeoDataFrame:
+    """Flag if line is part of a bigger contiguous dead end in a network.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame with LineStrings.
+        reference_network: Network against which connectivity will be checked in
+            addition to the input_gdf.
+        minimum_length: If contiguous dead end is shorter than this, don't flag.
+        part_of_dead_end_column: Name of boolean Series which tells if a feature
+            is part of a bigger contiguous dead end.
+
+    Returns:
+    -------
+        Input GeoDataFrame with boolean Series added.
+
+    """
+    merged = _get_merged_line_connections(input_gdf, reference_network)
+    merged["__is_deadend"] = ~(merged["__start_connected"] & merged["__end_connected"])
+
+    merged = merged.loc[merged["__is_deadend"] & (merged.length < minimum_length)]
+
+    union_geom = merged.union_all()
+
+    gdf = input_gdf.copy()
+    gdf[part_of_dead_end_column] = gdf.geometry.covered_by(union_geom)
+
+    return gdf
+
+
+def flag_disconnected_lines_contiguous_length(
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+    *,
+    length_column: str = "__part_of_line_length",
+) -> GeoDataFrame:
+    """Flag length of linestrings disconnected from a larger network.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame with LineStrings.
+        reference_network: Network against which connectivity will be checked in
+            addition to the input_gdf.
+        length_column: Name of float Series which for each feature tells the length
+            of the bigger set of linestrings it may be part of. If feature is not
+            part of a disconnected linestring set, the value will be 0.0.
+
+    Returns:
+    -------
+        Input GeoDataFrame with float Series added.
+
+    """
+    merged = _get_merged_line_connections(input_gdf, reference_network)
+    merged = merged.loc[~merged["__start_connected"] & (~merged["__end_connected"])]
+
+    def _get_length(line: LineString) -> float:
+        merged_lines = merged.loc[merged.covers(line)]
+
+        if merged_lines.shape[0] == 0:
+            return 0.0
+
+        if merged_lines.shape[0] != 1:
+            msg = "Line should be covered only by one merged line."
+            raise GeometryOperationError(msg)
+
+        return merged_lines.iloc[[0]].geometry.length.to_numpy()[0]
+
+    gdf = input_gdf.copy()
+    gdf[length_column] = Series(gdf.geometry.apply(_get_length))
+
+    return gdf
