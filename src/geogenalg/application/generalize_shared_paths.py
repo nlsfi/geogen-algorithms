@@ -8,20 +8,16 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
-from shapely import LineString
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.continuity import (
-    flag_connections,
+    get_lines_along_reference_lines,
+    process_lines_and_reconnect,
 )
 from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.core.geometry import (
-    LineExtendFrom,
     assign_nearest_z,
-    extend_line_to_nearest,
 )
-from geogenalg.selection import remove_close_line_segments
-from geogenalg.split import explode_and_hash_id
 
 
 @supports_identity
@@ -41,6 +37,9 @@ class GeneralizeSharedPaths(BaseAlgorithm):
     lower priority) along roads (or generally network of linestrings of higher priority)
     are removed.
     """
+    minimum_percentage: float = 90.0
+    """If the percentage of a lower priority line's total length within the
+    detection distance of higher priority lines is below this it will be removed."""
     reference_key: str = "roads"
     """Reference data, higher priority layer"""
 
@@ -69,69 +68,19 @@ class GeneralizeSharedPaths(BaseAlgorithm):
         else:
             raise MissingReferenceError
 
-        # TODO: Refactor this to use process_lines_and_reconnect()!
-        gdf = flag_connections(
+        def _process(geodataframe: GeoDataFrame) -> GeoDataFrame:
+            return get_lines_along_reference_lines(
+                geodataframe,
+                reference_gdf,
+                self.detection_distance,
+                length_percentage=self.minimum_percentage,
+            )[1]
+
+        gdf = process_lines_and_reconnect(
             data,
-            start_connected_column="__start_connected_before",
-            end_connected_column="__end_connected_before",
-        )
-
-        gdf = remove_close_line_segments(
-            gdf,
+            _process,
             reference_gdf,
-            self.detection_distance,
-        )
-        gdf = explode_and_hash_id(gdf, "sharedpaths")
-
-        gdf = flag_connections(
-            gdf,
-            start_connected_column="__start_connected_after",
-            end_connected_column="__end_connected_after",
+            length_tolerance=self.detection_distance * 1.25,
         )
 
-        # Effectively this checks which connections have been broken
-        # in remove_close_line_segments().
-        gdf["__extend_start"] = (
-            gdf["__start_connected_before"] != gdf["__start_connected_after"]
-        )
-
-        gdf["__extend_end"] = (
-            gdf["__end_connected_before"] != gdf["__end_connected_after"]
-        )
-
-        union_geom = reference_gdf.union_all()
-
-        def _extend(
-            extend_start: bool,  # noqa: FBT001
-            extend_end: bool,  # noqa: FBT001
-            line: LineString,
-        ) -> LineString:
-            if extend_start and extend_end:
-                extend_from = LineExtendFrom.BOTH
-            elif extend_start:
-                extend_from = LineExtendFrom.START
-            elif extend_end:
-                extend_from = LineExtendFrom.END
-            else:
-                return line
-
-            return extend_line_to_nearest(
-                line,
-                union_geom,
-                extend_from,
-                self.detection_distance * 1.25,
-            )
-
-        # Connect those shared paths whose connection was broken back into
-        # the larger network.
-        gdf.geometry = gdf[["__extend_start", "__extend_end", gdf.geometry.name]].apply(
-            lambda columns: _extend(*columns),
-            axis=1,
-        )
-
-        gdf = assign_nearest_z(data, gdf)
-
-        return gdf.drop(
-            [column for column in gdf.columns if column not in data.columns],
-            axis=1,
-        )
+        return assign_nearest_z(data, gdf)
