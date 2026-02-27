@@ -24,6 +24,8 @@ from geogenalg.continuity import (
     find_all_endpoints,
     flag_connections,
     flag_connections_to_reference,
+    flag_contiguous_dead_ends,
+    flag_disconnected_lines_contiguous_length,
     flag_polygon_centerline_connections,
     get_paths_along_roads,
     inspect_dead_end_candidates,
@@ -1064,4 +1066,264 @@ def test_process_lines_and_reconnect(
             length_tolerance=length_tolerance,
         ),
         expected_gdf,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "reference_network",
+        "minimum_length",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            100.0,
+            GeoDataFrame(
+                {
+                    "__part_of_dead_end": [
+                        True,
+                        True,
+                        True,
+                        False,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            1.0,
+            GeoDataFrame(
+                {
+                    "__part_of_dead_end": [
+                        False,
+                        False,
+                        False,
+                        False,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[3, -100], [3, 0], [3, 100]]),
+                ],
+            ),
+            100.0,
+            GeoDataFrame(
+                {
+                    "__part_of_dead_end": [
+                        False,
+                        False,
+                        False,
+                        False,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                    LineString([[3, -100], [3, 0], [3, 100]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            100.0,
+            GeoDataFrame(
+                {
+                    "__part_of_dead_end": [
+                        False,
+                        False,
+                        False,
+                        False,
+                        False,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -100], [0, 0], [0, 100]]),
+                    LineString([[3, -100], [3, 0], [3, 100]]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "is_dead_end",
+        "minimum_length",
+        "network",
+        "no_dead_end",
+    ],
+)
+def test_flag_contiguous_dead_ends(
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+    minimum_length: float,
+    expected_gdf: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        flag_contiguous_dead_ends(
+            input_gdf,
+            reference_network,
+            minimum_length=minimum_length,
+        ),
+        expected_gdf,
+        check_like=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "reference_network",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            GeoDataFrame(
+                {
+                    "__part_of_line_length": [
+                        3.0,
+                        3.0,
+                        3.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -1], [0, 0], [0, 1]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            GeoDataFrame(
+                {
+                    "__part_of_line_length": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -1], [0, 0], [0, 1]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, -1], [0, 0], [0, 1]]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__part_of_line_length": [
+                        0.0,
+                        0.0,
+                        0.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "is_disconnected",
+        "connected",
+        "network",
+    ],
+)
+def test_flag_disconnected_lines_contiguous_length(
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        flag_disconnected_lines_contiguous_length(
+            input_gdf,
+            reference_network,
+        ),
+        expected_gdf,
+        check_like=True,
     )
