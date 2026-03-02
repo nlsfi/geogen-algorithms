@@ -46,7 +46,7 @@ def test_generalize_landcover_50k(
     """
     Test generalizing landcover with marshes
     """
-    input_path = testdata_path / "marshes_2.gpkg"
+    input_path = testdata_path / "marshes_3.gpkg"
     input_data = read_gdf_from_file_and_set_index(
         input_path,
         UNIQUE_ID_COLUMN,

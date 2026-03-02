@@ -11,9 +11,9 @@ from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_old_ids
+from geogenalg.merge import dissolve_and_inherit_attributes
 from geogenalg.selection import remove_small_holes, remove_small_polygons
 
 
@@ -70,7 +70,12 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         # Create a positive_buffer to close narrow gaps between polygons
         _buffer(result_gdf, self.positive_buffer)
-        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by or None)
+
+        result_gdf = dissolve_and_inherit_attributes(
+            input_gdf=result_gdf,
+            by_column=self.group_by or None,
+        )
+        result_gdf = hash_index_from_old_ids(result_gdf, "landcover", "old_ids")
 
         # Create a negative buffer to restore polygons back to their original size and
         # remove narrow polygon parts
@@ -81,9 +86,10 @@ class GeneralizeLandcover(BaseAlgorithm):
         # Restore polygons to their original size with a positive buffer
         _buffer(result_gdf, -negative_buffer)
 
-        result_gdf = result_gdf.dissolve(as_index=False, by=self.group_by or None)
-        result_gdf = result_gdf.explode(index_parts=False)
-        result_gdf = inherit_attributes_from_largest(data, result_gdf, "old_ids")
+        result_gdf = dissolve_and_inherit_attributes(
+            input_gdf=result_gdf,
+            by_column=self.group_by or None,
+        )
         result_gdf = hash_index_from_old_ids(result_gdf, "landcover", "old_ids")
 
         # Simplify the polygons
