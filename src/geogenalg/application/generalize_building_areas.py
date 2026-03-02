@@ -12,14 +12,10 @@ from geopandas import GeoDataFrame
 from pandas import concat
 
 from geogenalg.analyze import calculate_coverage
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.merge import buffer_and_merge_polygons
-from geogenalg.selection import (
-    remove_close_line_segments,
-    remove_large_polygons,
-    remove_short_lines,
-)
+from geogenalg.selection import remove_large_polygons
 
 
 @dataclass(frozen=True)
@@ -107,10 +103,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         high_coverage_parcels = parcels_with_coverage[high_coverage_mask].copy()
 
         # 4 - Buffer and merge high-coverage parcels into building areas
-        building_areas = buffer_and_merge_polygons(
+        return buffer_and_merge_polygons(
             high_coverage_parcels,
             buffer_distance=self.buffer_distance,
         )
-        final_building_areas = building_areas
-
-        return final_building_areas
