@@ -42,8 +42,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """Column containing attributes describing the intended use of a building."""
     building_type_to_select: int = 1
     """Used to select type of building, residential for example."""
-    attribute_for_building_coverage = "building_coverage"
-    building_coverage_column = "building_coverage"
+    building_coverage_column: str = "building_coverage"
     """Name of column containing coverage percentage values."""
     reference_key: str = "parcels"
     """Reference data key for parcel data."""
