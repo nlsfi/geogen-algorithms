@@ -14,6 +14,7 @@ from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg.analyze import (
     calculate_coverage,
+    calculate_edge_adjacency,
     calculate_main_angle,
     classify_polygons_by_size_of_minimum_bounding_rectangle,
     flag_parallel_lines,
@@ -666,3 +667,84 @@ def test_get_polygons_for_parallel_lines(
         expected,
         check_like=True,
     )
+
+
+@pytest.mark.parametrize(
+    ("input_geom", "reference_geom", "expected_adjacency_ratio"),
+    [
+        (
+            Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),
+            Polygon([(0, 0), (3, 0), (3, 3), (0, 3)]),
+            1.0,
+        ),
+        (
+            Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
+            Polygon([(1, 1), (3, 1), (3, 3), (1, 3)]),
+            0.25,
+        ),
+        (
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(2, 2), (3, 2), (3, 3), (2, 3)]),
+            0.0,
+        ),
+        (
+            Polygon([(0, 0), (4, 0), (4, 4), (0, 4)]),
+            Polygon([(3, 3), (4, 3), (4, 4), (3, 4)]),
+            0.083,
+        ),
+        (
+            Polygon([(0, 0), (3, 0), (3, 6), (0, 6)]),
+            Polygon(
+                [(-1, 0), (5, 0), (5, 4), (2, 4), (2, 7), (6, 7), (6, -1), (-1, -1)]
+            ),
+            0.40,
+        ),
+    ],
+    ids=[
+        "Fully overlapping",
+        "Partially overlapping with outer halo",
+        "No overlap",
+        "Partially overlapping with inner halo",
+        "Partially overlapping with inner and outer halo",
+    ],
+)
+def test_calculate_edge_adjacency_various_overlap(
+    input_geom: Polygon, reference_geom: Polygon, expected_adjacency_ratio: float
+):
+    input_gdf = GeoDataFrame({"id": [1]}, geometry=[input_geom], crs="EPSG:3067")
+    reference_gdf = GeoDataFrame(
+        {"class": ["a"]}, geometry=[reference_geom], crs="EPSG:3067"
+    )
+
+    result = calculate_edge_adjacency(input_gdf, reference_gdf, buffer_size=1.0)
+
+    ratio = result["adjacency_ratio"][0]
+    assert ratio == pytest.approx(expected_adjacency_ratio, abs=0.01)
+
+
+def test_calculate_edge_adjacency_empty_input():
+    """Test that empty input GeoDataFrame returns empty result."""
+    input_gdf = GeoDataFrame(columns=["id"], geometry=[], crs="EPSG:3067")
+    reference_gdf = GeoDataFrame(columns=["class"], geometry=[], crs="EPSG:3067")
+
+    result = calculate_edge_adjacency(input_gdf, reference_gdf, buffer_size=1.0)
+
+    assert result.empty
+    assert "adjacency_ratio" in result.columns
+
+
+def test_calculate_edge_adjacency_non_polygon_raises():
+    """Test that non-polygon geometries raise GeometryTypeError."""
+    input_gdf = GeoDataFrame(
+        {"id": [1, 2]},
+        geometry=[Point(0, 0), LineString([(0, 0), (1, 1)])],
+        crs="EPSG:3067",
+    )
+    reference_gdf = GeoDataFrame(
+        {"class": ["a"]},
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        crs="EPSG:3067",
+    )
+
+    with pytest.raises(GeometryTypeError, match="Polygon or MultiPolygon"):
+        calculate_edge_adjacency(input_gdf, reference_gdf, buffer_size=1.0)
