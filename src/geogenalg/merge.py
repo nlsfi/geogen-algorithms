@@ -109,8 +109,8 @@ def dissolve_and_inherit_attributes(
     ----
         input_gdf: Input GeoDataFrame with Polygon geometries. The GeoDataFrame must
             include a column with a unique key.
-        by_column: Column name used to group and dissolve polygons. If left None,
-            the entire dataframe is considered a single group to dissolve.
+        by_column: Column(s) whose values define the groups to be dissolved.
+            If left None, the entire dataframe is considered a single group to dissolve.
         old_ids_column: Name of the column in the output GeoDataFrame
             containing a tuple of the cluster's old identifiers.
         inherit_from: Method for determining which intersecting feature is considered as
