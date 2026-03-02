@@ -421,7 +421,7 @@ def test_buffer_and_merge_polygons():
     polygon_2 = box(4.0, 0.0, 5.0, 1.0)
     gdf = GeoDataFrame(geometry=[polygon_1, polygon_2], crs="EPSG:3067")
 
-    result = buffer_and_merge_polygons(gdf, buffer_distance=1.0)
+    result = buffer_and_merge_polygons(gdf, buffer_distance=1.0, join_style="round")
 
     # Polygons should stay separate
     assert len(result) == 2
