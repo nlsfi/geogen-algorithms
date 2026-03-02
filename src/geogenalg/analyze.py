@@ -9,7 +9,7 @@ import geopandas as gpd
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
-from shapely import MultiLineString, concave_hull, convex_hull
+from shapely import BaseGeometry, MultiLineString, concave_hull, convex_hull
 from shapely.geometry import LineString, Polygon
 
 from geogenalg.core.exceptions import GeometryTypeError
@@ -424,3 +424,80 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
         "small_polygons": small_gdf,
         "large_polygons": large_gdf,
     }
+
+
+def calculate_edge_adjacency(
+    input_gdf: gpd.GeoDataFrame,
+    reference_gdf: gpd.GeoDataFrame,
+    buffer_size: float,
+    result_column: str = "adjacency_ratio",
+) -> gpd.GeoDataFrame:
+    """Calculate adjacency ratio using outer and inner halo buffers.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame with Polygon or MultiPolygon geometries.
+        reference_gdf: Reference GeoDataFrame with Polygon or MultiPolygon geometries.
+        buffer_size: Distance defining the zone in which overlap with the reference
+              geometries is analyzed.
+        result_column: Name of the output column storing the computed adjacency ratio.
+
+    Returns:
+    -------
+        GeoDataFrame with an added column containing the computed adjacency ratio for
+            each input feature.
+
+    Raises:
+    ------
+        GeometryTypeError: If the input GeoDataFrame contains other than
+            polygon or MultiPolygon geometries.
+
+    """
+    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+        msg = (
+            "Calculate edge adjacency only supports Polygon or MultiPolygon geometries."
+        )
+        raise GeometryTypeError(msg)
+
+    def intersection_ratio(halo: BaseGeometry) -> float | None:
+        if halo.is_empty:
+            return None
+
+        area = halo.area
+        if area <= 0:
+            return None
+
+        possible = reference_gdf.iloc[
+            list(reference_gdf.sindex.intersection(halo.bounds))
+        ]
+
+        if possible.empty:
+            return 0.0
+
+        intersection_area = possible.intersection(halo).area.sum()
+        return intersection_area / area
+
+    def feature_ratio(geom: BaseGeometry) -> float | None:
+        # Outer halo
+        outer_halo = geom.buffer(buffer_size).difference(geom)
+        outer_ratio = intersection_ratio(outer_halo)
+
+        # Inner halo
+        inner_buffer = geom.buffer(-buffer_size)
+        if inner_buffer.is_empty:
+            inner_ratio = None
+        else:
+            inner_halo = geom.difference(inner_buffer)
+            inner_ratio = intersection_ratio(inner_halo)
+
+        # Select appropriate value for overlapping ratio
+        if inner_ratio is None:
+            return outer_ratio
+        if outer_ratio is None:
+            return inner_ratio
+        return max(inner_ratio, outer_ratio)
+
+    result_gdf = input_gdf.copy()
+    result_gdf[result_column] = [feature_ratio(geom) for geom in result_gdf.geometry]
+
+    return result_gdf
