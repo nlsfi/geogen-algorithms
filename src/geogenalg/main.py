@@ -351,7 +351,7 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
 app = typer.Typer()
 
 
-def build_app() -> None:
+def build_app() -> None:  # noqa: PLR0914
     """Add commands to typer app from algorithms.
 
     Exists as a separate function mainly to enable running CLI test.
