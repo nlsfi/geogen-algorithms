@@ -201,7 +201,10 @@ def dissolve_and_inherit_attributes(
 
 
 def buffer_and_merge_polygons(
-    input_gdf: GeoDataFrame, buffer_distance: float
+    input_gdf: GeoDataFrame,
+    buffer_distance: float,
+    *,
+    join_style: Literal["round", "mitre", "bevel"] = "bevel",
 ) -> GeoDataFrame:
     """Merge polygons that are close to each other using a buffer.
 
@@ -217,6 +220,7 @@ def buffer_and_merge_polygons(
     ----
         input_gdf: GeoDataFrame containing Polygon geometries.
         buffer_distance: Distance used for buffering.
+        join_style: Join style used for buffering.
 
     Returns:
     -------
@@ -241,7 +245,7 @@ def buffer_and_merge_polygons(
         return input_gdf
 
     # 1. Buffer outward
-    buffered = input_gdf.geometry.buffer(buffer_distance, join_style="bevel")
+    buffered = input_gdf.geometry.buffer(buffer_distance, join_style=join_style)
 
     # 2. Union all buffered geometries
     merged = buffered.union_all()
@@ -259,7 +263,7 @@ def buffer_and_merge_polygons(
 
     # 4. Buffer inward to restore approximate original size
     out_geoms = [
-        geom.buffer(-buffer_distance, join_style="bevel")
+        geom.buffer(-buffer_distance, join_style=join_style)
         for geom in polygons
         if geom is not None and not geom.is_empty
     ]

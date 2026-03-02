@@ -105,7 +105,14 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         high_coverage_parcels = parcels_with_coverage[high_coverage_mask].copy()
 
         # 4 - Buffer and merge high-coverage parcels into building areas
-        return buffer_and_merge_polygons(
-            high_coverage_parcels,
-            buffer_distance=self.buffer_distance,
+
+        # TODO: exploding and resetting index is a temporary workaround.
+        # IDs need to be handled differently
+        return (
+            buffer_and_merge_polygons(
+                high_coverage_parcels,
+                buffer_distance=self.buffer_distance,
+            )
+            .explode(as_index=False)
+            .reset_index(drop=True)
         )
