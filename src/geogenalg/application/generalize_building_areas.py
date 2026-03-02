@@ -6,7 +6,7 @@
 #  LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 from pandas import concat
@@ -46,6 +46,9 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """Name of column containing coverage percentage values."""
     reference_key: str = "parcels"
     """Reference data key for parcel data."""
+
+    valid_input_geometry_types: ClassVar = {"Polygon"}
+    valid_reference_geometry_types: ClassVar = {"Polygon"}
 
     @override
     def _execute(
