@@ -16,6 +16,7 @@ from shapely.geometry import LineString, MultiLineString
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.continuity import (
+    add_contiguous_lines_information,
     check_line_connections,
     check_reference_line_connections,
     connect_lines_to_polygon_centroids,
@@ -1181,4 +1182,222 @@ def test_process_lines_and_reconnect(
             length_tolerance=length_tolerance,
         ),
         expected_gdf,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "reference_network",
+        "minimum_length",
+        "line_type_column",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(  # has_some_dead_ends
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -1], [0, 0], [0, 1]]),
+                    LineString([[-1, 1], [1, 1]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            100.0,
+            None,
+            GeoDataFrame(
+                {
+                    "contiguous_dead_end": [
+                        True,
+                        True,
+                        True,
+                        False,
+                        True,
+                    ],
+                    "contiguous_disconnected": [
+                        False,
+                        False,
+                        False,
+                        False,
+                        False,
+                    ],
+                    "contiguous_length": [
+                        3.0,
+                        3.0,
+                        3.0,
+                        2.0,
+                        2.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -1], [0, 0], [0, 1]]),
+                    LineString([[-1, 1], [1, 1]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(  # network
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -1], [0, 0], [0, 1]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[LineString([[-1, 1], [1, 1]])]),
+            100.0,
+            None,
+            GeoDataFrame(
+                {
+                    "contiguous_dead_end": [
+                        True,
+                        True,
+                        True,
+                        False,
+                    ],
+                    "contiguous_disconnected": [
+                        False,
+                        False,
+                        False,
+                        False,
+                    ],
+                    "contiguous_length": [
+                        3.0,
+                        3.0,
+                        3.0,
+                        2.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[2, 0], [3, 0]]),
+                    LineString([[0, -1], [0, 0], [0, 1]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(  # disconnected
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[5, 5], [6, 5]]),
+                    LineString([[6, 5], [8, 5]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            100.0,
+            None,
+            GeoDataFrame(
+                {
+                    "contiguous_dead_end": [
+                        False,
+                        False,
+                        False,
+                        False,
+                    ],
+                    "contiguous_disconnected": [
+                        True,
+                        True,
+                        True,
+                        True,
+                    ],
+                    "contiguous_length": [
+                        2.0,
+                        2.0,
+                        3.0,
+                        3.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[5, 5], [6, 5]]),
+                    LineString([[6, 5], [8, 5]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(  # line_type_column
+                {
+                    "type": [
+                        1,
+                        2,
+                        3,
+                        4,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[5, 5], [6, 5]]),
+                    LineString([[6, 5], [8, 5]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            100.0,
+            "type",
+            GeoDataFrame(
+                {
+                    "type": [
+                        1,
+                        2,
+                        3,
+                        4,
+                    ],
+                    "contiguous_dead_end": [
+                        True,
+                        True,
+                        True,
+                        True,
+                    ],
+                    "contiguous_disconnected": [
+                        False,
+                        False,
+                        False,
+                        False,
+                    ],
+                    "contiguous_length": [
+                        2.0,
+                        2.0,
+                        3.0,
+                        3.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                    LineString([[5, 5], [6, 5]]),
+                    LineString([[6, 5], [8, 5]]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "has_some_dead_ends",
+        "network",
+        "disconnected",
+        "line_type_column",
+    ],
+)
+def test_add_contiguous_lines_information(
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+    minimum_length: float,
+    line_type_column: str | None,
+    expected_gdf: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        add_contiguous_lines_information(
+            input_gdf,
+            reference_network,
+            line_type_column=line_type_column,
+        ),
+        expected_gdf,
+        check_like=True,
     )
