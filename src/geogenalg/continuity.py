@@ -5,14 +5,17 @@
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
 from collections.abc import Callable
+from itertools import starmap
 from typing import Literal, cast
 
 from geopandas import GeoDataFrame
-from pandas import concat
+from pandas import Series, concat
 from shapely import force_2d
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import linemerge
 
+from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
     extend_line_to_nearest,
@@ -342,13 +345,13 @@ def get_lines_along_reference_lines(
     drop_column: bool = True,
     length_percentage: float = 100.0,
 ) -> tuple[GeoDataFrame, GeoDataFrame]:
-    """Flag lines that fall within a buffer around reference roads.
+    """Flag lines that fall within a buffer around reference lines.
 
     Args:
     ----
         input_gdf: GeoDataFrame with LineString geometries to check.
         reference_gdf: GeoDataFrame with reference LineStrings.
-        detection_distance: Distance to buffer around reference roads.
+        detection_distance: Distance to buffer around reference lines.
         drop_column: Whether "along_ref" column indicating status should
             be dropped.
         length_percentage: Minimum percentage of line's length inside the
@@ -371,7 +374,7 @@ def get_lines_along_reference_lines(
 
     gdf = input_gdf.copy()
 
-    # Single geometry for the reference roads buffer
+    # Single geometry for the reference lines buffer
     buffered_union = reference_gdf.geometry.buffer(detection_distance)
     buffered_union = buffered_union.union_all()
 
@@ -726,3 +729,122 @@ def process_lines_and_reconnect(
         ],
         axis=1,
     )
+
+
+def _get_merged_line_connections(
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+) -> GeoDataFrame:
+    merged = GeoDataFrame(
+        geometry=[
+            linemerge(input_gdf.union_all()),
+        ],
+        crs=input_gdf.crs,
+    ).explode()
+
+    merged = flag_connections(
+        merged,
+        start_connected_column="connected_to_self_start",
+        end_connected_column="connected_to_self_end",
+    )
+
+    merged = flag_connections_to_reference(
+        merged,
+        reference_network,
+        start_connected_column="connected_to_network_start",
+        end_connected_column="connected_to_network_end",
+    )
+
+    merged["start_connected"] = (
+        merged["connected_to_self_start"] | merged["connected_to_network_start"]
+    )
+    merged["end_connected"] = (
+        merged["connected_to_self_end"] | merged["connected_to_network_end"]
+    )
+
+    return merged
+
+
+def add_contiguous_lines_information(  # noqa: PLR0913
+    input_gdf: GeoDataFrame,
+    reference_network: GeoDataFrame,
+    *,
+    line_type_column: str | None = None,
+    length_column: str = "contiguous_length",
+    dead_end_column: str = "contiguous_dead_end",
+    disconnected_column: str = "contiguous_disconnected",
+) -> GeoDataFrame:
+    """Add info to features about contiguous set of lines they are part of.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame with LineStrings.
+        reference_network: Network against which connectivity will be checked in
+            addition to the input_gdf.
+        line_type_column: If specified, consider contiguous lines within each
+            unique value of this column.
+        length_column: Name of an added column, telling the total length of the
+            contiguous lines a feature is part of.
+        dead_end_column: Name of an added column, telling if contiguous lines
+            are a dead end i.e. not connected to other lines of its type or the
+            reference network.
+        disconnected_column: Name of an added column, telling if contiguous
+            lines are disconnected from the network.
+
+    Returns:
+    -------
+        Input GeoDataFrame with boolean Series added.
+
+    """
+    gdf = cast("GeoDataFrame", input_gdf.copy())
+
+    def _get_length(line: LineString, merged: GeoDataFrame) -> float:
+        merged_lines = merged.loc[merged.covers(line)]
+
+        if merged_lines.shape[0] == 0:
+            return line.length
+
+        if merged_lines.shape[0] != 1:
+            msg = "Line should be covered only by one merged line."
+            raise GeometryOperationError(msg)
+
+        return merged_lines.iloc[[0]].geometry.length.to_numpy()[0]
+
+    def _flag(filtered_gdf: GeoDataFrame, reference_data: GeoDataFrame) -> GeoDataFrame:
+        merged = _get_merged_line_connections(gdf, reference_data)
+        merged["is_deadend"] = merged["start_connected"] != merged["end_connected"]
+        merged["is_disconnected"] = (~merged["start_connected"]) & (
+            ~merged["end_connected"]
+        )
+
+        dead_ends = merged.loc[merged["is_deadend"]].union_all()
+        disconnected_lines = merged.loc[merged["is_disconnected"]].union_all()
+        filtered_gdf[dead_end_column] = filtered_gdf.geometry.covered_by(dead_ends)
+        filtered_gdf[disconnected_column] = filtered_gdf.geometry.covered_by(
+            disconnected_lines
+        )
+        filtered_gdf[length_column] = Series(
+            gdf.geometry.apply(lambda geom: _get_length(geom, merged))
+        )
+
+        return filtered_gdf
+
+    def _get_ref(_gdf: GeoDataFrame) -> GeoDataFrame:
+        return _gdf if reference_network.empty else concat([_gdf, reference_network])
+
+    inputs = (
+        [
+            (
+                gdf.loc[gdf[line_type_column] == value].copy(),
+                _get_ref(gdf.loc[gdf[line_type_column] != value]),
+            )
+            for value in gdf[line_type_column].unique()
+        ]
+        if line_type_column is not None
+        else [(gdf, reference_network)]
+    )
+
+    if not inputs:
+        return gdf
+
+    return concat(list(starmap(_flag, inputs)))
