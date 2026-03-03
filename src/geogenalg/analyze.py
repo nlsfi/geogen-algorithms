@@ -9,8 +9,9 @@ import geopandas as gpd
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
-from shapely import BaseGeometry, MultiLineString, concave_hull, convex_hull
+from shapely import MultiLineString, concave_hull, convex_hull
 from shapely.geometry import LineString, Polygon
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import explode_line, segment_direction
