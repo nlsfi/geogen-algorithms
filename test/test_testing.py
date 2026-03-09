@@ -25,6 +25,100 @@ from geogenalg.testing import (
 )
 
 
+def test_assert_gdf_equal_index_mismatch():
+    TemporaryDirectory()
+    temp_dir_path = Path()
+
+    gdf_result = GeoDataFrame(
+        index=[1, 3, 5],
+        geometry=[
+            box(0, 0, 1, 1),
+            box(1, 1, 2, 2),
+            box(5, 5, 6, 6),
+        ],
+        crs="EPSG:3857",
+    )
+    gdf_control = GeoDataFrame(
+        index=[2, 4, 5],
+        geometry=[
+            box(8, 8, 9, 9),
+            box(7, 7, 8, 8),
+            box(5, 5, 6, 6),
+        ],
+        crs="EPSG:3857",
+    )
+
+    with pytest.raises(AssertionError):
+        assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
+
+    result_path = temp_dir_path / "result.gpkg"
+    result_mismatches_path = temp_dir_path / "result_features_not_in_control.gpkg"
+    control_mismatches_path = temp_dir_path / "control_features_not_in_result.gpkg"
+
+    assert result_path.exists()
+    assert result_mismatches_path.exists()
+    assert control_mismatches_path.exists()
+
+    read_file(result_mismatches_path)
+    GeoDataFrame(
+        index=[1, 3],
+        geometry=[
+            box(0, 0, 1, 1),
+            box(1, 1, 2, 2),
+        ],
+        crs="EPSG:3857",
+    )
+    read_file(control_mismatches_path)
+    GeoDataFrame(
+        index=[2, 4],
+        geometry=[
+            box(8, 8, 9, 9),
+            box(7, 7, 8, 8),
+        ],
+        crs="EPSG:3857",
+    )
+
+
+def test_assert_gdf_equal_save_attribute_geom():
+    TemporaryDirectory()
+    temp_dir_path = Path()
+
+    gdf_result = GeoDataFrame(
+        {
+            "attribute": [1],
+        },
+        geometry=[box(0, 0, 1, 1)],
+        crs="EPSG:3857",
+    )
+    gdf_control = GeoDataFrame(
+        {
+            "attribute": [2],
+        },
+        geometry=[box(0, 0, 1, 1)],
+        crs="EPSG:3857",
+    )
+
+    with pytest.raises(AssertionError):
+        assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
+
+    result_path = temp_dir_path / "result.gpkg"
+    attributediff = temp_dir_path / "attributediff.csv"
+
+    assert result_path.exists()
+    assert attributediff.exists()
+
+    result = read_file(result_path)
+    assert_geodataframe_equal(result, gdf_result)
+
+    with attributediff.open("r") as file:
+        contents = file.read()
+        expected = """,attribute,attribute
+,self,other
+0,1,2
+"""
+        assert contents == expected
+
+
 def test_assert_gdf_equal_save_diff_geom():
     temp_dir = TemporaryDirectory()
     temp_dir_path = Path(temp_dir.name)
@@ -43,15 +137,11 @@ def test_assert_gdf_equal_save_diff_geom():
 
     result_path = temp_dir_path / "result.gpkg"
     geomdiff_path = temp_dir_path / "geomdiff.gpkg"
-    control_path = temp_dir_path / "control.gpkg"
 
     assert result_path.exists()
     assert geomdiff_path.exists()
-    assert control_path.exists()
 
-    control = read_file(control_path)
     result = read_file(result_path)
-    assert_geodataframe_equal(control, gdf_control)
     assert_geodataframe_equal(result, gdf_result)
 
     geomdiff = read_file(geomdiff_path)

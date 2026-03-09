@@ -3,22 +3,37 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
-
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory, gettempdir
-from typing import NamedTuple, cast
+from typing import Any, Literal, NamedTuple, cast
+from warnings import warn
 
-from geopandas import GeoDataFrame, overlay
+from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
-from pandas import concat
+from pandas import DataFrame, concat
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
 
 logger = getLogger(__name__)
+
+AssertFunctionParameter = Literal[
+    "check_dtype",
+    "check_index_type",
+    "check_column_type",
+    "check_frame_type",
+    "check_like",
+    "check_less_precise",
+    "check_geom_type",
+    "check_crs",
+    "normalize",
+]
+
+
+class DiffWarning(UserWarning):  # noqa: D101
+    pass
 
 
 @dataclass(frozen=True)
@@ -59,61 +74,87 @@ class TestGeoDataFrames(NamedTuple):
     control: GeoDataFrame
 
 
-def assert_gdf_equal_save_diff(
+def assert_gdf_equal_save_diff(  # noqa: C901
     result: GeoDataFrame,
     control: GeoDataFrame,
     *,
+    assert_function_arguments: dict[AssertFunctionParameter, Any] | None = None,
     directory: Path | str | None = None,
-    save_control: bool = True,
 ) -> None:
     """Assert GeoDataFrames are equal and if not, save results.
 
-    Intended mainly for convenience in debugging. In tests, the
+    Intended for convenience in debugging. In actual tests, the
     geopandas.testing and pandas.testing modules should be used.
 
     Args:
     ----
         result: Result GeoDataFrame.
         control: Control GeoDataFrame.
+        assert_function_arguments: Arguments to pass to assert_geodataframe_equal.
         directory: Specify directory in which results will be saved. If None, a
             temporary directory will be created.
-        save_control: Whether to save control dataset to directory as well.
 
     """
+    if assert_function_arguments is None:
+        assert_function_arguments = {}
+
     if directory is None:
         directory = Path(gettempdir()) / "geogenalg_tests"
 
     if isinstance(directory, str):
         directory = Path(directory)
 
-    if not directory.exists():
-        directory.mkdir()
+    # No side effects
+    result = result.copy()
+    control = control.copy()
 
     try:
-        assert_geodataframe_equal(result, control)
-    except AssertionError:
-        result_path = directory / "result.gpkg"
-        geometry_difference_path = directory / "geomdiff.gpkg"
+        assert_geodataframe_equal(result, control, **assert_function_arguments)
+    except:
+        if not directory.exists():
+            directory.mkdir(parents=True)
 
+        warn(
+            "Exception occured while checking GeoDataFrame "
+            + f"equality. Saving diff to {directory}",
+            category=DiffWarning,
+            stacklevel=3,
+        )
+
+        result_path = directory / "result.gpkg"
         result.to_file(result_path)
 
-        try:
-            geom_diff = overlay(result, control, how="difference")
-            if not geom_diff.union_all().is_empty:
-                geom_diff.to_file(geometry_difference_path)
-        # Blindly catching exception and just logging should be fine in this case,
-        # as this function is just used for debugging purposes.
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Could not create geometry difference: %s", e)
+        if result.index.equals(control.index):
+            geom_diff_path = directory / "geomdiff.gpkg"
+            attribute_diff_path = directory / "attributediff.csv"
 
-        # TODO: support saving dataframe comparison to file as well
-        # something like (comparison = result.compare(control))
+            geom_diff = result.copy()
+            geom_diff.geometry = geom_diff.geometry.difference(control.geometry)
+            geom_diff = geom_diff.loc[~geom_diff.geometry.is_empty]
 
-        if save_control:
-            control_path = directory / "control.gpkg"
-            control.to_file(control_path)
+            attribute_diff = cast(
+                "DataFrame",
+                result.drop(result.geometry.name, axis=1).compare(
+                    control.drop(control.geometry.name, axis=1)
+                ),
+            )
 
-        logger.info("Test results saved to %s.", directory)
+            if not geom_diff.empty:
+                geom_diff.to_file(geom_diff_path)
+            if not attribute_diff.empty:
+                attribute_diff.to_csv(attribute_diff_path)
+        else:
+            result_mismatches_path = directory / "result_features_not_in_control.gpkg"
+            result_mismatches = result.loc[~result.index.isin(control.index)]
+
+            control_mismatches_path = directory / "control_features_not_in_result.gpkg"
+            control_mismatches = control.loc[~control.index.isin(result.index)]
+
+            if not result_mismatches.empty:
+                result_mismatches.to_file(result_mismatches_path)
+
+            if not control_mismatches.empty:
+                control_mismatches.to_file(control_mismatches_path)
 
         raise
 
@@ -175,7 +216,7 @@ def get_test_gdfs(
 
     Returns:
     -------
-        Input, reference, result and control GeoDataFrames, in that order.
+        Input, input before, reference, result and control GeoDataFrames, in that order.
 
     """
     reference_data = {}
