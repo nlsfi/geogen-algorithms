@@ -27,6 +27,7 @@ from geogenalg.continuity import (
     flag_connections_to_reference,
     flag_polygon_centerline_connections,
     get_lines_along_reference_lines,
+    get_segments_in_polygon_exteriors_but_not_in_lines,
     inspect_dead_end_candidates,
     process_lines_and_reconnect,
 )
@@ -1400,4 +1401,153 @@ def test_add_contiguous_lines_information(
         ),
         expected_gdf,
         check_like=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "polygons",
+        "lines",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(1, 0, 2, 1),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [1, 0],
+                            [2, 0],
+                            [2, 1],
+                            [2, 1],
+                            [1, 1],
+                            [0, 1],
+                            [0, 0],
+                        ]
+                    ),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [1, 0],
+                            [1, 1],
+                        ]
+                    ),
+                ]
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(1, 0, 2, 1),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [1, 0],
+                            [2, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [2, 1],
+                            [1, 1],
+                            [0, 1],
+                            [0, 0],
+                        ]
+                    ),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[1, 0], [1, 1]]),
+                    LineString([[2, 0], [2, 1]]),
+                ]
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [1, 0],
+                            [1, 1],
+                            [0, 1],
+                            [0, 0],
+                        ]
+                    ),
+                ]
+            ),
+            GeoDataFrame(geometry=[]),
+        ),
+        (
+            GeoDataFrame(),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [1, 0],
+                            [1, 1],
+                            [0, 1],
+                            [0, 0],
+                        ]
+                    ),
+                ]
+            ),
+            GeoDataFrame(),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                ]
+            ),
+            GeoDataFrame(),
+            GeoDataFrame(),
+        ),
+    ],
+    ids=[
+        "in_the_middle",
+        "missing_end",
+        "no_segments",
+        "empty_polygons",
+        "empty_lines",
+    ],
+)
+def test_get_segments_in_polygon_exteriors_but_not_in_lines(
+    polygons: GeoDataFrame,
+    lines: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+):
+    get_segments_in_polygon_exteriors_but_not_in_lines(
+        polygons,
+        lines,
+    )
+
+    assert_geodataframe_equal(
+        get_segments_in_polygon_exteriors_but_not_in_lines(
+            polygons,
+            lines,
+        ),
+        expected_gdf,
     )
