@@ -1268,11 +1268,17 @@ def test_centerline_length(
             box(20, 0, 21, 20),
             length,
         ),
+        (
+            box(0, 0, 10, 10),
+            box(0, 0, 10, 10),
+            None,
+        ),
     ],
     ids=[
-        "multiline, default size function",
-        "multipoly, default size function",
-        "multipoly, different size function",
+        "multiline_default_size_function",
+        "multipoly_default_size_function",
+        "multipoly_different_size_function",
+        "single_poly",
     ],
 )
 def test_largest_part(
@@ -1283,6 +1289,32 @@ def test_largest_part(
     assert (
         largest_part(input_geometry, size_function=size_function) == expected_geometry
     )
+
+
+@pytest.mark.parametrize(
+    ("geom", "error", "match"),
+    [
+        (MultiPoint(), TypeError, re.escape("Can't reduce (Multi)Point to largest.")),
+        (Point(), TypeError, re.escape("Can't reduce (Multi)Point to largest.")),
+        (
+            GeometryCollection(),
+            NotImplementedError,
+            re.escape("Not implemented for geometry collection."),
+        ),
+    ],
+    ids=[
+        "type_error_mp",
+        "type_error_point",
+        "notimplemented",
+    ],
+)
+def test_largest_part_raises(
+    geom: BaseGeometry,
+    error: type[Exception],
+    match: str,
+):
+    with pytest.raises(error, match=match):
+        largest_part(geom)
 
 
 @pytest.mark.parametrize(
