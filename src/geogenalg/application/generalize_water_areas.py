@@ -3,19 +3,20 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
-import operator
 from dataclasses import dataclass
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame, GeoSeries
-from shapely import MultiPoint, MultiPolygon, Point, Polygon, force_2d
+from shapely import MultiPoint, Polygon, force_2d
 
 from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.continuity import get_segments_in_polygon_exteriors_but_not_in_lines
+from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     assign_nearest_z,
     chaikin_smooth_keep_topology,
     extract_interior_rings,
+    largest_part,
     perforate_polygon_with_gdf_exteriors,
 )
 from geogenalg.exaggeration import (
@@ -75,20 +76,21 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
     @staticmethod
     def _get_skip_coords(data: GeoDataFrame, shoreline: GeoDataFrame) -> MultiPoint:
-        data_points = data.extract_unique_points().union_all()
-        shoreline_points = shoreline.extract_unique_points().union_all()
-        skip_coords = force_2d(data_points.difference(shoreline_points))
+        segments = get_segments_in_polygon_exteriors_but_not_in_lines(data, shoreline)
 
-        if isinstance(skip_coords, Point) and not skip_coords.is_empty:
-            skip_coords = MultiPoint([skip_coords])
+        if segments.empty:
+            return MultiPoint()
 
-        if skip_coords.is_empty:
-            skip_coords = MultiPoint()
+        if segments.shape[0] == 1:
+            return MultiPoint(segments.union_all())
 
-        if not isinstance(skip_coords, MultiPoint):
-            skip_coords = MultiPoint()
+        points = segments.extract_unique_points().union_all()
 
-        return skip_coords
+        if not isinstance(points, MultiPoint):
+            msg = "Result is not a MultiPoint."
+            raise GeometryOperationError(msg)
+
+        return force_2d(points)
 
     @override
     def _execute(
@@ -171,24 +173,11 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         # slivers and therefore change the geometry to a MultiPolygon. Resolve
         # this by transforming any MultiPolygons to Polygons, retaining only
         # the largest part.
-        def multipolygon_to_single_keep_largest(
-            geom: MultiPolygon | Polygon,
-        ) -> Polygon:
-            if isinstance(geom, Polygon):
-                return geom
-
-            areas = [(geom.area, geom) for geom in geom.geoms]
-            areas.sort(key=operator.itemgetter(0), reverse=True)
-
-            return areas[0][1]
-
-        mask = gdf.geometry.geom_type == "MultiPolygon"
-        gdf.loc[mask, gdf.geometry.name] = gdf.loc[mask].geometry.apply(
-            multipolygon_to_single_keep_largest
-        )
+        gdf.geometry = gdf.geometry.apply(largest_part)
 
         gdf.geometry = chaikin_smooth_keep_topology(
             gdf.geometry,
+            iterations=self.smoothing_passes,
             extra_skip_coords=skip_coords,
         )
 
