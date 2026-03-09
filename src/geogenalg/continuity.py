@@ -18,7 +18,6 @@ from shapely.ops import linemerge
 from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
-    explode_line,
     extend_line_to_nearest,
     get_topological_points,
 )
@@ -883,22 +882,19 @@ def get_segments_in_polygon_exteriors_but_not_in_lines(
 
     """
     if polygons.empty or lines.empty:
-        return GeoDataFrame()
+        return GeoDataFrame(geometry=[], crs=polygons.crs)
 
-    shoreline_filtered = lines.loc[lines.intersects(polygons.union_all())]
-    gdf = polygons.copy()
+    boundary = polygons.geometry.exterior.apply(Polygon).boundary.union_all()
+    segments = boundary.difference(lines.union_all())
 
-    gdf.geometry = gdf.geometry.exterior.apply(Polygon)
-    gdf.geometry = gdf.geometry.boundary.apply(explode_line)
-    gdf = gdf.explode()
-    gdf = gdf.overlay(shoreline_filtered, how="difference")
+    if segments.is_empty:
+        return GeoDataFrame(geometry=[], crs=polygons.crs)
 
-    # We've exploded things, it's not useful and even confusing to keep
-    # attribute data in, so let's get rid of it by returning the geoseries
-    # as a gdf.
-    gdf = gdf.loc[~gdf.geometry.is_empty].geometry.to_frame()
-
-    # If polygons have shared segments, both of them are still in
-    # so remove them
-    gdf.geometry = gdf.geometry.normalize()
-    return gdf.drop_duplicates()
+    return (
+        GeoDataFrame(
+            geometry=[segments],
+            crs=polygons.crs,
+        )
+        .explode()
+        .reset_index(drop=True)
+    )
