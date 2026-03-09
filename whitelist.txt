@@ -67,6 +67,7 @@ simplifytolerance
 sindex
 sklearn
 sqrt
+stacklevel
 starmap
 testdata
 tolist
