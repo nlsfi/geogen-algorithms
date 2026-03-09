@@ -3,10 +3,12 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
+import os
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from tempfile import gettempdir
+from typing import Any
 from warnings import warn
 
 import pytest
@@ -15,7 +17,14 @@ from geopandas.testing import assert_geodataframe_equal
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
-from geogenalg.testing import GeoPackageInput, TestGeoDataFrames, get_test_gdfs
+from geogenalg.testing import (
+    AssertFunctionParameter,
+    DiffWarning,
+    GeoPackageInput,
+    TestGeoDataFrames,
+    assert_gdf_equal_save_diff,
+    get_test_gdfs,
+)
 from geogenalg.utility.validation import geometry_string_to_type
 
 
@@ -34,18 +43,6 @@ GEOMETRY_TYPE_STRINGS = (
     "MultiPolygon",
     "GeometryCollection",
 )
-
-AssertFunctionParameter = Literal[
-    "check_dtype",
-    "check_index_type",
-    "check_column_type",
-    "check_frame_type",
-    "check_like",
-    "check_less_precise",
-    "check_geom_type",
-    "check_crs",
-    "normalize",
-]
 
 
 @dataclass(frozen=True)
@@ -89,7 +86,47 @@ class IntegrationTest:
             reference_uris=self.reference_uris,
         )
 
-    def run(self) -> None:
+    def _assert_and_save_diffs(
+        self,
+        result: GeoDataFrame,
+        control: GeoDataFrame,
+    ) -> None:
+        diff_dir: Path | str | None = os.environ.get("GEOGENALG_TEST_DIFF_DIR")
+        dir_specific = os.environ.get("GEOGENALG_TEST_DIFF_DIR_SPECIFIC")
+        dir_is_specific = dir_specific is not None and dir_specific.lower() in {
+            "true",
+            "1",
+            "on",
+        }
+
+        if diff_dir is None:
+            warn(
+                "No directory specified for diff. Using temporary directory by default. "
+                + "You can set the GEOGENALG_TEST_DIFF_DIR environment variable to save to "
+                + "a set location. By default diffs will be saved to a subdirectory according "
+                + "to algorithm name and a timestamp. To save specifically to the set directory "
+                + "and overwrite contents, set GEOGENALG_TEST_DIFF_DIR_SPECIFIC=true.",
+                category=DiffWarning,
+                stacklevel=1,
+            )
+            diff_dir = Path(gettempdir()) / "geogenalg_tests"
+        else:
+            diff_dir = Path(diff_dir)
+
+        if not dir_is_specific:
+            tz = datetime.now().astimezone().tzinfo
+            timestamp = datetime.now(tz=tz).strftime("%Y_%m_%d-%H_%M_%S")
+            prefix = self.algorithm.__class__.__name__ + "_"
+            diff_dir /= f"{prefix}{timestamp}"
+
+        assert_gdf_equal_save_diff(
+            result,
+            control,
+            assert_function_arguments=self.assert_function_arguments,
+            directory=diff_dir,
+        )
+
+    def run(self) -> None:  # noqa: C901
         """Run integration test.
 
         Raises
@@ -103,6 +140,7 @@ class IntegrationTest:
         assert input_data.crs == control.crs
 
         # Ensure input data was not modified.
+        # TODO: we should probably ensure that reference data is also unmodified
         assert_geodataframe_equal(input_data, input_data_before)
 
         # TODO: change these to failure states? However, that would
@@ -142,12 +180,6 @@ class IntegrationTest:
             msg = "Input has only single geometries but result does not."
             raise AssertionError(msg)
 
-        assert_geodataframe_equal(
-            result,
-            control,
-            **self.assert_function_arguments,
-        )
-
         if self.check_missing_reference:
             with pytest.raises(
                 MissingReferenceError, match=r"Reference data is missing."
@@ -164,5 +196,21 @@ class IntegrationTest:
                 self.algorithm.execute(
                     GeoDataFrame(geometry=[geom_type()]),
                 )
+
+        diff_env = os.environ.get("GEOGENALG_TEST_SAVE_DIFF")
+        try_to_save_diff = diff_env is not None and diff_env.lower() in {
+            "true",
+            "1",
+            "on",
+        }
+
+        if not try_to_save_diff:
+            assert_geodataframe_equal(
+                result,
+                control,
+                **self.assert_function_arguments,
+            )
+        else:
+            self._assert_and_save_diffs(result, control)
 
         # TODO: test reference data geom types?
