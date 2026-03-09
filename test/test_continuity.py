@@ -1416,7 +1416,8 @@ def test_add_contiguous_lines_information(
                 geometry=[
                     box(0, 0, 1, 1),
                     box(1, 0, 2, 1),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
             GeoDataFrame(
                 geometry=[
@@ -1432,7 +1433,8 @@ def test_add_contiguous_lines_information(
                             [0, 0],
                         ]
                     ),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
             GeoDataFrame(
                 geometry=[
@@ -1442,7 +1444,8 @@ def test_add_contiguous_lines_information(
                             [1, 1],
                         ]
                     ),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
         ),
         (
@@ -1450,7 +1453,8 @@ def test_add_contiguous_lines_information(
                 geometry=[
                     box(0, 0, 1, 1),
                     box(1, 0, 2, 1),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
             GeoDataFrame(
                 geometry=[
@@ -1469,20 +1473,23 @@ def test_add_contiguous_lines_information(
                             [0, 0],
                         ]
                     ),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
             GeoDataFrame(
                 geometry=[
                     LineString([[1, 0], [1, 1]]),
                     LineString([[2, 0], [2, 1]]),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
         ),
         (
             GeoDataFrame(
                 geometry=[
                     box(0, 0, 1, 1),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
             GeoDataFrame(
                 geometry=[
@@ -1495,12 +1502,16 @@ def test_add_contiguous_lines_information(
                             [0, 0],
                         ]
                     ),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
-            GeoDataFrame(geometry=[]),
+            GeoDataFrame(
+                geometry=[],
+                crs="EPSG:3857",
+            ),
         ),
         (
-            GeoDataFrame(),
+            GeoDataFrame(geometry=[], crs="EPSG:3857"),
             GeoDataFrame(
                 geometry=[
                     LineString(
@@ -1512,18 +1523,29 @@ def test_add_contiguous_lines_information(
                             [0, 0],
                         ]
                     ),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
-            GeoDataFrame(),
+            GeoDataFrame(
+                geometry=[],
+                crs="EPSG:3857",
+            ),
         ),
         (
             GeoDataFrame(
                 geometry=[
                     box(0, 0, 1, 1),
-                ]
+                ],
+                crs="EPSG:3857",
             ),
-            GeoDataFrame(),
-            GeoDataFrame(),
+            GeoDataFrame(
+                geometry=[],
+                crs="EPSG:3857",
+            ),
+            GeoDataFrame(
+                geometry=[],
+                crs="EPSG:3857",
+            ),
         ),
     ],
     ids=[
