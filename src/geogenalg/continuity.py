@@ -18,6 +18,7 @@ from shapely.ops import linemerge
 from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
+    explode_line,
     extend_line_to_nearest,
     get_topological_points,
 )
@@ -859,3 +860,45 @@ def add_contiguous_lines_information(  # noqa: PLR0913
         return gdf
 
     return concat(list(starmap(_flag, inputs)))
+
+
+def get_segments_in_polygon_exteriors_but_not_in_lines(
+    polygons: GeoDataFrame,
+    lines: GeoDataFrame,
+) -> GeoDataFrame:
+    """Find line segments present in polygons but not lines.
+
+    This is primarily meant to be used with polygons representing water areas
+    and lines representing corresponding shorelines, with the difference that
+    the polygons are split into parts with edges not present in shorelines.
+
+    Args:
+    ----
+        polygons: GeoDataFrame with the polygons.
+        lines: GeoDataFrame with the lines.
+
+    Returns:
+    -------
+        GeoDataFrame with located segments. Contains only geometries.
+
+    """
+    if polygons.empty or lines.empty:
+        return GeoDataFrame()
+
+    shoreline_filtered = lines.loc[lines.intersects(polygons.union_all())]
+    gdf = polygons.copy()
+
+    gdf.geometry = gdf.geometry.exterior.apply(Polygon)
+    gdf.geometry = gdf.geometry.boundary.apply(explode_line)
+    gdf = gdf.explode()
+    gdf = gdf.overlay(shoreline_filtered, how="difference")
+
+    # We've exploded things, it's not useful and even confusing to keep
+    # attribute data in, so let's get rid of it by returning the geoseries
+    # as a gdf.
+    gdf = gdf.loc[~gdf.geometry.is_empty].geometry.to_frame()
+
+    # If polygons have shared segments, both of them are still in
+    # so remove them
+    gdf.geometry = gdf.geometry.normalize()
+    return gdf.drop_duplicates()
