@@ -26,8 +26,8 @@ from geogenalg.testing import (
 
 
 def test_assert_gdf_equal_index_mismatch():
-    TemporaryDirectory()
-    temp_dir_path = Path()
+    temp_dir = TemporaryDirectory()
+    temp_dir_path = Path(temp_dir.name)
 
     gdf_result = GeoDataFrame(
         index=[1, 3, 5],
@@ -80,8 +80,8 @@ def test_assert_gdf_equal_index_mismatch():
 
 
 def test_assert_gdf_equal_save_attribute_geom():
-    TemporaryDirectory()
-    temp_dir_path = Path()
+    temp_dir = TemporaryDirectory()
+    temp_dir_path = Path(temp_dir.name)
 
     gdf_result = GeoDataFrame(
         {
