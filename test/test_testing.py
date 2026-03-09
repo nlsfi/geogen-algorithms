@@ -3,12 +3,11 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
-
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import ClassVar
+from warnings import catch_warnings
 
 import pytest
 from geopandas import GeoDataFrame, read_file
@@ -18,6 +17,7 @@ from shapely import Point, Polygon, box
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.testing import (
+    DiffWarning,
     GeoPackageInput,
     assert_gdf_equal_save_diff,
     get_alg_results_from_geopackage,
@@ -48,8 +48,9 @@ def test_assert_gdf_equal_index_mismatch():
         crs="EPSG:3857",
     )
 
-    with pytest.raises(AssertionError):
-        assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
+    with pytest.raises(AssertionError):  # noqa: SIM117
+        with catch_warnings(category=DiffWarning, action="ignore"):
+            assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
     result_mismatches_path = temp_dir_path / "result_features_not_in_control.gpkg"
@@ -98,8 +99,9 @@ def test_assert_gdf_equal_save_attribute_geom():
         crs="EPSG:3857",
     )
 
-    with pytest.raises(AssertionError):
-        assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
+    with pytest.raises(AssertionError):  # noqa: SIM117
+        with catch_warnings(category=DiffWarning, action="ignore"):
+            assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
     attributediff = temp_dir_path / "attributediff.csv"
@@ -132,8 +134,9 @@ def test_assert_gdf_equal_save_diff_geom():
         crs="EPSG:3857",
     )
 
-    with pytest.raises(AssertionError):
-        assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
+    with pytest.raises(AssertionError):  # noqa: SIM117
+        with catch_warnings(category=DiffWarning, action="ignore"):
+            assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
     geomdiff_path = temp_dir_path / "geomdiff.gpkg"
