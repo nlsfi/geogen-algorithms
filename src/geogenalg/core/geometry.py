@@ -823,7 +823,7 @@ def assign_nearest_z(
 
 
 def largest_part(
-    geom: BaseMultipartGeometry,
+    geom: BaseGeometry,
     *,
     size_function: Callable[[BaseGeometry], float] | None = None,
 ) -> BaseGeometry:
@@ -831,6 +831,8 @@ def largest_part(
 
     Does not work for MultiPoints. By default size is determined by
     length for MultiLineStrings, and area for MultiPolygons.
+
+    If input geometry is not a multigeometry, it is returned unchanged.
 
     Args:
     ----
@@ -844,12 +846,20 @@ def largest_part(
 
     Raises:
     ------
-        TypeError: If input geometry is a MultiPoint.
+        TypeError: If input geometry is a (Multi)Point.
+        NotImplementedError: if input geometry is a GeometryCollection.
 
     """
-    if isinstance(geom, MultiPoint):
-        msg = "Can't reduce MultiPoint to largest."
+    if isinstance(geom, MultiPoint | Point):
+        msg = "Can't reduce (Multi)Point to largest."
         raise TypeError(msg)
+
+    if isinstance(geom, GeometryCollection):
+        msg = "Not implemented for geometry collection."
+        raise NotImplementedError(msg)
+
+    if not isinstance(geom, MultiPolygon | MultiLineString):
+        return geom
 
     if size_function is None:
         size_function = length if isinstance(geom, MultiLineString) else area
