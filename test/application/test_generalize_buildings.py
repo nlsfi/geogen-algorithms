@@ -32,13 +32,10 @@ UNIQUE_ID_COLUMN = "mtk_id"
 
 def test_generalize_buildings_50k(testdata_path: Path) -> None:
     gpkg = GeoPackagePath(testdata_path / "buildings_helsinki.gpkg")
-    gpkg_control = GeoPackagePath(
-        testdata_path / "buildings_generalized_50k_helsinki.gpkg"
-    )
 
     IntegrationTest(
-        input_uri=gpkg.to_input("single_parts"),
-        control_uri=gpkg_control.to_input("control"),
+        input_uri=gpkg.to_input("buildings"),
+        control_uri=gpkg.to_input("control_50k"),
         algorithm=GeneralizeBuildings(
             area_threshold_for_all_buildings=5,
             area_threshold_for_low_priority_buildings=100,
@@ -58,14 +55,11 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
 
 
 def test_generalize_buildings_100k(testdata_path: Path) -> None:
-    gpkg = GeoPackagePath(testdata_path / "buildings_generalized_50k_helsinki.gpkg")
-    gpkg_control = GeoPackagePath(
-        testdata_path / "buildings_generalized_100k_helsinki.gpkg"
-    )
+    gpkg = GeoPackagePath(testdata_path / "buildings_helsinki.gpkg")
 
     IntegrationTest(
-        input_uri=gpkg.to_input("control"),
-        control_uri=gpkg_control.to_input("control"),
+        input_uri=gpkg.to_input("control_50k"),
+        control_uri=gpkg.to_input("control_100k"),
         algorithm=GeneralizeBuildings(
             area_threshold_for_all_buildings=10,
             area_threshold_for_low_priority_buildings=500,
