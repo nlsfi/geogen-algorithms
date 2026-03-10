@@ -128,3 +128,37 @@ def hash_index_from_old_ids(
         gdf = gdf.drop(old_ids_column, axis=1)
 
     return gdf
+
+
+def hash_index_from_geometry(
+    data: GeoDataFrame,
+    hash_prefix: str,
+) -> GeoDataFrame:
+    """Change dataframe index to a hash value based on an old IDs column.
+
+    Args:
+    ----
+        data: GeoDataFrame to process.
+        hash_prefix: Prefix to use in hash input, can be used to identify an algorithm
+            so that two algorithms can't produce the same output.
+
+    Returns:
+    -------
+        GeoDataFrame with the processed index.
+
+    """
+    if data.empty:
+        return GeoDataFrame(geometry=[], crs=data.crs)
+
+    gdf = data.copy()
+
+    gdf["temp_index"] = gdf.geometry.to_wkt().apply(
+        lambda wkt: sha256(
+            (hash_prefix + wkt).encode(),
+        ).hexdigest()
+    )
+
+    gdf = gdf.set_index("temp_index")
+    gdf.index.name = data.index.name
+
+    return gdf
