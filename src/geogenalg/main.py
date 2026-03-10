@@ -28,7 +28,9 @@ from geopandas import GeoDataFrame, read_file
 from pandas import Series, concat
 
 from geogenalg.application import BaseAlgorithm
-from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
+from geogenalg.application.generalize_building_areas_by_parcel import (
+    GeneralizeBuildingAreasByParcel,
+)
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.application.generalize_cliffs import GeneralizeCliffs
 from geogenalg.application.generalize_clusters_to_centroids import (
@@ -376,7 +378,7 @@ def build_app() -> None:  # noqa: PLR0914
         "buildings": GeneralizeBuildings,
         "shared_paths": GeneralizeSharedPaths,
         "power_lines": GeneralizePowerLines,
-        "building_areas": GeneralizeBuildingAreas,
+        "building_areas_by_parcel": GeneralizeBuildingAreasByParcel,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
