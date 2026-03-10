@@ -9,7 +9,11 @@ from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 from shapely import Point
 
-from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
+from geogenalg.identity import (
+    hash_duplicate_indexes,
+    hash_index_from_geometry,
+    hash_index_from_old_ids,
+)
 
 
 @pytest.mark.parametrize(
@@ -226,5 +230,55 @@ def test_hash_index_from_old_ids(
 
     assert_geodataframe_equal(
         result,
+        control,
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_data", "hash_prefix", "control"),
+    [
+        (
+            GeoDataFrame(geometry=[Point(0, 0)]),
+            "test",
+            GeoDataFrame(
+                index=[
+                    "82cd623bbcbe44b15a7c77bb80c94abc2c019eb76f62e7aa9e519fa40844c9dc"
+                ],
+                geometry=[Point(0, 0)],
+            ),
+        ),
+        (
+            GeoDataFrame(geometry=[]),
+            "test",
+            GeoDataFrame(
+                geometry=[],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[Point(5, 0)],
+            ),
+            "other",
+            GeoDataFrame(
+                index=[
+                    "0499cf748f3220845eb9bd0db42aff3247db1972052224849bd707e0ee37786a"
+                ],
+                geometry=[Point(5, 0)],
+            ),
+        ),
+    ],
+    ids=[
+        "point",
+        "empty",
+        "hash_prefix",
+    ],
+)
+def test_hash_index_from_geometry(
+    input_data: GeoDataFrame,
+    hash_prefix: str,
+    control: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        hash_index_from_geometry(input_data, hash_prefix),
         control,
     )
