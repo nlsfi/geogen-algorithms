@@ -13,6 +13,9 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
+from geogenalg.application.generalize_building_areas_by_geometry import (
+    GeneralizeBuildingAreasByGeometry,
+)
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 
 try:
@@ -379,6 +382,7 @@ def build_app() -> None:  # noqa: PLR0914
         "shared_paths": GeneralizeSharedPaths,
         "power_lines": GeneralizePowerLines,
         "building_areas_by_parcel": GeneralizeBuildingAreasByParcel,
+        "building_areas_by_geometry": GeneralizeBuildingAreasByGeometry,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
