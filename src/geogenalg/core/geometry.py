@@ -3,16 +3,14 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
-
 from collections.abc import Callable
 from enum import Enum
 from math import atan2, degrees, pi, sqrt
 from statistics import mean
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import column_stack, ndarray, vstack  # noqa: SC200
+from numpy import array, column_stack, ndarray, vstack  # noqa: SC200
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -33,6 +31,7 @@ from shapely import (
 )
 from shapely.affinity import rotate, scale, translate
 from shapely.coords import CoordinateSequence
+from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from shapely.ops import linemerge
 
@@ -1045,3 +1044,61 @@ def segment_direction(segment: LineString) -> float:
         return degrees(direction + 2 * pi)
 
     return degrees(direction)
+
+
+def equalize_z(  # noqa: C901, PLR0911
+    geom: BaseGeometry,
+    *,
+    method: Literal["min", "max"],
+) -> BaseGeometry:
+    """Set same z value for each vertex in geometry.
+
+    Args:
+    ----
+        geom: Geometry to process.
+        method: How z value is determined.
+
+    Returns:
+    -------
+        Processed geometry.
+
+    """
+    if not geom.has_z:
+        return geom
+
+    z_values = array([coord[2] for coord in get_coordinates(geom, include_z=True)])
+
+    z_to_set = float(z_values.min() if method == "min" else z_values.max())
+
+    def _z_for_coord_seq(
+        coords: CoordinateSequence,
+    ) -> list[tuple[float, float, float]]:
+        return [(coord[0], coord[1], z_to_set) for coord in coords]
+
+    def _make_point(coords: CoordinateSequence) -> Point:
+        return Point(coords[0][0], coords[0][1], z_to_set)
+
+    def _make_polygon(poly: Polygon) -> Polygon:
+        exterior_with_z = _z_for_coord_seq(poly.exterior.coords)
+        interiors_with_z = [_z_for_coord_seq(ring.coords) for ring in poly.interiors]
+        return Polygon(shell=exterior_with_z, holes=interiors_with_z)
+
+    if geom.geom_type == "Point":
+        return _make_point(geom.coords)
+    if geom.geom_type == "MultiPoint":
+        return MultiPoint([_make_point(geom.coords) for geom in geom.geoms])
+    if geom.geom_type == "LineString":
+        return LineString(_z_for_coord_seq(geom.coords))
+    if geom.geom_type == "LinearRing":
+        return LinearRing(_z_for_coord_seq(geom.coords))
+    if geom.geom_type == "MultiLineString":
+        return MultiLineString(
+            [LineString(_z_for_coord_seq(geom.coords)) for geom in geom.geoms]
+        )
+    if geom.geom_type == "Polygon":
+        return _make_polygon(geom)
+    if geom.geom_type == "MultiPolygon":
+        return MultiPolygon([_make_polygon(polygon) for polygon in geom.geoms])
+
+    msg = f"Function not implemented for geom type: {geom.geom_type}"
+    raise NotImplementedError(msg)
