@@ -20,7 +20,9 @@ from geogenalg.selection import remove_large_polygons
 
 @dataclass(frozen=True)
 class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
-    """Generalize polygons representing buildings and property parcels.
+    """Generalize polygons representing buildings.
+
+    Generalization is done according to property parcels the buildings reside in.
 
     Output contains generalized building-area polygons.
 

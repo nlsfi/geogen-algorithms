@@ -434,6 +434,7 @@ def explode_line(line: LineString | MultiLineString) -> MultiLineString:
         MultiLineString where each segment is its own part.
 
     """
+    # TODO: switch to using shapely.get_segments() once we have shapely >=2.2.0
 
     def _linestring_to_segments(line: LineString) -> list[LineString]:
         return [
