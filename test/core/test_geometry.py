@@ -3,10 +3,10 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 import math
 import re
 from collections.abc import Callable
+from typing import Literal
 
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
@@ -22,7 +22,14 @@ from shapely import (
     to_wkt,
     unary_union,
 )
-from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
+from shapely.geometry import (
+    LinearRing,
+    LineString,
+    MultiLineString,
+    MultiPoint,
+    Point,
+    Polygon,
+)
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 
 from geogenalg.core.exceptions import (
@@ -37,6 +44,7 @@ from geogenalg.core.geometry import (
     chaikin_smooth_keep_topology,
     chaikin_smooth_skip_coords,
     elongation,
+    equalize_z,
     explode_line,
     extend_line_to_nearest,
     extract_interior_rings,
@@ -1561,3 +1569,160 @@ def test_segment_direction(geom: LineString, expected: float):
 def test_segment_direction_raises(geom: LineString, msg: str):
     with pytest.raises(GeometryOperationError, match=re.escape(msg)):
         segment_direction(geom)
+
+
+@pytest.mark.parametrize(
+    ("geom", "method", "expected"),
+    [
+        (
+            Point(0, 0, 1),
+            "min",
+            Point(0, 0, 1),
+        ),
+        (
+            MultiPoint(
+                [
+                    Point(0, 0, 1),
+                    Point(2, 2, 2),
+                    Point(2, 4, 6),
+                ]
+            ),
+            "min",
+            MultiPoint(
+                [
+                    Point(0, 0, 1),
+                    Point(2, 2, 1),
+                    Point(2, 4, 1),
+                ]
+            ),
+        ),
+        (
+            LineString([[0, 0, 1], [1, 0, 0]]),
+            "min",
+            LineString([[0, 0, 0], [1, 0, 0]]),
+        ),
+        (
+            MultiLineString(
+                [
+                    LineString([[0, 0, 1], [1, 0, 0]]),
+                    LineString([[5, 5, 10], [6, 6, 12]]),
+                ]
+            ),
+            "max",
+            MultiLineString(
+                [
+                    LineString([[0, 0, 12], [1, 0, 12]]),
+                    LineString([[5, 5, 12], [6, 6, 12]]),
+                ]
+            ),
+        ),
+        (
+            Polygon([[0, 0, 0], [1, 0, 1], [1, 1, 2], [0, 1, 3]]),
+            "max",
+            Polygon([[0, 0, 3], [1, 0, 3], [1, 1, 3], [0, 1, 3]]),
+        ),
+        (
+            Polygon(
+                shell=[[0, 0, 0], [1, 0, 1], [1, 1, 2], [0, 1, 3]],
+                holes=[
+                    [
+                        [0.25, 0.25, 4],
+                        [0.75, 0.25, 5],
+                        [0.75, 0.75, 6],
+                        [0.25, 0.75, 7],
+                    ]
+                ],
+            ),
+            "max",
+            Polygon(
+                shell=[[0, 0, 7], [1, 0, 7], [1, 1, 7], [0, 1, 7]],
+                holes=[
+                    [
+                        [0.25, 0.25, 7],
+                        [0.75, 0.25, 7],
+                        [0.75, 0.75, 7],
+                        [0.25, 0.75, 7],
+                    ]
+                ],
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        [
+                            [0, 0, 0],
+                            [1, 0, 1],
+                            [1, 1, 2],
+                            [0, 1, 3],
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            [10, 10, 3],
+                            [11, 10, 4],
+                            [11, 11, 5],
+                            [10, 11, 6],
+                        ]
+                    ),
+                ]
+            ),
+            "max",
+            MultiPolygon(
+                [
+                    Polygon(
+                        [
+                            [0, 0, 6],
+                            [1, 0, 6],
+                            [1, 1, 6],
+                            [0, 1, 6],
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            [10, 10, 6],
+                            [11, 10, 6],
+                            [11, 11, 6],
+                            [10, 11, 6],
+                        ]
+                    ),
+                ]
+            ),
+        ),
+        (
+            LinearRing([[0, 0, 0], [1, 0, 1], [1, 1, 2], [0, 1, 3]]),
+            "min",
+            LinearRing([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]),
+        ),
+        (
+            LinearRing([[0, 0], [1, 0], [1, 1], [0, 1]]),
+            "min",
+            LinearRing([[0, 0], [1, 0], [1, 1], [0, 1]]),
+        ),
+    ],
+    ids=[
+        "point",
+        "multipoint",
+        "linestring",
+        "multilinestring",
+        "polygon",
+        "polygon_with_hole",
+        "multipolygon",
+        "linearring",
+        "2d",
+    ],
+)
+def test_equalize_z(
+    geom: BaseGeometry,
+    method: Literal["min", "max"],
+    expected: BaseGeometry,
+):
+    assert equalize_z(geom, method=method) == expected
+
+
+def test_equalize_z_raises():
+    with pytest.raises(
+        NotImplementedError,
+        match=re.escape("Function not implemented for geom type: GeometryCollection"),
+    ):
+        equalize_z(GeometryCollection([Point(0, 0, 1)]), method="min")
