@@ -884,7 +884,7 @@ def get_segments_in_polygon_exteriors_but_not_in_lines(
     if polygons.empty or lines.empty:
         return GeoDataFrame(geometry=[], crs=polygons.crs)
 
-    boundary = polygons.geometry.exterior.apply(Polygon).boundary.union_all()
+    boundary = polygons.geometry.exterior.union_all()
     segments = boundary.difference(lines.union_all())
 
     if segments.is_empty:
