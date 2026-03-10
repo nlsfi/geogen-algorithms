@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -18,6 +17,7 @@ from geogenalg.analyze import (
 )
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import assign_nearest_z, equalize_z
 from geogenalg.exaggeration import extract_narrow_polygon_parts
 from geogenalg.identity import hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
@@ -158,8 +158,23 @@ class GeneralizeBuildings(BaseAlgorithm):
             all_building_centroids_gdf,
         )
 
+        small_buildings_gdf = assign_nearest_z(
+            data,
+            small_buildings_gdf,
+        )
+
         large_buildings_gdf = self._generalize_polygon_buildings(
             classified_gdfs["large_polygons"],
+        )
+
+        large_buildings_gdf = assign_nearest_z(
+            data,
+            large_buildings_gdf,
+        )
+        # We have z values now, but they might differ in different vertices of
+        # the building. Therefore go set them to the lowest z value found.
+        large_buildings_gdf.geometry = large_buildings_gdf.geometry.apply(
+            lambda geom: equalize_z(geom, method="min")
         )
 
         result = concat(
