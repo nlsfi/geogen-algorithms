@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from dataclasses import dataclass
 from typing import ClassVar, override
 
@@ -12,6 +11,7 @@ from geopandas import GeoDataFrame
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.selection import remove_close_line_segments, remove_short_lines
+from geogenalg.split import explode_and_hash_id
 
 
 @supports_identity
@@ -64,4 +64,5 @@ class GeneralizeCliffs(BaseAlgorithm):
             raise MissingReferenceError
 
         result = remove_close_line_segments(data, roads_data, self.buffer_size)
-        return remove_short_lines(result, self.length_threshold)
+        result = remove_short_lines(result, self.length_threshold)
+        return explode_and_hash_id(result, "cliffs")
