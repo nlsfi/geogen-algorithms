@@ -168,6 +168,10 @@ class IntegrationTest:
             msg = "Control data has mixed 2.5D and 2D geometries."
             raise AssertionError(msg)
 
+        if control.has_z.all() != result.has_z.all():
+            msg = "Control or result data has z when other does not."
+            raise AssertionError(msg)
+
         input_has_only_single_geometries = all(
             "Multi" not in geom_type
             for geom_type in input_data.geometry.geom_type.values
