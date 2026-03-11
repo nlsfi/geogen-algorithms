@@ -8,12 +8,13 @@ from collections.abc import Callable
 from typing import Any
 
 from geopandas.geodataframe import GeoDataFrame
-from pandas import Series, concat
+from pandas import Series
 from shapely import MultiPoint, Point
 from sklearn.cluster import DBSCAN
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import mean_z
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 def dbscan_cluster_ids(
@@ -129,6 +130,7 @@ def get_cluster_centroids(
         return centroid
 
     gdf.geometry = gdf.geometry.apply(_make_centroid)
+    gdf.crs = input_gdf.crs
 
     return gdf
 
@@ -222,4 +224,4 @@ def reduce_nearby_points_by_clustering(
 
         clustered_points_gdfs.append(representative_point_gdf)
 
-    return concat(clustered_points_gdfs)
+    return combine_gdfs(clustered_points_gdfs)

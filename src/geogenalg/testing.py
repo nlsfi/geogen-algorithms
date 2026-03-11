@@ -7,15 +7,20 @@ from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory, gettempdir
-from typing import Any, Literal, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 from warnings import warn
 
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
-from pandas import DataFrame, concat
 
 from geogenalg.application import BaseAlgorithm
-from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+from geogenalg.utility.dataframe_processing import (
+    combine_gdfs,
+    read_gdf_from_file_and_set_index,
+)
+
+if TYPE_CHECKING:
+    from pandas import DataFrame
 
 logger = getLogger(__name__)
 
@@ -237,7 +242,7 @@ def get_test_gdfs(
             )
             for uri in input_uri
         ]
-        input_data = cast("GeoDataFrame", concat(gdfs))
+        input_data = cast("GeoDataFrame", combine_gdfs(gdfs))
     else:
         input_data = read_gdf_from_file_and_set_index(
             input_uri.file,

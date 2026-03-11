@@ -8,7 +8,7 @@ from typing import ClassVar
 
 from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
-from pandas import Series, concat
+from pandas import Series
 from shapely import box
 from shapely.geometry import Polygon
 
@@ -27,6 +27,7 @@ from geogenalg.selection import (
     remove_small_holes,
     remove_small_polygons,
 )
+from geogenalg.utility.dataframe_processing import combine_gdfs
 from geogenalg.utility.fix_geometries import (
     drop_empty_geometries,
     fix_invalid_geometries,
@@ -128,7 +129,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         # Create centroids for small and large polygons
-        classified_gdfs["small_polygons"] = concat(
+        classified_gdfs["small_polygons"] = combine_gdfs(
             [
                 classified_gdfs["small_polygons"],
                 polygon_buildings_gdf[always_point_buildings],
@@ -142,13 +143,13 @@ class GeneralizeBuildings(BaseAlgorithm):
         large_building_centroids_gdf.geometry = large_building_centroids_gdf.centroid
 
         # Combine original point buildings with centroids of small polygons
-        small_buildings_gdf = concat(
+        small_buildings_gdf = combine_gdfs(
             [point_buildings_gdf, small_building_centroids_gdf],
         )
 
         # Combine centroids of large polygons with all small building points
         all_building_centroids_gdf = GeoDataFrame(
-            concat(
+            combine_gdfs(
                 [large_building_centroids_gdf, small_buildings_gdf],
             ),
             crs=point_buildings_gdf.crs,
@@ -178,7 +179,7 @@ class GeneralizeBuildings(BaseAlgorithm):
             lambda geom: equalize_z(geom, method="min")
         )
 
-        result = concat(
+        result = combine_gdfs(
             [
                 small_buildings_gdf,
                 large_buildings_gdf,
@@ -241,7 +242,7 @@ class GeneralizeBuildings(BaseAlgorithm):
             self.original_area_column,
         )
 
-        return concat(
+        return combine_gdfs(
             [low_priority_buildings_gdf, other_buildings_gdf],
         )
 
@@ -293,7 +294,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         # Dissolve the expanded narrow parts and already large enough parts
-        result_gdf = concat([simplified_gdf, narrow_parts_gdf])
+        result_gdf = combine_gdfs([simplified_gdf, narrow_parts_gdf])
         result_gdf["__temp_id"] = result_gdf.index
         result_gdf = dissolve_and_inherit_attributes(
             result_gdf,

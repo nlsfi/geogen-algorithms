@@ -9,13 +9,13 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
-from pandas import concat
 
 from geogenalg.analyze import calculate_coverage
 from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.merge import buffer_and_merge_polygons
 from geogenalg.selection import remove_large_polygons
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,7 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
         )
 
         # 1.3 - Combine residential buildings with filtered non-residential buildings
-        filtered_buildings = concat(
+        filtered_buildings = combine_gdfs(
             [
                 result_gdf[
                     result_gdf[self.building_type_column]

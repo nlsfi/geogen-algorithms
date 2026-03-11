@@ -17,7 +17,7 @@ from geogenalg.core.exceptions import GeoCombineError
 class ConcatParameters(TypedDict):
     """Types for pandas.concat."""
 
-    axis: NotRequired[Literal[0]]
+    axis: NotRequired[Literal[0, 1]]
     join: NotRequired[Literal["inner", "outer"]]
     ignore_index: NotRequired[bool]
     verify_integrity: NotRequired[bool]
