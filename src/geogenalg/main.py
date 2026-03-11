@@ -28,7 +28,7 @@ except ImportError:
     sys.exit(0)
 
 from geopandas import GeoDataFrame, read_file
-from pandas import Series, concat
+from pandas import Series
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.application.generalize_building_areas_by_parcel import (
@@ -51,7 +51,10 @@ from geogenalg.application.generalize_watercourse_areas import (
 )
 from geogenalg.application.keep_intersection import KeepIntersection
 from geogenalg.application.remove_overlap import RemoveOverlap
-from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+from geogenalg.utility.dataframe_processing import (
+    combine_gdfs,
+    read_gdf_from_file_and_set_index,
+)
 
 GEOPACKAGE_URI_HELP = (
     "Path to a GeoPackage, with layer name optionally specified, "
@@ -329,7 +332,7 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
             if reference.name not in reference_data:
                 reference_data[reference.name] = reference_gdf
             else:
-                reference_data[reference.name] = concat(
+                reference_data[reference.name] = combine_gdfs(
                     [
                         reference_data[reference.name],
                         reference_gdf,

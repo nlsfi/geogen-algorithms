@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from typing import ClassVar, cast, override
 
 from geopandas import GeoDataFrame
-from pandas import concat
 from pygeoops import centerline
 from shapely.geometry import Polygon
 
@@ -33,6 +32,7 @@ from geogenalg.selection import (
     remove_disconnected_short_lines,
 )
 from geogenalg.split import explode_and_hash_id
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
@@ -99,7 +99,7 @@ class GeneralizePowerLines(BaseAlgorithm):
                 fences,
                 substations,
             )
-            gdf = concat(
+            gdf = combine_gdfs(
                 [
                     gdf.loc[
                         ~gdf[self.class_column].isin(
@@ -134,7 +134,7 @@ class GeneralizePowerLines(BaseAlgorithm):
                 higher_priority_lines,
             )
 
-            gdf = concat([higher_priority_lines, lower_priority_lines])
+            gdf = combine_gdfs([higher_priority_lines, lower_priority_lines])
 
         if self.simplification_tolerance > 0:
             gdf.geometry = gdf.geometry.simplify(self.simplification_tolerance)
@@ -257,7 +257,7 @@ class GeneralizePowerLines(BaseAlgorithm):
 
         parallels = parallels.drop("temp_polygon", axis=1)
 
-        combined = concat([gdf, parallels])
+        combined = combine_gdfs([gdf, parallels])
         combined = combined.drop([start_connected_column, end_connected_column], axis=1)
 
         return explode_and_hash_id(combined, "powerlines")

@@ -17,6 +17,10 @@ class InvalidGeometryError(Exception):
     pass
 
 
+class GeoCombineError(Exception):
+    pass
+
+
 class MissingReferenceError(Exception):
     def __init__(
         self,
