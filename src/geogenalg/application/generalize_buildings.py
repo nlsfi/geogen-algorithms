@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -11,6 +10,7 @@ from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
 from pandas import Series, concat
 from shapely import box
+from shapely.geometry import Polygon
 
 from geogenalg.analyze import (
     calculate_main_angle,
@@ -294,9 +294,13 @@ class GeneralizeBuildings(BaseAlgorithm):
         # Subtract buildings from the background
         result_gdf = drop_empty_geometries(result_gdf)
         result_gdf = fix_invalid_geometries(result_gdf)
+
         simplified_gdf = drop_empty_geometries(simplified_gdf)
         simplified_gdf = fix_invalid_geometries(simplified_gdf)
-        bounding_polygon = box(*simplified_gdf.total_bounds)
+
+        bounding_polygon = (
+            box(*simplified_gdf.total_bounds) if not simplified_gdf.empty else Polygon()
+        )
         difference_gdf = GeoDataFrame(
             geometry=[bounding_polygon.difference(result_gdf.union_all())],
             crs=input_gdf.crs,
