@@ -146,7 +146,7 @@ def dissolve_and_inherit_attributes(
 
     features = []
     for _, dissolved_row in dissolved_gdf.iterrows():
-        dissolved_geom = dissolved_row.geometry
+        dissolved_geom = dissolved_row[gdf.geometry.name]
 
         if by_column is None:
             intersecting_polygons_gdf = gdf[
@@ -194,7 +194,7 @@ def dissolve_and_inherit_attributes(
 
         features.append(feature)
 
-    output = GeoDataFrame(features, crs=input_gdf.crs)
+    output = GeoDataFrame(features, geometry=input_gdf.geometry.name, crs=input_gdf.crs)
     output.index.name = input_gdf.index.name
 
     return output

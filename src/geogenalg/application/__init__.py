@@ -94,11 +94,16 @@ class BaseAlgorithm(ABC):
                 )
                 raise GeometryTypeError(msg)
 
-        output = self._execute(data=data, reference_data=reference_data)
+        output = self._execute(
+            data=data.rename_geometry("geometry", inplace=False)
+            if data.geometry.name != "geometry"
+            else data,
+            reference_data=reference_data,
+        )
 
         # Ensure the output has the same geometry column name as the input data
         if output.geometry.name != data.geometry.name:
-            output = output.rename_geometry(data.geometry.name)
+            output = output.rename_geometry(data.geometry.name, inplace=False)
 
         # Ensure the output has the same index name as the input data
         if output.index.name != data.index.name:

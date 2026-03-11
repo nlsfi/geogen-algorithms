@@ -246,6 +246,11 @@ def get_test_gdfs(
         )
 
     input_data_before = input_data.copy()
+    # Rename geometry to simulate it not being called "geometry". Reading gdf
+    # from file sets it automatically to "geometry", even when it's named
+    # differently in a GeoPackage. Algorithms should work regardless of the
+    # name of the geometry columns and this allows testing for that.
+    input_data = input_data.rename_geometry("geom", inplace=False)
 
     result = get_alg_results_from_geopackage(
         alg,
@@ -259,6 +264,8 @@ def get_test_gdfs(
         unique_id_column,
         layer=control_uri.layer_name,
     )
+
+    input_data = input_data.rename_geometry("geometry", inplace=False)
 
     return TestGeoDataFrames(
         input_data,

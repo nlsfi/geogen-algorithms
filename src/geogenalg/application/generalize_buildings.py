@@ -394,7 +394,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         if input_gdf.empty:
             return input_gdf
 
-        return input_gdf[
+        return input_gdf.loc[
             (
                 (
                     input_gdf[self.original_area_column]

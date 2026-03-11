@@ -255,7 +255,7 @@ def test_get_alg_results_from_geopackage():
     assert_geodataframe_equal(result, control)
 
 
-def test_get_result_and_control():
+def test_get_test_gdfs():
     input_data = GeoDataFrame(
         {"id": ["1"], "column": ["input"]},
         geometry=[Point(0, 0)],
