@@ -9,7 +9,7 @@ from itertools import starmap
 from typing import Literal, cast
 
 from geopandas import GeoDataFrame
-from pandas import Series, concat
+from pandas import Series
 from shapely import force_2d
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
@@ -21,6 +21,7 @@ from geogenalg.core.geometry import (
     extend_line_to_nearest,
     get_topological_points,
 )
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 def find_all_endpoints(
@@ -198,7 +199,7 @@ def check_reference_line_connections(  # noqa: SC200
     """
     results = []
     other_lines = (
-        GeoDataFrame(concat(reference_gdfs))
+        GeoDataFrame(combine_gdfs(reference_gdfs))
         if reference_gdfs
         else GeoDataFrame(geometry=[])
     )
@@ -320,7 +321,7 @@ def inspect_dead_end_candidates(
     """
     new_connection = []
     other_lines = (
-        GeoDataFrame(concat(reference_gdfs))
+        GeoDataFrame(combine_gdfs(reference_gdfs))
         if reference_gdfs
         else GeoDataFrame(geometry=[])
     )
@@ -841,7 +842,9 @@ def add_contiguous_lines_information(  # noqa: PLR0913
         return filtered_gdf
 
     def _get_ref(_gdf: GeoDataFrame) -> GeoDataFrame:
-        return _gdf if reference_network.empty else concat([_gdf, reference_network])
+        return (
+            _gdf if reference_network.empty else combine_gdfs([_gdf, reference_network])
+        )
 
     inputs = (
         [
@@ -858,7 +861,7 @@ def add_contiguous_lines_information(  # noqa: PLR0913
     if not inputs:
         return gdf
 
-    return concat(list(starmap(_flag, inputs)))
+    return combine_gdfs(list(starmap(_flag, inputs)))
 
 
 def get_segments_in_polygon_exteriors_but_not_in_lines(

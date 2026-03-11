@@ -10,7 +10,6 @@ from typing import ClassVar, override
 
 from cartagen.utils.partitioning.network import network_faces
 from geopandas import GeoDataFrame
-from pandas import concat
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.continuity import connect_nearby_endpoints
@@ -23,6 +22,7 @@ from geogenalg.selection import (
     remove_parts_of_lines_on_polygon_edges,
     split_polygons_by_point_intersection,
 )
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
@@ -121,7 +121,7 @@ class GeneralizeFences(BaseAlgorithm):
         helper_lines_gdf = connect_nearby_endpoints(result_gdf, self.gap_threshold)
 
         # Combine original fence lines with helper lines
-        combined_gdf: GeoDataFrame = concat(
+        combined_gdf: GeoDataFrame = combine_gdfs(
             [result_gdf, helper_lines_gdf], ignore_index=True
         )
 
@@ -163,7 +163,7 @@ class GeneralizeFences(BaseAlgorithm):
         )
 
         # Combine filtered polygons
-        faces_gdf = concat(
+        faces_gdf = combine_gdfs(
             [polygon_gdf_with_point, polygon_gdf_without_point], ignore_index=True
         )
 

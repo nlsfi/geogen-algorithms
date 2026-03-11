@@ -3,18 +3,17 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from dataclasses import dataclass, field
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
-from pandas import concat
 
 from geogenalg.analyze import calculate_edge_adjacency
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.identity import hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
+from geogenalg.utility.dataframe_processing import combine_gdfs, combine_geoseries
 
 WATER_PROXIMITY_DISTANCE = 20
 WATER_RATIO_THRESHOLD = 0.5
@@ -71,7 +70,7 @@ class GeneralizeConservationAreas(BaseAlgorithm):
 
         # Merge reference layers from the dictionary into a single GeoDataFrame
         reference_geoms = [gdf.geometry for gdf in reference_data.values()]
-        combined_series = concat(reference_geoms, ignore_index=True)
+        combined_series = combine_geoseries(reference_geoms, ignore_index=True)
         reference_gdf = GeoDataFrame(geometry=combined_series)
         reference_gdf = reference_gdf.explode(index_parts=False).reset_index(drop=True)
         reference_gdf = reference_gdf[~reference_gdf.geometry.is_empty]
@@ -114,7 +113,7 @@ class GeneralizeConservationAreas(BaseAlgorithm):
         inland_areas_gdf = inland_generalize.execute(data=inland_areas_gdf)
 
         # Merge coastal and inland areas and allow dissolving within the feature class
-        result_gdf = concat([inland_areas_gdf, coastal_areas_gdf])
+        result_gdf = combine_gdfs([inland_areas_gdf, coastal_areas_gdf])
         result_gdf = result_gdf.drop(columns=[WATER_RATIO_COLUMN], errors="ignore")
 
         result_gdf = dissolve_and_inherit_attributes(

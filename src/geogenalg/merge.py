@@ -6,12 +6,12 @@
 from typing import Literal
 
 from geopandas import GeoDataFrame
-from pandas import concat
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString
 
 from geogenalg.attributes import inherit_attributes
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.dataframe_processing import combine_gdfs
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -288,7 +288,7 @@ def dissolve_polygon_layers(input_gdfs: list[GeoDataFrame]) -> GeoDataFrame:
 
     """
     # Combine all layers
-    combined = concat(input_gdfs, ignore_index=True)
+    combined = combine_gdfs(input_gdfs, ignore_index=True)
 
     # Validate geometry type
     if not check_gdf_geometry_type(combined, ["Polygon", "MultiPolygon"]):
