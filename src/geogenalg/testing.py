@@ -7,15 +7,20 @@ from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory, gettempdir
-from typing import Any, Literal, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 from warnings import warn
 
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
-from pandas import DataFrame, concat
 
 from geogenalg.application import BaseAlgorithm
-from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+from geogenalg.utility.dataframe_processing import (
+    combine_gdfs,
+    read_gdf_from_file_and_set_index,
+)
+
+if TYPE_CHECKING:
+    from pandas import DataFrame
 
 logger = getLogger(__name__)
 
@@ -237,7 +242,7 @@ def get_test_gdfs(
             )
             for uri in input_uri
         ]
-        input_data = cast("GeoDataFrame", concat(gdfs))
+        input_data = cast("GeoDataFrame", combine_gdfs(gdfs))
     else:
         input_data = read_gdf_from_file_and_set_index(
             input_uri.file,
@@ -246,6 +251,11 @@ def get_test_gdfs(
         )
 
     input_data_before = input_data.copy()
+    # Rename geometry to simulate it not being called "geometry". Reading gdf
+    # from file sets it automatically to "geometry", even when it's named
+    # differently in a GeoPackage. Algorithms should work regardless of the
+    # name of the geometry columns and this allows testing for that.
+    input_data = input_data.rename_geometry("geom", inplace=False)
 
     result = get_alg_results_from_geopackage(
         alg,
@@ -259,6 +269,8 @@ def get_test_gdfs(
         unique_id_column,
         layer=control_uri.layer_name,
     )
+
+    input_data = input_data.rename_geometry("geometry", inplace=False)
 
     return TestGeoDataFrames(
         input_data,

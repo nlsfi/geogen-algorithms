@@ -3,12 +3,132 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
-
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Literal, NotRequired, TypedDict, Unpack
 
 from geopandas import GeoDataFrame, read_file
+from geopandas.geoseries import GeoSeries
 from pandas import concat
+
+from geogenalg.core.exceptions import GeoCombineError
+
+
+class ConcatParameters(TypedDict):
+    """Types for pandas.concat."""
+
+    axis: NotRequired[Literal[0, 1]]
+    join: NotRequired[Literal["inner", "outer"]]
+    ignore_index: NotRequired[bool]
+    verify_integrity: NotRequired[bool]
+    sort: NotRequired[bool]
+    copy: NotRequired[bool]
+
+
+def _combine_geo_objects(
+    geo_objects: Iterable[GeoDataFrame] | Iterable[GeoSeries],
+    object_type: type[GeoDataFrame | GeoSeries],
+    **kwargs: Unpack[ConcatParameters],
+) -> GeoDataFrame | GeoSeries:
+    crs = set()
+    geom_names = set()
+
+    geo_objects = list(geo_objects)
+
+    if len(geo_objects) == 0:
+        msg = "Nothing to combine."
+        raise GeoCombineError(msg)
+
+    for geo_object in geo_objects:
+        if not isinstance(geo_object, object_type):
+            msg = f"Non-{object_type.__name__} object found."
+            raise GeoCombineError(msg)
+
+        if isinstance(geo_object, GeoDataFrame) and not geo_object.active_geometry_name:
+            msg = "GeoDataFrame does not have active geometry column set."
+            raise GeoCombineError(msg)
+
+        geom_names.add(geo_object.geometry.name)
+        crs.add(geo_object.crs)
+
+    if len(geo_objects) == 1:
+        return geo_objects[0]
+
+    if len(crs) != 1:
+        msg = "Different CRSs found in GeoDataFrames."
+        raise GeoCombineError(msg)
+
+    if len(geom_names) != 1:
+        msg = "Different geometry column names found in GeoDataFrames."
+        raise GeoCombineError(msg)
+
+    return concat(geo_objects, **kwargs)
+
+
+def combine_gdfs(
+    gdfs: Iterable[GeoDataFrame],
+    **kwargs: Unpack[ConcatParameters],
+) -> GeoDataFrame:
+    """Combine GeoDataFrames.
+
+    This is a wrapper for pandas.concat() with additional checks that make
+    noticing errors easier.
+
+    If single GeoDataFrame is passed, it is returned unchanged.
+
+    Returns
+    -------
+        Combined GeoDataFrames.
+
+    Raises
+    ------
+        GeoCombineError: If any check fails.
+
+    """
+    combined = _combine_geo_objects(
+        gdfs,
+        GeoDataFrame,
+        **kwargs,
+    )
+
+    if not isinstance(combined, GeoDataFrame):
+        msg = "Non-GeoDataFrame returned by concat."
+        raise GeoCombineError(msg)
+
+    return combined
+
+
+def combine_geoseries(
+    geoseries: Iterable[GeoSeries],
+    **kwargs: Unpack[ConcatParameters],
+) -> GeoSeries:
+    """Combine GeoSeries.
+
+    This is a wrapper for pandas.concat() with additional checks that make
+    noticing errors easier.
+
+    If single GeoSeries is passed, it is returned unchanged.
+
+    Returns
+    -------
+        Combined GeoSeries.
+
+    Raises
+    ------
+        GeoCombineError: If any check fails.
+
+    """
+    combined = _combine_geo_objects(
+        geoseries,
+        GeoSeries,
+        **kwargs,
+    )
+
+    if not isinstance(combined, GeoSeries):
+        msg = "Non-GeoSeries returned by concat."
+        raise GeoCombineError(msg)
+
+    return combined
 
 
 def read_gdf_from_file_and_set_index(
@@ -77,17 +197,17 @@ def group_gdfs_by_geometry_type(
     crs = next((gdf.crs for gdf in input_gdfs if not gdf.empty), None)
 
     polygon_gdf = (
-        GeoDataFrame(concat(polygon_gdfs, ignore_index=True), crs=crs)
+        GeoDataFrame(combine_gdfs(polygon_gdfs, ignore_index=True), crs=crs)
         if polygon_gdfs
         else GeoDataFrame(geometry=[], crs=crs)
     )
     line_gdf = (
-        GeoDataFrame(concat(line_gdfs, ignore_index=True), crs=crs)
+        GeoDataFrame(combine_gdfs(line_gdfs, ignore_index=True), crs=crs)
         if line_gdfs
         else GeoDataFrame(geometry=[], crs=crs)
     )
     point_gdf = (
-        GeoDataFrame(concat(point_gdfs, ignore_index=True), crs=crs)
+        GeoDataFrame(combine_gdfs(point_gdfs, ignore_index=True), crs=crs)
         if point_gdfs
         else GeoDataFrame(geometry=[], crs=crs)
     )

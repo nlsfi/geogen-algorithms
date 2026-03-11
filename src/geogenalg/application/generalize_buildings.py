@@ -3,14 +3,14 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from dataclasses import dataclass, field
 from typing import ClassVar
 
 from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
-from pandas import Series, concat
+from pandas import Series
 from shapely import box
+from shapely.geometry import Polygon
 
 from geogenalg.analyze import (
     calculate_main_angle,
@@ -26,6 +26,7 @@ from geogenalg.selection import (
     remove_small_holes,
     remove_small_polygons,
 )
+from geogenalg.utility.dataframe_processing import combine_gdfs
 from geogenalg.utility.fix_geometries import (
     drop_empty_geometries,
     fix_invalid_geometries,
@@ -127,7 +128,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         # Create centroids for small and large polygons
-        classified_gdfs["small_polygons"] = concat(
+        classified_gdfs["small_polygons"] = combine_gdfs(
             [
                 classified_gdfs["small_polygons"],
                 polygon_buildings_gdf[always_point_buildings],
@@ -141,13 +142,13 @@ class GeneralizeBuildings(BaseAlgorithm):
         large_building_centroids_gdf.geometry = large_building_centroids_gdf.centroid
 
         # Combine original point buildings with centroids of small polygons
-        small_buildings_gdf = concat(
+        small_buildings_gdf = combine_gdfs(
             [point_buildings_gdf, small_building_centroids_gdf],
         )
 
         # Combine centroids of large polygons with all small building points
         all_building_centroids_gdf = GeoDataFrame(
-            concat(
+            combine_gdfs(
                 [large_building_centroids_gdf, small_buildings_gdf],
             ),
             crs=point_buildings_gdf.crs,
@@ -162,7 +163,7 @@ class GeneralizeBuildings(BaseAlgorithm):
             classified_gdfs["large_polygons"],
         )
 
-        result = concat(
+        result = combine_gdfs(
             [
                 small_buildings_gdf,
                 large_buildings_gdf,
@@ -225,7 +226,7 @@ class GeneralizeBuildings(BaseAlgorithm):
             self.original_area_column,
         )
 
-        return concat(
+        return combine_gdfs(
             [low_priority_buildings_gdf, other_buildings_gdf],
         )
 
@@ -277,7 +278,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         # Dissolve the expanded narrow parts and already large enough parts
-        result_gdf = concat([simplified_gdf, narrow_parts_gdf])
+        result_gdf = combine_gdfs([simplified_gdf, narrow_parts_gdf])
         result_gdf["__temp_id"] = result_gdf.index
         result_gdf = dissolve_and_inherit_attributes(
             result_gdf,
@@ -294,9 +295,13 @@ class GeneralizeBuildings(BaseAlgorithm):
         # Subtract buildings from the background
         result_gdf = drop_empty_geometries(result_gdf)
         result_gdf = fix_invalid_geometries(result_gdf)
+
         simplified_gdf = drop_empty_geometries(simplified_gdf)
         simplified_gdf = fix_invalid_geometries(simplified_gdf)
-        bounding_polygon = box(*simplified_gdf.total_bounds)
+
+        bounding_polygon = (
+            box(*simplified_gdf.total_bounds) if not simplified_gdf.empty else Polygon()
+        )
         difference_gdf = GeoDataFrame(
             geometry=[bounding_polygon.difference(result_gdf.union_all())],
             crs=input_gdf.crs,
@@ -390,7 +395,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         if input_gdf.empty:
             return input_gdf
 
-        return input_gdf[
+        return input_gdf.loc[
             (
                 (
                     input_gdf[self.original_area_column]

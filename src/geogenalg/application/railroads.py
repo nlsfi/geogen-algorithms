@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import LineString, Point
 from sklearn.cluster import DBSCAN
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 def generalize_railroads(
@@ -211,7 +212,7 @@ def reduce_line_density(gdf: gpd.GeoDataFrame, distance_threshold=5, sampling_ra
 
     # Combine all sampled lines into a single GeoDataFrame
     reduced_gdf = gpd.GeoDataFrame(
-        pd.concat(reduced_lines, ignore_index=True), crs=gdf.crs
+        combine_gdfs(reduced_lines, ignore_index=True), crs=gdf.crs
     ).drop(columns=["cluster"])
 
     return reduced_gdf  # noqa
@@ -224,7 +225,7 @@ def generalize_sidetracks(sidetracks: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     outer_sidetracks = sidetracks[sidetracks["border"]]
     removed_dense_tracks = inner_sidetracks[::5]  # select every 5th
     gen_sidetracks = gpd.GeoDataFrame(
-        pd.concat([removed_dense_tracks, outer_sidetracks]), crs=sidetracks.crs
+        combine_gdfs([removed_dense_tracks, outer_sidetracks]), crs=sidetracks.crs
     )
     return gen_sidetracks  # noqa
 
@@ -308,7 +309,7 @@ def generalize_railtracks(
     gdf_sidetracks["cluster"] = clustering.labels_
 
     combined_tracks = gpd.GeoDataFrame(
-        pd.concat([gdf_maintracks, gdf_sidetracks]),
+        combine_gdfs([gdf_maintracks, gdf_sidetracks]),
         crs=gdf.crs,
     )
 
@@ -333,7 +334,7 @@ def generalize_railtracks(
 
     # Merge back into the original GeoDataFrame
     combined_tracks = gpd.GeoDataFrame(
-        pd.concat([combined_tracks.drop(maintracks.index), maintracks]), crs=gdf.crs
+        combine_gdfs([combined_tracks.drop(maintracks.index), maintracks]), crs=gdf.crs
     )
 
     """

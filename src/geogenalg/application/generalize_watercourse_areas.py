@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
-from pandas import concat
 
 from geogenalg.application import supports_identity
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.split import explode_and_hash_id
 from geogenalg.transform import thin_polygon_sections_to_lines
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
@@ -67,7 +67,7 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
         )
         lines = hash_duplicate_indexes(lines, "watercourseareas")
 
-        return concat(
+        return combine_gdfs(
             [
                 lines,
                 polygons,

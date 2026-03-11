@@ -5,7 +5,6 @@
 #  SPDX-License-Identifier: MIT
 from typing import Literal
 
-import geopandas as gpd
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
@@ -365,9 +364,9 @@ def calculate_main_angle(polygon: Polygon) -> float:
 
 
 def classify_polygons_by_size_of_minimum_bounding_rectangle(
-    input_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
     side_threshold: float,
-) -> dict[str, gpd.GeoDataFrame]:
+) -> dict[str, GeoDataFrame]:
     """Classifiy polygons as small or large based on the minimum bounding rectangle.
 
     Args:
@@ -393,10 +392,10 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
 
     if input_gdf.empty:
         return {
-            "small_polygons": gpd.GeoDataFrame(
+            "small_polygons": GeoDataFrame(
                 columns=input_gdf.columns, crs=input_gdf.crs
             ),
-            "large_polygons": gpd.GeoDataFrame(
+            "large_polygons": GeoDataFrame(
                 columns=input_gdf.columns, crs=input_gdf.crs
             ),
         }
@@ -428,11 +427,11 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
 
 
 def calculate_edge_adjacency(
-    input_gdf: gpd.GeoDataFrame,
-    reference_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
     buffer_size: float,
     result_column: str = "adjacency_ratio",
-) -> gpd.GeoDataFrame:
+) -> GeoDataFrame:
     """Calculate adjacency ratio using outer and inner halo buffers.
 
     Args:
