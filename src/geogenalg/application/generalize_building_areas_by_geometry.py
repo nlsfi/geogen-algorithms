@@ -39,6 +39,8 @@ class GeneralizeBuildingAreasByGeometry(BaseAlgorithm):
     """Tolerance for building simplification (Douglas-Peucker)."""
     simplify_tolerance_building_areas: float = 10.0
     """Tolerance for building simplification (Douglas-Peucker)."""
+    network_buffer_distance: float = 10.0
+    """How large a section will be removed close to roads from building areas."""
     reference_key: str = "roads"
     """Reference key for line data which building areas adapt to."""
 
@@ -70,7 +72,9 @@ class GeneralizeBuildingAreasByGeometry(BaseAlgorithm):
         gdf.geometry = gdf.simplify(self.simplify_tolerance_building_areas)
 
         # Remove sections around roads
-        buffered_network = reference_network.geometry.buffer(10).to_frame()
+        buffered_network = reference_network.geometry.buffer(
+            self.network_buffer_distance
+        ).to_frame()
         gdf = gdf.overlay(buffered_network, how="difference")
 
         # Dissolve to remove overlapping features and explode to single features
@@ -78,7 +82,7 @@ class GeneralizeBuildingAreasByGeometry(BaseAlgorithm):
         gdf = gdf.explode()
         gdf = gdf.loc[gdf.geometry.area > self.threshold_building_area]
 
-        gdf.geometry = gdf.geometry.buffer(5)
+        gdf.geometry = gdf.geometry.buffer(self.network_buffer_distance / 2)
         gdf = remove_small_holes(gdf, self.threshold_building_area_hole)
 
         gdf = assign_nearest_z(data, gdf)
