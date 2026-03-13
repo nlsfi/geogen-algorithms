@@ -54,6 +54,7 @@ linalg
 linemerge
 linestring
 loc
+multilinestring
 multipolygon
 nodata
 polygonize

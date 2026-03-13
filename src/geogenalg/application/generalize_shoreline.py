@@ -63,6 +63,9 @@ class GeneralizeShoreline(BaseAlgorithm):
         new_shoreline = water_areas_gdf.geometry.boundary.to_frame()
         new_shoreline = new_shoreline.explode()
 
+        # TODO: replace the whole buffering approach and use split_linear_geometry()
+        # to split new shoreline at each closest boundary of ungeneralized shoreline
+
         buffered_old_shoreline = data.copy()
         buffered_old_shoreline.geometry = buffered_old_shoreline.geometry.buffer(
             self.buffer_distance

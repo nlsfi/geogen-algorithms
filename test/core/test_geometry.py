@@ -56,10 +56,12 @@ from geogenalg.core.geometry import (
     move_to_point,
     oriented_envelope_dimensions,
     perforate_polygon_with_gdf_exteriors,
+    polygon_rings_to_multilinestring,
     remove_line_segments_at_wide_sections,
     remove_small_parts,
     scale_line_to_length,
     segment_direction,
+    split_linear_geometry,
 )
 
 
@@ -1726,3 +1728,205 @@ def test_equalize_z_raises():
         match=re.escape("Function not implemented for geom type: GeometryCollection"),
     ):
         equalize_z(GeometryCollection([Point(0, 0, 1)]), method="min")
+
+
+@pytest.mark.parametrize(
+    ("geom", "expected"),
+    [
+        (
+            box(0, 0, 1, 1),
+            MultiLineString(
+                [
+                    box(0, 0, 1, 1).exterior,
+                ]
+            ),
+        ),
+        (
+            Polygon(
+                shell=box(-2, -2, 2, 2).exterior.coords,
+                holes=[
+                    box(0, 0, 1, 1).exterior.coords,
+                ],
+            ),
+            MultiLineString(
+                [
+                    box(-2, -2, 2, 2).exterior,
+                    box(0, 0, 1, 1).exterior,
+                ]
+            ),
+        ),
+        (
+            Polygon(
+                shell=box(-20, -20, 20, 20).exterior.coords,
+                holes=[
+                    box(0, 0, 1, 1).exterior.coords,
+                    box(5, 5, 8, 8).exterior.coords,
+                ],
+            ),
+            MultiLineString(
+                [
+                    box(-20, -20, 20, 20).exterior,
+                    box(0, 0, 1, 1).exterior,
+                    box(5, 5, 8, 8).exterior,
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    box(0, 0, 1, 1),
+                ]
+            ),
+            MultiLineString(
+                [
+                    box(0, 0, 1, 1).exterior,
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    box(0, 0, 1, 1),
+                    box(5, 5, 6, 6),
+                ]
+            ),
+            MultiLineString(
+                [
+                    box(0, 0, 1, 1).exterior,
+                    box(5, 5, 6, 6).exterior,
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=box(-20, -20, 20, 20).exterior.coords,
+                        holes=[
+                            box(0, 0, 1, 1).exterior.coords,
+                        ],
+                    ),
+                    Polygon(
+                        shell=box(50, 50, 60, 60).exterior.coords,
+                        holes=[
+                            box(55, 55, 57, 57).exterior.coords,
+                        ],
+                    ),
+                ]
+            ),
+            MultiLineString(
+                [
+                    box(-20, -20, 20, 20).exterior.coords,
+                    box(0, 0, 1, 1).exterior.coords,
+                    box(50, 50, 60, 60).exterior.coords,
+                    box(55, 55, 57, 57).exterior.coords,
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "single_polygon_no_holes",
+        "single_polygon_one_hole",
+        "single_polygon_multiple_holes",
+        "multipolygon_single_part",
+        "multipolygon_multiple_parts",
+        "multipolygon_with_holes",
+    ],
+)
+def test_polygon_rings_to_multilinestring(
+    geom: Polygon | MultiLineString,
+    expected: MultiLineString,
+):
+    assert polygon_rings_to_multilinestring(geom) == expected
+
+
+@pytest.mark.parametrize(
+    ("geom", "split_with", "expected"),
+    [
+        (  # split_line_with_point_at_segment
+            LineString([[0, 0], [1, 0]]),
+            Point(0.5, 0),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [0.5, 0]]),
+                    LineString([[0.5, 0], [1, 0]]),
+                ]
+            ),
+        ),
+        (  # split_line_with_line_at_segment
+            LineString([[0, 0], [1, 0]]),
+            LineString([[0.5, -1], [0.5, 1]]),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [0.5, 0]]),
+                    LineString([[0.5, 0], [1, 0]]),
+                ]
+            ),
+        ),
+        (  # split_line_with_line_at_vertex
+            LineString([[0, 0], [0.5, 0], [1, 0]]),
+            LineString([[0.5, -1], [0.5, 1]]),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [0.5, 0]]),
+                    LineString([[0.5, 0], [1, 0]]),
+                ]
+            ),
+        ),
+        (  # split_ring_with_single_point_at_segment_no_change
+            LineString([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]),
+            Point(0.5, 0),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]),
+                ]
+            ),
+        ),
+        (  # split_ring_with_line_at_segment
+            LineString([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]),
+            LineString([[0.5, -5], [0.5, 5]]),
+            MultiLineString(
+                [
+                    LineString([[0.5, 1], [0, 1], [0, 0], [0.5, 0]]),
+                    LineString([[0.5, 0], [1, 0], [1, 1], [0.5, 1]]),
+                ]
+            ),
+        ),
+        (  # split_ring_with_line_at_segment
+            LineString([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]),
+            LineString([[-5, -5], [5, 5]]),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [1, 0], [1, 1]]),
+                    LineString([[1, 1], [0, 1], [0, 0]]),
+                ]
+            ),
+        ),
+        (  # split_ring_with_polygon_at_segment
+            LineString([[0, 0], [10, 0]]),
+            box(2, -2, 6, 6),
+            MultiLineString(
+                [
+                    LineString([[0, 0], [2, 0]]),
+                    LineString([[2, 0], [6, 0]]),
+                    LineString([[6, 0], [10, 0]]),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "split_line_with_point_at_segment",
+        "split_line_with_line_at_segment",
+        "split_line_with_line_at_vertex",
+        "split_ring_with_single_point_at_segment_no_change",
+        "split_ring_with_line_at_segment",
+        "split_ring_with_line_at_vertexes",
+        "split_ring_with_polygon_at_segment",
+    ],
+)
+def test_split_linear_geometry(
+    geom: LineString | LinearRing,
+    split_with: BaseGeometry,
+    expected: MultiLineString,
+):
+    assert split_linear_geometry(geom, split_with) == expected
