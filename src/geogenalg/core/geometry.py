@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from collections.abc import Callable
 from enum import Enum
+from itertools import chain
 from math import atan2, degrees, pi, sqrt
 from statistics import mean
 from typing import Literal, NamedTuple
@@ -33,7 +34,7 @@ from shapely.affinity import rotate, scale, translate
 from shapely.coords import CoordinateSequence
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
-from shapely.ops import linemerge
+from shapely.ops import linemerge, split
 
 from geogenalg.core.exceptions import (
     GeometryOperationError,
@@ -1103,3 +1104,110 @@ def equalize_z(  # noqa: C901, PLR0911
 
     msg = f"Function not implemented for geom type: {geom.geom_type}"
     raise NotImplementedError(msg)
+
+
+def polygon_rings_to_multilinestring(
+    polygon: Polygon | MultiPolygon,
+) -> MultiLineString:
+    """Get all rings of (Multi)Polygon as a MultiLineString.
+
+    Returns
+    -------
+        Rings as MultiLineString.
+
+    """
+
+    def _get_rings(single_polygon: Polygon) -> list[LinearRing]:
+        return [
+            single_polygon.exterior,
+            *list(single_polygon.interiors),
+        ]
+
+    if isinstance(polygon, Polygon):
+        return MultiLineString(_get_rings(polygon))
+
+    return MultiLineString(
+        list(chain.from_iterable(_get_rings(poly) for poly in polygon.geoms)),
+    )
+
+
+def split_linear_geometry(  # noqa: C901
+    in_geom: LineString | LinearRing,
+    split_with: BaseGeometry,
+) -> MultiLineString:
+    """Split linestring or linear ring.
+
+    The purpose of using this function over shapely.ops.split() is that it handles
+    a behavior where when splitting a closed linear geometry an extra part
+    is produced. For other cases prefer shapely's function.
+
+    Returns
+    -------
+        Processed geometry, always as a MultiLineString (even if no splitting)
+        occurred.
+
+    Raises
+    ------
+        NotImplementedError: If split_with is a GeometryCollection.
+        GeometryOperationError: If geometry couldn't be split as expected.
+
+    """
+    geom = in_geom
+    if isinstance(in_geom, LinearRing):
+        geom = LineString(in_geom)
+
+    if geom.is_empty or split_with.is_empty or not split_with.intersects(geom):
+        return MultiLineString([geom])
+
+    if not geom.is_ring:
+        return MultiLineString(split(geom, split_with).geoms)
+
+    modified_split_with = split_with
+
+    # If we're splitting with a (Multi)Polygon, use only its exterior and
+    # interior rings as lines, otherwise we'll remove whole sections of the
+    # input line, not split it.
+    if isinstance(split_with, Polygon | MultiPolygon):
+        modified_split_with = polygon_rings_to_multilinestring(split_with)
+    elif isinstance(split_with, GeometryCollection):
+        msg = "Split linear geometry with GeometryCollection not implemented."
+        raise NotImplementedError(msg)
+
+    splits_at = geom.intersection(modified_split_with)
+
+    # We can't really split a ring by just one point, and if we go ahead with a
+    # difference operation it gives an unwanted result with an extra part, so
+    # just return geometry unchanged.
+    if isinstance(splits_at, Point):
+        return MultiLineString([geom])
+
+    if not isinstance(splits_at, MultiPoint):
+        # This should never happen, but if it does let it be known explicitly.
+        msg = f"Got unexpected geometry type from intersection: {splits_at.geom_type}."
+        raise GeometryOperationError(msg)
+
+    if len(splits_at.geoms) < 2:  # noqa: PLR2004
+        return geom
+
+    diff = geom.difference(modified_split_with)
+
+    if not isinstance(diff, MultiLineString):
+        msg = f"Got unexpected geometry type from difference: {diff.geom_type}."
+        raise GeometryOperationError(msg)
+
+    # Extra part does not occur always, if geom is split to a correct number of
+    # parts already, retun already.
+    if len(diff.geoms) == len(splits_at.geoms):
+        return diff
+
+    # At this point we have a situation where there is an extra part added
+    # from the difference, as the first geometry in a MultiLineString.
+    # Fix by merging it with the last part.
+    parts_to_merge = [diff.geoms[0], diff.geoms[-1]]
+    parts = [linemerge(parts_to_merge), *list(diff.geoms)[1:-1]]
+
+    if len(splits_at.geoms) != len(parts):
+        msg = "Got unexpected amount of parts in split operation."
+        raise GeometryOperationError(msg)
+
+    return MultiLineString(parts)
