@@ -67,7 +67,9 @@ shapelysmooth
 simplifier
 simplifytolerance
 sindex
+sjoin
 sklearn
+splitters
 sqrt
 stacklevel
 starmap

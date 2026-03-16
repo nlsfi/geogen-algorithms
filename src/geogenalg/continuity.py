@@ -9,17 +9,21 @@ from itertools import starmap
 from typing import Literal, cast
 
 from geopandas import GeoDataFrame
+from geopandas.geoseries import GeoSeries
 from pandas import Series
 from shapely import force_2d
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
+from shapelysmooth import chaikin_smooth
 
 from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
+    extend_line_by,
     extend_line_to_nearest,
     get_topological_points,
+    split_linear_geometry,
 )
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
@@ -905,3 +909,64 @@ def get_segments_in_polygon_exteriors_but_not_in_lines(
         .explode()
         .reset_index(drop=True)
     )
+
+
+def smooth_contiguously(
+    input_gdf: GeoDataFrame,
+    *,
+    iterations: int = 5,
+) -> GeoDataFrame:
+    """Smooth lines in a GeoDataFrame without retaining feature ends.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with lines.
+        iterations: How many smoothing passes are performed.
+
+    Returns:
+    -------
+        GeoDataFrame with smoothed lines.
+
+    """
+    if input_gdf.empty:
+        return input_gdf[0:0].copy()
+
+    gdf = GeoDataFrame(
+        geometry=[
+            linemerge(input_gdf.union_all()),
+        ],
+        crs=input_gdf.crs,
+    ).explode()
+
+    gdf.geometry = gdf.geometry.apply(
+        lambda geom: chaikin_smooth(geom, iterations, keep_ends=not geom.is_ring),
+    )
+
+    splitters = GeoSeries(
+        get_topological_points(input_gdf.geometry),
+        crs=input_gdf.crs,
+    ).to_frame()
+    splitters.geometry = splitters.geometry.shortest_line(gdf.union_all())
+    splitters.geometry = splitters.geometry.apply(
+        lambda geom: extend_line_by(geom, 5, LineExtendFrom.BOTH)
+    )
+
+    gdf["__splitter"] = gdf.geometry.apply(
+        lambda geom: splitters.loc[splitters.geometry.intersects(geom)].union_all()
+    )
+
+    gdf.geometry = gdf[[gdf.geometry.name, "__splitter"]].apply(
+        lambda columns: split_linear_geometry(
+            columns[gdf.geometry.name],
+            columns["__splitter"],
+        ),
+        axis=1,
+    )
+    gdf = gdf.drop("__splitter", axis=1)
+    gdf = gdf.explode()
+
+    index_name = (
+        input_gdf.index.name if input_gdf.index.name is not None else "index_right"
+    )
+
+    return gdf.sjoin_nearest(input_gdf).set_index(index_name)
