@@ -30,6 +30,7 @@ from geogenalg.continuity import (
     get_segments_in_polygon_exteriors_but_not_in_lines,
     inspect_dead_end_candidates,
     process_lines_and_reconnect,
+    smooth_contiguously,
 )
 
 
@@ -1572,4 +1573,81 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
             lines,
         ),
         expected_gdf,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "iterations",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(geometry=[]),
+            5,
+            GeoDataFrame(geometry=[]),
+        ),
+        (
+            GeoDataFrame(
+                {"attribute": ["1", "2"]},
+                index=[1, 2],
+                geometry=[
+                    LineString([[0, 0], [1, 1]]),
+                    LineString([[1, 1], [2, 0]]),
+                ],
+            ),
+            1,
+            GeoDataFrame(
+                {"attribute": ["1", "2"]},
+                index=[1, 2],
+                geometry=[
+                    LineString([[0, 0], [0.75, 0.75], [1, 0.75]]),
+                    LineString([[1, 0.75], [1.25, 0.75], [2, 0]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"attribute": ["1", "2", "3", "4"]},
+                index=[1, 2, 3, 4],
+                geometry=[
+                    LineString([[0, 0], [1, 1]]),
+                    LineString([[1, 1], [2, 0]]),
+                    LineString([[2, 0], [1, -1]]),
+                    LineString([[1, -1], [0, 0]]),
+                ],
+            ),
+            1,
+            GeoDataFrame(
+                {"attribute": ["1", "2", "3", "4"]},
+                index=[1, 2, 3, 4],
+                geometry=[
+                    LineString([[0.25, 0], [0.25, 0.25], [0.75, 0.75], [1, 0.75]]),
+                    LineString([[1, 0.75], [1.25, 0.75], [1.75, 0.25], [1.75, 0]]),
+                    LineString([[1.75, 0], [1.75, -0.25], [1.25, -0.75], [1, -0.75]]),
+                    LineString([[1, -0.75], [0.75, -0.75], [0.25, -0.25], [0.25, 0]]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "non_ring",
+        "ring",
+    ],
+)
+def test_smooth_contiguously(
+    input_gdf: GeoDataFrame,
+    iterations: int,
+    expected_gdf: GeoDataFrame,
+):
+    result = smooth_contiguously(
+        input_gdf,
+        iterations=iterations,
+    )
+    assert_geodataframe_equal(
+        result,
+        expected_gdf,
+        check_like=True,
     )

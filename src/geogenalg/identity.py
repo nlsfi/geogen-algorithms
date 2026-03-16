@@ -62,7 +62,11 @@ def hash_duplicate_indexes(
 
 
 def hash_index_from_old_ids(
-    data: DataFrame, hash_prefix: str, old_ids_column: str, *, drop_old_ids: bool = True
+    data: DataFrame,
+    hash_prefix: str,
+    old_ids_column: str,
+    *,
+    drop_old_ids: bool = True,
 ) -> DataFrame:
     """Change dataframe index to a hash value based on an old IDs column.
 
