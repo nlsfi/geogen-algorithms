@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from geopandas import GeoDataFrame
 from shapelysmooth import chaikin_smooth
@@ -51,6 +51,10 @@ class GeneralizeLandcover(BaseAlgorithm):
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""
+    buffer_cap_style: Literal["round", "square", "flat"] = "square"
+    """Cap style used in buffer operations."""
+    buffer_join_style: Literal["round", "mitre", "bevel"] = "bevel"
+    """Join style used in buffer operations."""
     group_by: list[str] = field(default_factory=list)
     """Column(s) whose values define the groups to be dissolved."""
 
@@ -65,7 +69,9 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         def _buffer(gdf: GeoDataFrame, distance: float) -> None:
             gdf.geometry = gdf.geometry.buffer(
-                distance, cap_style="square", join_style="bevel"
+                distance,
+                cap_style=self.buffer_cap_style,
+                join_style=self.buffer_join_style,
             )
 
         # Create a positive_buffer to close narrow gaps between polygons
