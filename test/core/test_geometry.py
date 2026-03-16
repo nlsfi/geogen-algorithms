@@ -17,6 +17,7 @@ from shapely import (
     GeometryCollection,
     MultiPolygon,
     box,
+    equals_exact,
     from_wkt,
     length,
     to_wkt,
@@ -46,6 +47,7 @@ from geogenalg.core.geometry import (
     elongation,
     equalize_z,
     explode_line,
+    extend_line_by,
     extend_line_to_nearest,
     extract_interior_rings,
     extract_interior_rings_gdf,
@@ -56,6 +58,7 @@ from geogenalg.core.geometry import (
     move_to_point,
     oriented_envelope_dimensions,
     perforate_polygon_with_gdf_exteriors,
+    point_on_line,
     polygon_rings_to_multilinestring,
     remove_line_segments_at_wide_sections,
     remove_small_parts,
@@ -1930,3 +1933,89 @@ def test_split_linear_geometry(
     expected: MultiLineString,
 ):
     assert split_linear_geometry(geom, split_with) == expected
+
+
+@pytest.mark.parametrize(
+    ("line", "distance", "expected"),
+    [
+        (LineString([[0, 0], [1, 0]]), 10, Point(11, 0)),
+        (LineString([[0, 0], [1, 0]]), -10, Point(-10, 0)),
+        (LineString([[0, 0], [1, 1]]), -1.5, Point(-1.0606, -1.0606)),
+    ],
+    ids=[
+        "from_end",
+        "from_start",
+        "diagonal",
+    ],
+)
+def test_point_on_line(
+    line: LineString,
+    distance: float,
+    expected: Point,
+):
+    assert equals_exact(point_on_line(line, distance), expected, tolerance=0.5)
+
+
+def test_point_on_line_raises():
+    with pytest.raises(ValueError, match=re.escape("Line must only have two vertices")):
+        point_on_line(
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            10,
+        )
+
+
+@pytest.mark.parametrize(
+    ("line", "extend_by", "extend_from", "expected"),
+    [
+        (
+            LineString([[0, 0], [1, 0]]),
+            1.0,
+            LineExtendFrom.END,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            1.0,
+            LineExtendFrom.START,
+            LineString([[-1, 0], [0, 0], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            1.0,
+            LineExtendFrom.BOTH,
+            LineString([[-1, 0], [0, 0], [1, 0], [2, 0]]),
+        ),
+    ],
+    ids=[
+        "end",
+        "start",
+        "both",
+    ],
+)
+def test_extend_line_by(
+    line: LineString,
+    extend_by: float,
+    extend_from: LineExtendFrom,
+    expected: LineString,
+):
+    assert extend_line_by(line, extend_by, extend_from) == expected
+
+
+def test_extend_line_by_raises():
+    with pytest.raises(
+        ValueError, match=re.escape("Extension distance must be above zero.")
+    ):
+        extend_line_by(
+            LineString(),
+            -10,
+            extend_from=LineExtendFrom.START,
+        )
+
+    with pytest.raises(
+        GeometryOperationError, match=re.escape("Can't extend line with no length.")
+    ):
+        extend_line_by(
+            LineString(),
+            10,
+            extend_from=LineExtendFrom.START,
+        )

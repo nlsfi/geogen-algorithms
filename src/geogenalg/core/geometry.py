@@ -602,7 +602,10 @@ def extend_line_to_nearest(
     return merged
 
 
-def point_on_line(line: LineString, distance: float) -> Point:
+def point_on_line(
+    line: LineString,
+    distance: float,
+) -> Point:
     """Get point along line.
 
     Returns
@@ -616,8 +619,6 @@ def point_on_line(line: LineString, distance: float) -> Point:
         ValueError: If line does not have exactly 2 vertices.
 
     """
-    # TODO: doesn't have a test
-
     required_coords = 2
 
     if len(line.coords) != required_coords:
@@ -627,7 +628,7 @@ def point_on_line(line: LineString, distance: float) -> Point:
     if distance == 0:
         return Point(line.coords[-1])
 
-    from_start: bool = distance < 0
+    from_start = distance < 0
 
     if from_start:
         start_x = line.coords[0][0]
@@ -666,13 +667,16 @@ def extend_line_by(
     Raises
     ------
         ValueError: if extend_from is less or equal than 0
+        GeometryOperationError: if line has no length.
 
     """
-    # TODO: doesn't have a test
-
     if extend_by <= 0:
         msg = "Extension distance must be above zero."
         raise ValueError(msg)
+
+    if line.length == 0.0:
+        msg = "Can't extend line with no length."
+        raise GeometryOperationError(msg)
 
     first_segment = LineString((line.coords[0], line.coords[1]))
     last_segment = LineString((line.coords[-2], line.coords[-1]))
