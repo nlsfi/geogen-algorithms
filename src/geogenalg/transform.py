@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from typing import TYPE_CHECKING, cast
 
 from geopandas import GeoDataFrame, GeoSeries
@@ -16,6 +15,7 @@ from geogenalg.core.geometry import (
     remove_line_segments_at_wide_sections,
     remove_small_parts,
 )
+from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 
 if TYPE_CHECKING:
     from shapely import LineString, MultiLineString
@@ -79,7 +79,7 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         if old_ids_column is not None:
             gdf[old_ids_column] = nan
 
-        return GeoDataFrame(columns=gdf.columns, crs=gdf.crs), gdf
+        return copy_gdf_as_empty(gdf), gdf
 
     # Create a polygonal mask from lines which have been determined to be long
     # enough. This is used to remove thin sections from the polygons.
@@ -125,12 +125,12 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         gdf[old_ids_column] = None
 
     if new_lines.is_empty:
-        return GeoDataFrame(columns=gdf.columns, crs=gdf.crs), gdf
+        return copy_gdf_as_empty(gdf), gdf
 
+    new_lines = GeoSeries(new_lines).explode(ignore_index=True)
     new_line_features = GeoDataFrame(
-        geometry=GeoSeries(
-            new_lines,
-        ).explode(ignore_index=True),
+        {input_gdf.geometry.name: new_lines},
+        geometry=input_gdf.geometry.name,
         crs=input_gdf.crs,
     )
 

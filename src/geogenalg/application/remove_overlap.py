@@ -59,7 +59,11 @@ class RemoveOverlap(BaseAlgorithm):
 
         # Create GeoDataFrame with only geometries for mask so its attributes
         # are not inherited.
-        mask_gdf = GeoDataFrame(mask_data.geometry)
+        mask_gdf = GeoDataFrame(
+            {data.geometry.name: mask_data.geometry},
+            geometry=data.geometry.name,
+            crs=data.crs,
+        )
 
         gdf = data.copy()
         gdf["__index"] = gdf.index

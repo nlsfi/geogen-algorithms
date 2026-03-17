@@ -17,7 +17,7 @@ from shapely.geometry import Polygon
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.cluster import get_cluster_centroids
 from geogenalg.core.geometry import mean_z
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
 
 @supports_identity
@@ -80,7 +80,7 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             data.loc[data.geometry.type == "Polygon"],
         )
 
-        clusters_from_points = GeoDataFrame(geometry=[], crs=data.crs)
+        clusters_from_points = copy_gdf_as_empty(data)
         if not points.empty:
             clusters_from_points = get_cluster_centroids(
                 points,
@@ -97,7 +97,7 @@ class GeneralizePointClustersAndPolygonsToCentroids(BaseAlgorithm):
             )
             clusters_from_points[self.feature_type_column] = "centroid_from_point"
 
-        clusters_from_polygons = GeoDataFrame(geometry=[], crs=data.crs)
+        clusters_from_polygons = copy_gdf_as_empty(data)
         if not polygons.empty:
             clusters_from_polygons = self._process_polygons(polygons)
             clusters_from_polygons[self.feature_type_column] = "centroid_from_polygon"

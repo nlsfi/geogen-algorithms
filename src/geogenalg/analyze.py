@@ -5,7 +5,6 @@
 #  SPDX-License-Identifier: MIT
 from typing import Literal
 
-import geopandas as gpd
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
@@ -15,6 +14,7 @@ from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import explode_line, segment_direction
+from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -141,13 +141,14 @@ def flag_parallel_lines(
     for index, row in gdf.iterrows():
         parallel_geom = row[column_parallel_check]
         parallel_geom_direction = row[column_direction]
+        row_geom = row[gdf.geometry.name]
 
         # This locates lines which a) are not the line we're iterating over
         # b) intersects the buffered area used to check for parallel lines and
         # c) are within the given direction bounds.
         crossing_lines = gdf.loc[
             (gdf.geometry.intersects(parallel_geom))
-            & ~gdf.geometry.intersects(row.geometry)
+            & ~gdf.geometry.intersects(row_geom)
             & (
                 ((gdf[column_direction] - parallel_geom_direction).abs())
                 < allowed_direction_difference
@@ -365,9 +366,9 @@ def calculate_main_angle(polygon: Polygon) -> float:
 
 
 def classify_polygons_by_size_of_minimum_bounding_rectangle(
-    input_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
     side_threshold: float,
-) -> dict[str, gpd.GeoDataFrame]:
+) -> dict[str, GeoDataFrame]:
     """Classifiy polygons as small or large based on the minimum bounding rectangle.
 
     Args:
@@ -393,19 +394,15 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
 
     if input_gdf.empty:
         return {
-            "small_polygons": gpd.GeoDataFrame(
-                columns=input_gdf.columns, crs=input_gdf.crs
-            ),
-            "large_polygons": gpd.GeoDataFrame(
-                columns=input_gdf.columns, crs=input_gdf.crs
-            ),
+            "small_polygons": copy_gdf_as_empty(input_gdf),
+            "large_polygons": copy_gdf_as_empty(input_gdf),
         }
 
     large_polygon_indices = []
     small_polygon_indices = []
 
     for idx, row in input_gdf.iterrows():
-        geom = row.geometry
+        geom = row[input_gdf.geometry.name]
         coordinates = list(geom.minimum_rotated_rectangle.exterior.coords)
 
         longest_side = max(
@@ -428,11 +425,11 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
 
 
 def calculate_edge_adjacency(
-    input_gdf: gpd.GeoDataFrame,
-    reference_gdf: gpd.GeoDataFrame,
+    input_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame,
     buffer_size: float,
     result_column: str = "adjacency_ratio",
-) -> gpd.GeoDataFrame:
+) -> GeoDataFrame:
     """Calculate adjacency ratio using outer and inner halo buffers.
 
     Args:

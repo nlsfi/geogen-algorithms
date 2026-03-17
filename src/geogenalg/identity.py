@@ -3,12 +3,13 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
 from hashlib import sha256
 
 from geopandas import GeoDataFrame
 from pandas import DataFrame, Index
 from pandas.api.types import is_string_dtype
+
+from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 
 
 def hash_duplicate_indexes(
@@ -148,7 +149,7 @@ def hash_index_from_geometry(
 
     """
     if data.empty:
-        return GeoDataFrame(geometry=[], crs=data.crs)
+        return copy_gdf_as_empty(data)
 
     gdf = data.copy()
 

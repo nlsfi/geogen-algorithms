@@ -122,10 +122,10 @@ def test_read_gdf_from_file_and_set_index(testdata_path: Path):
         ),
     ],
     ids=[
-        "two polygon GeoDataFrames should merge",
-        "one input GeoDataFrame for each geometry type",
-        "empty input list should return empty GeoDataFrames",
-        "three polygon GeoDataFrames should merge",
+        "two_polygon_GeoDataFrames_should_merge",
+        "one_input_GeoDataFrame_for_each_geometry_type",
+        "empty_input_list_should_return_empty_GeoDataFrames",
+        "three_polygon_GeoDataFrames_should_merge",
     ],
 )
 def test_group_gdfs_by_geometry_type(
@@ -421,6 +421,20 @@ def test_combine_geries_returns(
                 {"attr": []},
             ),
         ),
+        (
+            GeoDataFrame(
+                {
+                    "geom": [Point(0, 0)],
+                },
+                geometry="geom",
+            ),
+            GeoDataFrame(
+                {
+                    "geom": [],
+                },
+                geometry="geom",
+            ),
+        ),
     ],
     ids=[
         "completely_empty",
@@ -429,6 +443,7 @@ def test_combine_geries_returns(
         "input_has_features",
         "input_has_features_and_attributes",
         "input_has_attribute_but_not_geometry",
+        "geometry_column",
     ],
 )
 def test_copy_gdf_as_empty(

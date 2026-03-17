@@ -33,13 +33,15 @@ def inherit_attributes(
     # Iterate over each row in the target GeoDataFrame and inherit the attributes from
     # the first intersecting source GeoDataFrame geometry.
     for _, target_row in target_gdf.iterrows():
-        target_geom = target_row.geometry
+        target_geom = target_row[target_gdf.geometry.name]
         new_attrs = None
 
         candidates = source_gdf[source_gdf.geometry.intersects(target_geom)]
 
         for _, source_row in candidates.iterrows():
-            intersection = target_geom.intersection(source_row.geometry)
+            intersection = target_geom.intersection(
+                source_row[candidates.geometry.name]
+            )
             if not intersection.is_empty:
                 new_attrs = source_row.drop(source_gdf.geometry.name).to_dict()
                 break
@@ -87,8 +89,9 @@ def inherit_attributes_from_largest(
     """
     new_features = []
     for _, feature in target_gdf.iterrows():
+        feature_geom = feature[target_gdf.geometry.name]
         intersecting_features = source_gdf.loc[
-            source_gdf.geometry.intersects(feature.geometry)
+            source_gdf.geometry.intersects(feature_geom)
         ].copy()
 
         if intersecting_features.empty:
@@ -109,7 +112,7 @@ def inherit_attributes_from_largest(
         largest_feature = intersecting_features.iloc[0]
 
         new_feature = largest_feature.copy()
-        new_feature.geometry = feature.geometry
+        new_feature[target_gdf.geometry.name] = feature_geom
 
         if old_ids_column is not None:
             new_feature[old_ids_column] = tuple(
@@ -117,7 +120,9 @@ def inherit_attributes_from_largest(
             )
         new_features.append(new_feature)
 
-    output = GeoDataFrame(new_features, crs=target_gdf.crs)
+    output = GeoDataFrame(
+        new_features, geometry=target_gdf.geometry.name, crs=target_gdf.crs
+    )
     output.index.name = source_gdf.index.name
     output.geometry.name = source_gdf.geometry.name
 

@@ -148,11 +148,8 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         # Combine centroids of large polygons with all small building points
-        all_building_centroids_gdf = GeoDataFrame(
-            combine_gdfs(
-                [large_building_centroids_gdf, small_buildings_gdf],
-            ),
-            crs=point_buildings_gdf.crs,
+        all_building_centroids_gdf = combine_gdfs(
+            [large_building_centroids_gdf, small_buildings_gdf],
         )
 
         small_buildings_gdf = self._generalize_point_buildings(
