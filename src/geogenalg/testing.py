@@ -200,12 +200,14 @@ def get_alg_results_from_geopackage(
     )
 
 
-def get_test_gdfs(
+def get_test_gdfs(  # noqa: PLR0913
     input_uri: GeoPackageInput | list[GeoPackageInput],
     control_uri: GeoPackageInput,
     alg: BaseAlgorithm,
     unique_id_column: str,
     reference_uris: dict[str, GeoPackageInput] | None = None,
+    *,
+    rename_geometry: str | None = None,
 ) -> TestGeoDataFrames:
     """Get input, reference, result and control GeoDataFrame.
 
@@ -218,6 +220,9 @@ def get_test_gdfs(
         reference_uris: Dictionary of GeoPackageURIs, which is used to
             construct matching reference_data dictionary to pass to algorithm's
             execute function.
+        rename_geometry: If not None, rename the geometry column of input and reference
+            GeoDataFrames. This can be used to test that an algorithm produces the
+            same results with different geometry column names.
 
     Returns:
     -------
@@ -225,9 +230,28 @@ def get_test_gdfs(
 
     """
     reference_data = {}
+
+    def read_gdf(
+        path: Path,
+        id_column: str,
+        layer: str | None,
+    ) -> GeoDataFrame:
+        if rename_geometry is None:
+            return read_gdf_from_file_and_set_index(
+                path,
+                id_column,
+                layer=layer,
+            )
+
+        return read_gdf_from_file_and_set_index(
+            path,
+            id_column,
+            layer=layer,
+        ).rename_geometry(rename_geometry, inplace=False)
+
     if reference_uris is not None:
         for key, uri in reference_uris.items():
-            reference_data[key] = read_gdf_from_file_and_set_index(
+            reference_data[key] = read_gdf(
                 uri.file,
                 unique_id_column,
                 layer=uri.layer_name,
@@ -235,16 +259,16 @@ def get_test_gdfs(
 
     if isinstance(input_uri, list):
         gdfs = [
-            read_gdf_from_file_and_set_index(
+            read_gdf(
                 uri.file,
                 unique_id_column,
                 layer=uri.layer_name,
             )
             for uri in input_uri
         ]
-        input_data = cast("GeoDataFrame", combine_gdfs(gdfs))
+        input_data = combine_gdfs(gdfs)
     else:
-        input_data = read_gdf_from_file_and_set_index(
+        input_data = read_gdf(
             input_uri.file,
             unique_id_column,
             layer=input_uri.layer_name,

@@ -66,7 +66,7 @@ class IntegrationTest:
     )
     """Any arguments to pass to geopandas.testing.assert_geodataframe_equal."""
 
-    def get_test_gdfs(self) -> TestGeoDataFrames:
+    def get_test_gdfs(self, *, geometry_column: str | None = None) -> TestGeoDataFrames:
         """Get GeoDataFrames used in test.
 
         Defined as a separate method for ease in debugging, allows inspecting
@@ -84,6 +84,7 @@ class IntegrationTest:
             alg=self.algorithm,
             unique_id_column=self.unique_id_column,
             reference_uris=self.reference_uris,
+            rename_geometry=geometry_column,
         )
 
     def _assert_and_save_diffs(
@@ -126,7 +127,7 @@ class IntegrationTest:
             directory=diff_dir,
         )
 
-    def run(self) -> None:  # noqa: C901
+    def run(self) -> None:  # noqa: C901, PLR0912
         """Run integration test.
 
         Raises
@@ -201,14 +202,16 @@ class IntegrationTest:
                     GeoDataFrame(geometry=[geom_type()]),
                 )
 
+        # TODO: test reference data geom types?
+
         diff_env = os.environ.get("GEOGENALG_TEST_SAVE_DIFF")
-        try_to_save_diff = diff_env is not None and diff_env.lower() in {
+        save_diff = diff_env is not None and diff_env.lower() in {
             "true",
             "1",
             "on",
         }
 
-        if not try_to_save_diff:
+        if not save_diff:
             assert_geodataframe_equal(
                 result,
                 control,
@@ -217,4 +220,28 @@ class IntegrationTest:
         else:
             self._assert_and_save_diffs(result, control)
 
-        # TODO: test reference data geom types?
+        # By default run algorithm twice with same data, to test that it
+        # produces same results with different geometry column names. Allow
+        # disabling this by environment variable to speed up tests during
+        # development.
+        geom_column = os.environ.get("GEOGENALG_TEST_NO_GEOM_COLUMNS")
+        test_geom_column = geom_column is None or geom_column.lower() not in {
+            "true",
+            "1",
+            "on",
+        }
+
+        if test_geom_column:
+            _, _, _, result_from_geom_column, control_from_geom_column = (
+                self.get_test_gdfs(geometry_column="geom")
+            )
+            if not save_diff:
+                assert_geodataframe_equal(
+                    result_from_geom_column,
+                    control_from_geom_column,
+                    **self.assert_function_arguments,
+                )
+            else:
+                self._assert_and_save_diffs(
+                    result_from_geom_column, control_from_geom_column
+                )
