@@ -281,9 +281,10 @@ def reduce_nearby_points_by_selecting(
         if input_point_index in to_remove:
             continue
 
+        input_point_geom = getattr(input_point, gdf.geometry.name)
         possible_matches_idx = list(
             reference_sindex.intersection(
-                input_point.geometry.buffer(distance_threshold).bounds
+                input_point_geom.buffer(distance_threshold).bounds
             )
         )
         possible_matches: GeoDataFrame = reference_points_gdf.iloc[possible_matches_idx]
@@ -293,7 +294,9 @@ def reduce_nearby_points_by_selecting(
             if other_point_index == input_point_index or other_point_index in to_remove:
                 continue
 
-            distance = input_point.geometry.distance(other_point.geometry)
+            distance = input_point_geom.distance(
+                getattr(other_point, possible_matches.geometry.name)
+            )
 
             if distance < distance_threshold and (
                 getattr(input_point, priority_column)

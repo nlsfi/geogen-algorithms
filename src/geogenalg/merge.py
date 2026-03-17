@@ -44,7 +44,7 @@ def merge_connecting_lines_by_attribute(
         lines: list[tuple[LineString, dict, str]] = []  # geom, attributes, id
 
         for idx, row in group.iterrows():
-            geom = row.geometry
+            geom = row[group.geometry.name]
             if geom is None:
                 continue
 
@@ -86,7 +86,11 @@ def merge_connecting_lines_by_attribute(
             properties[old_ids_column] = old_ids
             merged_records.append(properties)
 
-    result_gdf = GeoDataFrame(data=merged_records, crs=input_gdf.crs)
+    result_gdf = GeoDataFrame(
+        data=merged_records,
+        geometry=input_gdf.geometry.name,
+        crs=input_gdf.crs,
+    )
 
     # Assign attributes to merged lines by mapping back to one of the source lines
     result_gdf_with_attributes = inherit_attributes(input_gdf, result_gdf)
@@ -146,7 +150,7 @@ def dissolve_and_inherit_attributes(
 
     features = []
     for _, dissolved_row in dissolved_gdf.iterrows():
-        dissolved_geom = dissolved_row.geometry
+        dissolved_geom = dissolved_row[dissolved_gdf.geometry.name]
 
         if by_column is None:
             intersecting_polygons_gdf = gdf[
@@ -186,7 +190,7 @@ def dissolve_and_inherit_attributes(
                 representative_feature = intersecting_polygons_gdf.iloc[0]
 
         feature = representative_feature.copy()
-        feature.geometry = dissolved_geom
+        feature[dissolved_gdf.geometry.name] = dissolved_geom
 
         feature[old_ids_column] = tuple(
             intersecting_polygons_gdf.index.to_list(),
@@ -194,7 +198,7 @@ def dissolve_and_inherit_attributes(
 
         features.append(feature)
 
-    output = GeoDataFrame(features, crs=input_gdf.crs)
+    output = GeoDataFrame(features, geometry=input_gdf.geometry.name, crs=input_gdf.crs)
     output.index.name = input_gdf.index.name
 
     return output

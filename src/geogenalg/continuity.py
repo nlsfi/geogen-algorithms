@@ -118,7 +118,11 @@ def connect_nearby_endpoints(
             used_ends.add(i)
 
     # Return a new GeoDataFrame containing only the helper lines
-    return GeoDataFrame(geometry=new_lines, crs=input_gdf.crs)
+    return GeoDataFrame(
+        {input_gdf.geometry.name: new_lines},
+        geometry=input_gdf.geometry.name,
+        crs=input_gdf.crs,
+    )
 
 
 def check_line_connections(
@@ -199,9 +203,9 @@ def check_reference_line_connections(  # noqa: SC200
     """
     results = []
     other_lines = (
-        GeoDataFrame(combine_gdfs(reference_gdfs))
+        combine_gdfs(reference_gdfs)
         if reference_gdfs
-        else GeoDataFrame(geometry=[])
+        else GeoDataFrame(geometry=[], crs=input_gdf.crs)
     )
 
     gdf = input_gdf.copy()

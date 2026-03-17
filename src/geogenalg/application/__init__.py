@@ -106,6 +106,7 @@ class BaseAlgorithm(ABC):
 
         if getattr(self, _SUPPORTS_IDENTITY_ATTR, False):
             return output
+
         return reset_with_random_hash_index(output)
 
     @abstractmethod

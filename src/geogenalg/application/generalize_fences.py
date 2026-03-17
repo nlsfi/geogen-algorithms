@@ -121,9 +121,7 @@ class GeneralizeFences(BaseAlgorithm):
         helper_lines_gdf = connect_nearby_endpoints(result_gdf, self.gap_threshold)
 
         # Combine original fence lines with helper lines
-        combined_gdf: GeoDataFrame = combine_gdfs(
-            [result_gdf, helper_lines_gdf], ignore_index=True
-        )
+        combined_gdf = combine_gdfs([result_gdf, helper_lines_gdf], ignore_index=True)
 
         # Calculate the CartaGen network faces to fill closing line geometries
         faces = network_faces(list(combined_gdf.geometry), convex_hull=False)

@@ -113,6 +113,7 @@ def test_geometry_column_does_not_change():
 
     output_data = MockAlg().execute(input_data, {})
 
+    assert input_data.geometry.name == "geom"
     assert output_data.geometry.name == "geom"
 
 
