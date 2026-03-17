@@ -10,7 +10,7 @@ import pytest
 from geopandas import GeoDataFrame
 from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal, assert_geoseries_equal
-from pandas import DataFrame, Series
+from pandas import DataFrame, Index, Series
 from pandas.testing import assert_frame_equal
 from shapely.geometry import LineString, Point, Polygon
 
@@ -20,6 +20,7 @@ from geogenalg.utility.dataframe_processing import (
     ConcatParameters,
     combine_gdfs,
     combine_geoseries,
+    copy_gdf_as_empty,
 )
 
 
@@ -379,3 +380,134 @@ def test_combine_geries_returns(
         combine_geoseries(inputs, **kwargs),
         output,
     )
+
+
+@pytest.mark.parametrize(
+    ("input_gdf", "expected_gdf"),
+    [
+        (
+            GeoDataFrame(),
+            GeoDataFrame(),
+        ),
+        (
+            GeoDataFrame(geometry=[]),
+            GeoDataFrame(geometry=[]),
+        ),
+        (
+            GeoDataFrame(geometry=[], crs="EPSG:3857"),
+            GeoDataFrame(geometry=[], crs="EPSG:3857"),
+        ),
+        (
+            GeoDataFrame(geometry=[Point(0, 0), Point(2, 0)], crs="EPSG:3857"),
+            GeoDataFrame(geometry=[], crs="EPSG:3857"),
+        ),
+        (
+            GeoDataFrame(
+                {"attr": [2.0, 3.0]},
+                geometry=[Point(0, 0), Point(2, 0)],
+                crs="EPSG:3857",
+            ),
+            GeoDataFrame(
+                {"attr": []},
+                geometry=[],
+                crs="EPSG:3857",
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"attr": [2.0, 3.0]},
+            ),
+            GeoDataFrame(
+                {"attr": []},
+            ),
+        ),
+    ],
+    ids=[
+        "completely_empty",
+        "empty_with_active_geom_column",
+        "empty_with_crs",
+        "input_has_features",
+        "input_has_features_and_attributes",
+        "input_has_attribute_but_not_geometry",
+    ],
+)
+def test_copy_gdf_as_empty(
+    input_gdf: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        copy_gdf_as_empty(input_gdf),
+        expected_gdf,
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_gdf", "expected_gdf"),
+    [
+        (
+            GeoDataFrame({"test_index": ["test_1", "test_2"]}).set_index("test_index"),
+            GeoDataFrame(),
+        ),
+        (
+            GeoDataFrame(
+                {"test_index": ["test_1", "test_2"]},
+                geometry=[Point(0, 0), Point(1, 0)],
+            ).set_index("test_index"),
+            GeoDataFrame(
+                geometry=[],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"test_index": [10, 50]},
+                geometry=[Point(0, 0), Point(1, 0)],
+            ).set_index("test_index"),
+            GeoDataFrame(
+                geometry=[],
+            ),
+        ),
+        (
+            GeoDataFrame(),
+            GeoDataFrame(),
+        ),
+    ],
+    ids=[
+        "no_geoms",
+        "has_geoms",
+        "int_index",
+        "empty",
+    ],
+)
+def test_copy_gdf_as_empty_index_name(
+    input_gdf: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+):
+    expected_gdf = expected_gdf.set_index(
+        Index([], dtype=input_gdf.index.dtype, name=input_gdf.index.name),
+    )
+
+    result = copy_gdf_as_empty(input_gdf)
+
+    assert_geodataframe_equal(
+        result,
+        expected_gdf,
+    )
+
+    assert result.index.name == expected_gdf.index.name == input_gdf.index.name
+
+
+def test_copy_gdf_as_empty_none_index_name():
+    input_gdf = GeoDataFrame(
+        index=[1, 2],
+    )
+
+    expected_gdf = GeoDataFrame()
+
+    result = copy_gdf_as_empty(input_gdf)
+
+    assert_geodataframe_equal(
+        result,
+        expected_gdf,
+    )
+
+    assert result.index.name == input_gdf.index.name

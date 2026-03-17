@@ -25,6 +25,20 @@ class ConcatParameters(TypedDict):
     copy: NotRequired[bool]
 
 
+def copy_gdf_as_empty(input_gdf: GeoDataFrame) -> GeoDataFrame:
+    """Copy GeoDataFrame, retaining its structure (columns, crs) but not any rows.
+
+    Returns
+    -------
+        GeoDataFrame with input_gdf's columns and crs but without any rows.
+
+    """
+    # If input_gdf does not have an active geometry column, a DataFrame would
+    # be returned. Wrap in gdf constructor to ensure a GeoDataFrame is always
+    # returned.
+    return GeoDataFrame(input_gdf.iloc[0:0].copy())
+
+
 def _combine_geo_objects(
     geo_objects: Iterable[GeoDataFrame] | Iterable[GeoSeries],
     object_type: type[GeoDataFrame | GeoSeries],
