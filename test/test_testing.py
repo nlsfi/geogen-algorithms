@@ -12,7 +12,6 @@ from warnings import catch_warnings
 import pytest
 from geopandas import GeoDataFrame, read_file
 from geopandas.testing import assert_geodataframe_equal
-from pandas import concat
 from shapely import Point, Polygon, box
 
 from geogenalg.application import BaseAlgorithm, supports_identity
@@ -23,6 +22,7 @@ from geogenalg.testing import (
     get_alg_results_from_geopackage,
     get_test_gdfs,
 )
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 def test_assert_gdf_equal_index_mismatch():
@@ -199,14 +199,18 @@ class MockAlg(BaseAlgorithm):
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
         result = GeoDataFrame(
-            {"id": ["3"], "column": [self.mock_attribute]},
-            geometry=[Point(2, 0)],
+            {
+                "id": ["3"],
+                "column": [self.mock_attribute],
+                data.geometry.name: [Point(2, 0)],
+            },
+            geometry=data.geometry.name,
             crs="EPSG:3067",
         )
         result = result.set_index("id")
 
         return GeoDataFrame(
-            concat(
+            combine_gdfs(
                 [
                     data,
                     reference_data["ref"],
@@ -218,12 +222,18 @@ class MockAlg(BaseAlgorithm):
 
 def test_get_alg_results_from_geopackage():
     input_data = GeoDataFrame(
-        {"id": ["1"], "column": ["input"]},
+        {
+            "id": ["1"],
+            "column": ["input"],
+        },
         geometry=[Point(0, 0)],
         crs="EPSG:3067",
     )
     ref_data = GeoDataFrame(
-        {"id": ["2"], "column": ["ref_data"]},
+        {
+            "id": ["2"],
+            "column": ["ref_data"],
+        },
         geometry=[Point(1, 0)],
         crs="EPSG:3067",
     )
@@ -255,23 +265,102 @@ def test_get_alg_results_from_geopackage():
     assert_geodataframe_equal(result, control)
 
 
-def test_get_result_and_control():
-    input_data = GeoDataFrame(
-        {"id": ["1"], "column": ["input"]},
-        geometry=[Point(0, 0)],
-        crs="EPSG:3067",
-    )
-    ref_data = GeoDataFrame(
-        {"id": ["2"], "column": ["ref_data"]},
-        geometry=[Point(1, 0)],
-        crs="EPSG:3067",
-    )
-    control_data = GeoDataFrame(
-        {"id": ["5"], "column": ["control"]},
-        geometry=[Point(1, 0)],
-        crs="EPSG:3067",
-    )
-
+@pytest.mark.parametrize(
+    ("input_data", "ref_data", "control_data", "result_expected", "geometry_column"),
+    [
+        (
+            GeoDataFrame(
+                {
+                    "id": ["1"],
+                    "column": ["input"],
+                },
+                geometry=[Point(0, 0)],
+                crs="EPSG:3067",
+            ),
+            GeoDataFrame(
+                {
+                    "id": ["2"],
+                    "column": ["ref_data"],
+                },
+                geometry=[Point(1, 0)],
+                crs="EPSG:3067",
+            ),
+            GeoDataFrame(
+                {
+                    "id": ["5"],
+                    "column": ["control"],
+                },
+                geometry=[Point(1, 0)],
+                crs="EPSG:3067",
+            ),
+            GeoDataFrame(
+                {
+                    "id": ["1", "2", "3"],
+                    "column": ["input", "ref_data", "result"],
+                },
+                geometry=[
+                    Point(0, 0),
+                    Point(1, 0),
+                    Point(2, 0),
+                ],
+                crs="EPSG:3067",
+            ),
+            None,
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "id": ["1"],
+                    "column": ["input"],
+                    "geom": [Point(0, 0)],
+                },
+                geometry="geom",
+                crs="EPSG:3067",
+            ),
+            GeoDataFrame(
+                {
+                    "id": ["2"],
+                    "column": ["ref_data"],
+                    "geom": [Point(1, 0)],
+                },
+                geometry="geom",
+                crs="EPSG:3067",
+            ),
+            GeoDataFrame(
+                {
+                    "id": ["5"],
+                    "column": ["control"],
+                },
+                geometry=[Point(1, 0)],
+                crs="EPSG:3067",
+            ),
+            GeoDataFrame(
+                {
+                    "id": ["1", "2", "3"],
+                    "column": ["input", "ref_data", "result"],
+                },
+                geometry=[
+                    Point(0, 0),
+                    Point(1, 0),
+                    Point(2, 0),
+                ],
+                crs="EPSG:3067",
+            ),
+            "geom",
+        ),
+    ],
+    ids=[
+        "no_rename",
+        "rename_to_geom",
+    ],
+)
+def test_get_test_gdfs(
+    input_data: GeoDataFrame,
+    ref_data: GeoDataFrame,
+    control_data: GeoDataFrame,
+    result_expected: GeoDataFrame,
+    geometry_column: str | None,
+):
     temp_dir = TemporaryDirectory()
     temp_dir_path = Path(temp_dir.name)
 
@@ -289,24 +378,13 @@ def test_get_result_and_control():
         MockAlg("result"),
         "id",
         reference_uris={"ref": ref_path},
+        rename_geometry=geometry_column,
     )
 
     assert_geodataframe_equal(input_data.set_index("id"), input_before)
     assert_geodataframe_equal(input_data.set_index("id"), other_input)
     assert_geodataframe_equal(ref_data.set_index("id"), other_ref["ref"])
 
-    result_expected = GeoDataFrame(
-        {
-            "id": ["1", "2", "3"],
-            "column": ["input", "ref_data", "result"],
-        },
-        geometry=[
-            Point(0, 0),
-            Point(1, 0),
-            Point(2, 0),
-        ],
-        crs="EPSG:3067",
-    )
     result_expected = result_expected.set_index("id")
 
     control_expected = control_data.copy()
