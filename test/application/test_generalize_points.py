@@ -41,6 +41,7 @@ def test_generalize_points() -> None:
             Point(6, 7.5),
             Point(8, 7.5),
         ],
+        crs="EPSG:3857",
     ).set_index("id")
 
     result_gdf = algorithm.execute(input_gdf, {})
@@ -79,6 +80,7 @@ def test_generalize_points() -> None:
             Point(6.15843, 7.38223, 0),
             Point(9.15285, 7.50761, 0),
         ],
+        crs="EPSG:3857",
     )
     expected_gdf = expected_gdf.set_index("id")
 

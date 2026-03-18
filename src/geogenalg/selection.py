@@ -171,10 +171,6 @@ def remove_small_polygons(
         msg = "area_threshold must be > 0."
         raise ValueError(msg)
 
-    if polygons_gdf.crs is None or not polygons_gdf.crs.is_projected:
-        msg = "Input layer must have a projected CRS to compute area."
-        raise ValueError(msg)
-
     # Drop missing/empty geometries before area calculation
     gdf = polygons_gdf.dropna(subset=[polygons_gdf.geometry.name]).loc[
         ~polygons_gdf.geometry.is_empty
