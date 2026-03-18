@@ -3,7 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-
+import re
 from typing import ClassVar
 
 import pytest
@@ -22,7 +22,7 @@ from shapely import (
 )
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.exceptions import GeometryTypeError, InvalidCRSError
 
 
 def test_index_reset_without_identity_support():
@@ -40,6 +40,7 @@ def test_index_reset_without_identity_support():
         },
         index=["abc", "def", "ghi"],
         geometry="geom",
+        crs="EPSG:3857",
     )
 
     output_data = MockAlg().execute(input_data, {})
@@ -63,6 +64,7 @@ def test_index_not_reset_with_identity_support():
         },
         index=["abc", "def", "ghi"],
         geometry="geom",
+        crs="EPSG:3857",
     )
 
     output_data = MockAlg().execute(input_data, {})
@@ -86,6 +88,7 @@ def test_input_index_converted_to_strings_for_algorithm_use():
         },
         index=[111, 222, 333],
         geometry="geom",
+        crs="EPSG:3857",
     )
 
     output_data = MockAlg().execute(input_data, {})
@@ -109,6 +112,7 @@ def test_geometry_column_does_not_change():
         },
         index=[111, 222, 333],
         geometry="geom",
+        crs="EPSG:3857",
     )
 
     output_data = MockAlg().execute(input_data, {})
@@ -187,4 +191,91 @@ def test_wrong_geometry_type_reference_data(reference_data: GeoDataFrame):
         GeometryTypeError,
         match=r"Reference data must contain only geometries of following types: Point.",
     ):
-        MockAlg().execute(GeoDataFrame(geometry=[Point()]), {"ref": reference_data})
+        MockAlg().execute(
+            GeoDataFrame(geometry=[Point()], crs="EPSG:3857"), {"ref": reference_data}
+        )
+
+
+@pytest.mark.parametrize(
+    ("input_data", "error_msg"),
+    [
+        (
+            GeoDataFrame(
+                geometry=[],
+                crs=None,
+            ),
+            "Input data has no set coordinate reference system.",
+        ),
+        (
+            GeoDataFrame(
+                geometry=[],
+                crs="EPSG:4326",
+            ),
+            "Input data does not have a projected coordinate reference system.",
+        ),
+    ],
+    ids=[
+        "no_crs",
+        "geographic",
+    ],
+)
+def test_input_invalid_crs(
+    input_data: GeoDataFrame,
+    error_msg: str,
+):
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(InvalidCRSError, match=re.escape(error_msg)):
+        MockAlg().execute(input_data)
+
+
+@pytest.mark.parametrize(
+    ("reference_data", "error_msg"),
+    [
+        (
+            GeoDataFrame(
+                geometry=[],
+                crs=None,
+            ),
+            'Reference data "ref" does not have a projected coordinate reference system.',
+        ),
+        (
+            GeoDataFrame(
+                geometry=[],
+                crs="EPSG:4326",
+            ),
+            'Reference data "ref" does not have a projected coordinate reference system.',
+        ),
+        (
+            GeoDataFrame(
+                geometry=[],
+                crs="EPSG:3067",
+            ),
+            'Reference data "ref" and input data have different coordinate reference systems.',
+        ),
+    ],
+    ids=[
+        "no_crs",
+        "geographic",
+        "different",
+    ],
+)
+def test_reference_invalid_crs(
+    reference_data: GeoDataFrame,
+    error_msg: str,
+):
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(InvalidCRSError, match=re.escape(error_msg)):
+        MockAlg().execute(
+            GeoDataFrame(geometry=[], crs="EPSG:3857"),
+            reference_data={"ref": reference_data},
+        )

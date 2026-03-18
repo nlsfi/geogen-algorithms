@@ -672,17 +672,6 @@ def test_remove_small_polygons_b():  # test B - handling None and empty geometri
     assert len(result) == 0  # number of polygons that should remain
 
 
-def test_remove_small_polygons_c():  # test C- handling CRS problems
-    gdf = GeoDataFrame(
-        {"id": [0]},
-        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
-        crs="EPSG:4326",  # not projected (degrees)
-    )
-
-    with pytest.raises(ValueError, match="projected CRS"):
-        remove_small_polygons(gdf, area_threshold=1.0)
-
-
 def test_remove_close_line_segments():
     lines = GeoDataFrame(
         geometry=[

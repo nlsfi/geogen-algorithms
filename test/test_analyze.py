@@ -49,29 +49,6 @@ def test_calculate_coverage():
     assert test_features["coverage"][0] == pytest.approx(56.25)
 
 
-def test_calculate_coverage_raises_for_wrong_crs_type():
-    with pytest.raises(ValueError, match="projected CRS"):
-        calculate_coverage(
-            overlay_features=GeoDataFrame(
-                {
-                    "id": [1],
-                },
-                geometry=[
-                    Polygon([(0, 0), (1, 1), (0, 1), (0, 0)]),
-                ],
-            ),
-            base_features=GeoDataFrame(
-                {
-                    "class": ["a"],
-                    "id": [1],
-                },
-                geometry=[
-                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
-                ],
-            ),
-        )
-
-
 def test_calculate_coverage_using_empty_input():
     overlay = GeoDataFrame({"id": []}, geometry=[], crs="EPSG:3067")
     base = GeoDataFrame({"class": [], "id": []}, geometry=[], crs="EPSG:3067")

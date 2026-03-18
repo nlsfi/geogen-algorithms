@@ -21,6 +21,10 @@ class GeoCombineError(Exception):
     pass
 
 
+class InvalidCRSError(Exception):
+    pass
+
+
 class MissingReferenceError(Exception):
     def __init__(
         self,

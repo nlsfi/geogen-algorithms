@@ -283,20 +283,7 @@ def calculate_coverage(
             A version of 'base_features' with an additional 'coverage_attribute' column.
             Unnecessary columns are dropped.
 
-    Raises:
-    ------
-    ValueError: If CRS is not projected for both layers.
-
     """
-    if (
-        overlay_features.crs is None
-        or base_features.crs is None
-        or not overlay_features.crs.is_projected
-        or not base_features.crs.is_projected
-    ):
-        error_msg = "Both layers must have a projected CRS (metres)."
-        raise ValueError(error_msg)
-
     overlay_features = overlay_features.copy()
     base_features = base_features.copy()
     base_features["base_area"] = base_features.geometry.area

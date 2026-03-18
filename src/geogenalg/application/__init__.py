@@ -11,7 +11,7 @@ from typing import ClassVar, TypeVar, final
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
 
-from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.exceptions import GeometryTypeError, InvalidCRSError
 from geogenalg.utility.hash import reset_with_random_hash_index
 from geogenalg.utility.validation import (
     ShapelyGeometryTypeString,
@@ -48,12 +48,6 @@ class BaseAlgorithm(ABC):
         -------
             A GeoDataFrame containing generalized data
 
-        Raises:
-        ------
-            GeometryTypeError: If input or reference data contains invalid
-            geometry types, or valid geometry types are not defined for
-            subclass.
-
         """
         # Convert non-string indices to allow algorithm implementations
         # to rely on the assumption that input index is some kind of string
@@ -63,36 +57,7 @@ class BaseAlgorithm(ABC):
         if reference_data is None:
             reference_data = {}
 
-        if not self.valid_input_geometry_types:
-            msg = "Valid input geometry types not defined."
-            raise GeometryTypeError(msg)
-
-        if not check_gdf_geometry_type(data, self.valid_input_geometry_types):
-            types = (
-                next(iter(self.valid_input_geometry_types))
-                if len(self.valid_input_geometry_types) == 1
-                else f"{', '.join(sorted(self.valid_input_geometry_types))}"
-            )
-            msg = (
-                f"Input data must contain only geometries of following types: {types}."
-            )
-            raise GeometryTypeError(msg)
-
-        for reference in reference_data.values():
-            if not check_gdf_geometry_type(
-                reference,
-                self.valid_reference_geometry_types,
-            ):
-                types = (
-                    next(iter(self.valid_reference_geometry_types))
-                    if len(self.valid_reference_geometry_types) == 1
-                    else f"{', '.join(sorted(self.valid_reference_geometry_types))}"
-                )
-                msg = (
-                    "Reference data must contain only geometries of following types: "
-                    + f"{types}."
-                )
-                raise GeometryTypeError(msg)
+        self._validate_data(data, reference_data)
 
         output = self._execute(data=data, reference_data=reference_data)
 
@@ -142,6 +107,85 @@ class BaseAlgorithm(ABC):
         )
 
         data.to_file(output_path, layer=layer_name)
+
+    @final
+    def _validate_data(
+        self,
+        data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+    ) -> None:
+        """Run a series of checks on input and reference data.
+
+        Running this ensures that algorithm subclasses can assume all data passed
+        to it
+            1) has only geometries of accepted types
+            2) has a coordinate reference system
+            3) has a projected coordinate reference system
+            4) has the same coordinate reference system
+
+        Raises
+        ------
+            GeometryTypeError: If input or reference data contains invalid
+                geometry types, or valid geometry types are not defined for
+                subclass.
+            InvalidCRSError: If input or reference data has missing, non-projected
+                or differing coordinate reference systems.
+
+        """
+        if not self.valid_input_geometry_types:
+            msg = "Valid input geometry types not defined."
+            raise GeometryTypeError(msg)
+
+        if not check_gdf_geometry_type(data, self.valid_input_geometry_types):
+            types = (
+                next(iter(self.valid_input_geometry_types))
+                if len(self.valid_input_geometry_types) == 1
+                else f"{', '.join(sorted(self.valid_input_geometry_types))}"
+            )
+            msg = (
+                f"Input data must contain only geometries of following types: {types}."
+            )
+            raise GeometryTypeError(msg)
+
+        if data.crs is None or not data.crs.is_projected:
+            msg = (
+                "Input data has no set coordinate reference system."
+                if data.crs is None
+                else "Input data does not have a projected coordinate reference system."
+            )
+            raise InvalidCRSError(msg)
+
+        for key, reference in reference_data.items():
+            if not check_gdf_geometry_type(
+                reference,
+                self.valid_reference_geometry_types,
+            ):
+                types = (
+                    next(iter(self.valid_reference_geometry_types))
+                    if len(self.valid_reference_geometry_types) == 1
+                    else f"{', '.join(sorted(self.valid_reference_geometry_types))}"
+                )
+                msg = (
+                    "Reference data must contain only geometries of following types: "
+                    + f"{types}."
+                )
+                raise GeometryTypeError(msg)
+
+            if reference.crs is None or not reference.crs.is_projected:
+                msg = (
+                    f'Reference data "{key}" has no set coordinate reference system.'
+                    if data.crs is None
+                    else f'Reference data "{key}" does not have a projected coordinate '
+                    + "reference system."
+                )
+                raise InvalidCRSError(msg)
+
+            if reference.crs != data.crs:
+                msg = (
+                    f'Reference data "{key}" and input data have different coordinate '
+                    + "reference systems."
+                )
+                raise InvalidCRSError(msg)
 
 
 _Alg = TypeVar("_Alg", bound=type[BaseAlgorithm])
