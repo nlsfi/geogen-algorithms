@@ -16,14 +16,17 @@ from geogenalg.split import explode_and_hash_id
 @supports_identity
 @dataclass(frozen=True)
 class RemoveOverlap(BaseAlgorithm):
-    """Remove overlapping areas from input polygon data.
+    """Remove overlapping sections from input data.
 
-    Identifies which areas in input data overlap with areas in mask data
-    and returns a copy of input data with overlapping areas removed.
+    Identifies which sections in input data overlap with  in mask data
+    and returns a copy of input data with overlapping sections removed.
 
-    Keeps attributes and IDs returned geometries intact. If a polygon
-    is split by the mask, a MultiPolygon is created. New vertices introduced
-    by cuts get Z value via linear interpolation along the affected edges.
+    If feature in input data is wholly contained by the mask, it will be
+    removed.
+
+    Keeps attributes intact. If a feature is split by the mask, its parts will
+    be turned to new features and their IDs hashed. New vertices introduced by
+    cuts get Z value via linear interpolation along the affected edges.
     """
 
     reference_key: str = "mask"

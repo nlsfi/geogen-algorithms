@@ -16,6 +16,9 @@ from typing import Annotated, Any, cast
 from geogenalg.application.generalize_building_areas_by_geometry import (
     GeneralizeBuildingAreasByGeometry,
 )
+from geogenalg.application.generalize_polygons_to_points import (
+    GeneralizePolygonsToPoints,
+)
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 
 try:
@@ -36,9 +39,6 @@ from geogenalg.application.generalize_building_areas_by_parcel import (
 )
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.application.generalize_cliffs import GeneralizeCliffs
-from geogenalg.application.generalize_clusters_to_centroids import (
-    GeneralizePointClustersAndPolygonsToCentroids,
-)
 from geogenalg.application.generalize_fences import GeneralizeFences
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.application.generalize_points import GeneralizePoints
@@ -192,7 +192,7 @@ def int_or_str_list(value: str) -> int | str:
         try:
             # This might be redundant, maybe you could do just some kind of nop
             # call here, but I got worried that could be optimized out, which
-            # that's the reason for the funny looking assignments here.
+            # is the reason for the funny looking assignments here.
             integer = int(integer_part)
             return str(integer)
         except ValueError:
@@ -370,7 +370,7 @@ def build_app() -> None:  # noqa: PLR0914
 
     """
     commands_and_algs = {
-        "clusters_to_centroids": GeneralizePointClustersAndPolygonsToCentroids,
+        "polygons_to_points": GeneralizePolygonsToPoints,
         "fences": GeneralizeFences,
         "landcover": GeneralizeLandcover,
         "shoreline": GeneralizeShoreline,
