@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 #  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
 #
 #  This file is part of geogen-algorithms.
