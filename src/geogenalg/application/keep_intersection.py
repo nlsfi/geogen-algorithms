@@ -16,17 +16,17 @@ from geogenalg.split import explode_and_hash_id
 @supports_identity
 @dataclass(frozen=True)
 class KeepIntersection(BaseAlgorithm):
-    """Keep intersecting areas from input polygon data.
+    """Keep intersecting sections from input data.
 
-    Identifies which areas in input data intersect with areas in mask data
-    and returns a copy of input data with only intersecting areas remaining.
+    Identifies which sections in input data intersect with areas in mask data
+    and returns a copy of input data with only intersecting sections remaining.
 
     If feature in input data has zero intersection with mask, it will be
     removed.
 
-    Keeps attributes and IDs returned geometries intact. If a polygon
-    is split by the mask, a MultiPolygon is created. New vertices introduced
-    by cuts get Z value via linear interpolation along the affected edges.
+    Keeps attributes intact. If a feature is split by the mask, its parts will
+    be turned to new features and their IDs hashed. New vertices introduced by
+    cuts get Z value via linear interpolation along the affected edges.
     """
 
     reference_key: str = "mask"
@@ -51,24 +51,6 @@ class KeepIntersection(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        """Execute algorithm.
-
-        Args:
-        ----
-            data: GeoDataFrame to be overlaid.
-            reference_data: Should contain a GeoDataFrame with
-                (multi)polygons with which to overlay input data.
-
-        Returns:
-        -------
-            A copy of `input_data` where areas outside geometries of
-            `mask_data` have been removed.
-
-        Raises:
-        ------
-            MissingReferenceError: If reference data is not found.
-
-        """
         if self.reference_key not in reference_data:
             raise MissingReferenceError
 
