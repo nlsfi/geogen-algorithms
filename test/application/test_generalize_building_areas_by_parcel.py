@@ -7,7 +7,6 @@ from pathlib import Path
 
 from conftest import IntegrationTest
 
-from geogenalg.application import supports_identity
 from geogenalg.application.generalize_building_areas_by_parcel import (
     GeneralizeBuildingAreasByParcel,
 )
@@ -20,13 +19,8 @@ def test_generalize_building_areas_by_parcel(testdata_path: Path) -> None:
     gpkg = GeoPackagePath(testdata_path / "buildings_helsinki.gpkg")
     gpkg_reference = GeoPackagePath(testdata_path / "properties_helsinki.gpkg")
 
-    # TODO: this is a hacky way to get around testing algorithm which without
-    # identity support produces unpredictable indexes. Fix index handling
-    # in GeneralizeBuildingAreasByParcel and add a better way to handle such algorithms.
-    supports_identity(GeneralizeBuildingAreasByParcel)
-
     IntegrationTest(
-        input_uri=gpkg.to_input("single_parts"),
+        input_uri=gpkg.to_input("buildings"),
         control_uri=gpkg_reference.to_input("control"),
         algorithm=GeneralizeBuildingAreasByParcel(
             building_area_threshold=4000,

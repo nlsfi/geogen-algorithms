@@ -4,20 +4,22 @@
 #
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
-
 from dataclasses import dataclass
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 
 from geogenalg.analyze import calculate_coverage
-from geogenalg.application import BaseAlgorithm
+from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import MissingReferenceError
+from geogenalg.core.geometry import assign_nearest_z
+from geogenalg.identity import hash_index_from_geometry
 from geogenalg.merge import buffer_and_merge_polygons
 from geogenalg.selection import remove_large_polygons
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
+@supports_identity
 @dataclass(frozen=True)
 class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
     """Generalize polygons representing buildings.
@@ -108,13 +110,10 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
 
         # 4 - Buffer and merge high-coverage parcels into building areas
 
-        # TODO: exploding and resetting index is a temporary workaround.
-        # IDs need to be handled differently
-        return (
-            buffer_and_merge_polygons(
-                high_coverage_parcels,
-                buffer_distance=self.buffer_distance,
-            )
-            .explode(as_index=False)
-            .reset_index(drop=True)
-        )
+        gdf = buffer_and_merge_polygons(
+            high_coverage_parcels,
+            buffer_distance=self.buffer_distance,
+        ).explode(as_index=False)
+
+        gdf = hash_index_from_geometry(gdf, "buildingareasparcel")
+        return assign_nearest_z(data, gdf)
