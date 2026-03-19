@@ -30,12 +30,15 @@ from geogenalg.utility.dataframe_processing import combine_gdfs
 
 def find_all_endpoints(
     lines: list[LineString | MultiLineString],
+    *,
+    force_point_to_2d: bool = False,
 ) -> list[tuple[Point, int, int]]:
     """Find all endpoints (start and end points) of line features.
 
     Args:
     ----
         lines: A list of shapely LineString or MultiLineString geometries
+        force_point_to_2d: If True, endpoints are returned as 2D.
 
     Returns:
     -------
@@ -71,7 +74,9 @@ def find_all_endpoints(
     # Flatten the dictionary into a list of (point, line index, count of lines)
     for entries in endpoint_map.values():
         for point, idx in entries:
-            endpoints.append((point, idx, len(entries)))
+            endpoints.append(
+                (point if not force_point_to_2d else force_2d(point), idx, len(entries))
+            )
 
     return endpoints
 
