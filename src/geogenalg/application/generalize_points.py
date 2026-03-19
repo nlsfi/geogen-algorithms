@@ -51,6 +51,7 @@ class GeneralizePoints(GeneralizePointClustersAndPolygonsToCentroids):
     cluster_distance: float = 20.0
 
     valid_input_geometry_types: ClassVar = {"Point"}
+    required_projected_crs: ClassVar = False
 
     def _execute(
         self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]

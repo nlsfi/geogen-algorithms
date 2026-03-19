@@ -30,6 +30,10 @@ class BaseAlgorithm(ABC):
     valid_reference_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
     """Set of accepted geometry types for reference data. If there is a mismatch,
     GeometryTypeError will be raised."""
+    requires_projected_crs: ClassVar[bool] = True
+    """Tells whether algorithm requires a projected coordinate reference
+    system. If True, when data with non-projected CRS is passed to execute(),
+    InvalidCRSError is raised."""
 
     @final
     def execute(
@@ -147,12 +151,12 @@ class BaseAlgorithm(ABC):
             )
             raise GeometryTypeError(msg)
 
-        if data.crs is None or not data.crs.is_projected:
-            msg = (
-                "Input data has no set coordinate reference system."
-                if data.crs is None
-                else "Input data does not have a projected coordinate reference system."
-            )
+        if data.crs is None:
+            msg = "Input data has no coordinate reference system."
+            raise InvalidCRSError(msg)
+
+        if self.requires_projected_crs and not data.crs.is_projected:
+            msg = "Algorithm requires projected CRS and data does not have one."
             raise InvalidCRSError(msg)
 
         for key, reference in reference_data.items():
@@ -171,19 +175,15 @@ class BaseAlgorithm(ABC):
                 )
                 raise GeometryTypeError(msg)
 
-            if reference.crs is None or not reference.crs.is_projected:
-                msg = (
-                    f'Reference data "{key}" has no set coordinate reference system.'
-                    if data.crs is None
-                    else f'Reference data "{key}" does not have a projected coordinate '
-                    + "reference system."
-                )
-                raise InvalidCRSError(msg)
-
+            # We've already established that the input data has a CRS and
+            # either the algorithm a) does not require a projected CRS or b)
+            # does require one and the data has one. Therefore it should be
+            # enough to just check that the reference data CRS matches the
+            # input data CRS.
             if reference.crs != data.crs:
                 msg = (
                     f'Reference data "{key}" and input data have different coordinate '
-                    + "reference systems."
+                    + f"reference systems: {reference.crs} != {data.crs}."
                 )
                 raise InvalidCRSError(msg)
 

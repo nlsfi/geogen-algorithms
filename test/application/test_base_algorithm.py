@@ -204,14 +204,14 @@ def test_wrong_geometry_type_reference_data(reference_data: GeoDataFrame):
                 geometry=[],
                 crs=None,
             ),
-            "Input data has no set coordinate reference system.",
+            "Input data has no coordinate reference system.",
         ),
         (
             GeoDataFrame(
                 geometry=[],
                 crs="EPSG:4326",
             ),
-            "Input data does not have a projected coordinate reference system.",
+            "Algorithm requires projected CRS and data does not have one.",
         ),
     ],
     ids=[
@@ -241,26 +241,18 @@ def test_input_invalid_crs(
                 geometry=[],
                 crs=None,
             ),
-            'Reference data "ref" does not have a projected coordinate reference system.',
-        ),
-        (
-            GeoDataFrame(
-                geometry=[],
-                crs="EPSG:4326",
-            ),
-            'Reference data "ref" does not have a projected coordinate reference system.',
+            'Reference data "ref" and input data have different coordinate reference systems: None != EPSG:3857.',
         ),
         (
             GeoDataFrame(
                 geometry=[],
                 crs="EPSG:3067",
             ),
-            'Reference data "ref" and input data have different coordinate reference systems.',
+            'Reference data "ref" and input data have different coordinate reference systems: EPSG:3067 != EPSG:3857.',
         ),
     ],
     ids=[
         "no_crs",
-        "geographic",
         "different",
     ],
 )
@@ -279,3 +271,16 @@ def test_reference_invalid_crs(
             GeoDataFrame(geometry=[], crs="EPSG:3857"),
             reference_data={"ref": reference_data},
         )
+
+
+def test_no_projected_crs_required():
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+        requires_projected_crs = False
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    # Just check that no error is raised, no explicit asserts required
+
+    MockAlg().execute(GeoDataFrame(geometry=[], crs="EPSG:4326"))
