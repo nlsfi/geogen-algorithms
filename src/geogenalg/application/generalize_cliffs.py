@@ -38,6 +38,7 @@ class GeneralizeCliffs(BaseAlgorithm):
 
     valid_input_geometry_types: ClassVar = {"LineString", "MultiLineString"}
     valid_reference_geometry_types: ClassVar = {"LineString", "MultiLineString"}
+    required_projected_crs: ClassVar = False
 
     @override
     def _execute(

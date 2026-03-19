@@ -41,6 +41,7 @@ class RemoveOverlap(BaseAlgorithm):
     }
 
     valid_reference_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
+    requires_projected_crs: ClassVar = False
 
     @override
     def _execute(
