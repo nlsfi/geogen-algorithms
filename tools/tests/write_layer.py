@@ -28,8 +28,6 @@ def write_layer(
 ) -> None:
     gdf = read_file(input_layer.file, layer=input_layer.layer_name)
     gdf.to_file(output_layer.file, layer=output_layer.layer_name)
-    print(input_layer)
-    print(output_layer)
 
 
 if __name__ == "__main__":

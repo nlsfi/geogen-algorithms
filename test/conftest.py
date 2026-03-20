@@ -14,13 +14,14 @@ from warnings import warn
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
+from pandas.testing import assert_series_equal
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
 from geogenalg.testing import (
     AssertFunctionParameter,
-    DiffWarning,
     GeoPackageInput,
+    TestDiffWarning,
     TestGeoDataFrames,
     assert_gdf_equal_save_diff,
     get_test_gdfs,
@@ -107,7 +108,7 @@ class IntegrationTest:
                 + "a set location. By default diffs will be saved to a subdirectory according "
                 + "to algorithm name and a timestamp. To save specifically to the set directory "
                 + "and overwrite contents, set GEOGENALG_TEST_DIFF_DIR_SPECIFIC=true.",
-                category=DiffWarning,
+                category=TestDiffWarning,
                 stacklevel=1,
             )
             diff_dir = Path(gettempdir()) / "geogenalg_tests"
@@ -120,22 +121,47 @@ class IntegrationTest:
             prefix = self.algorithm.__class__.__name__ + "_"
             diff_dir /= f"{prefix}{timestamp}"
 
-        assert_gdf_equal_save_diff(
-            result,
-            control,
-            assert_function_arguments=self.assert_function_arguments,
-            directory=diff_dir,
-        )
+        try:
+            assert_gdf_equal_save_diff(
+                result,
+                control,
+                assert_function_arguments=self.assert_function_arguments,
+                directory=diff_dir,
+            )
+        except:
+            warn(
+                "If the result is okay, you can make it the new control data by running: \n\n"
+                + f"python tools/tests/write_layer.py {diff_dir}/result.gpkg {self.control_uri.file}@{self.control_uri.layer_name}\n\n",
+                category=TestDiffWarning,
+                stacklevel=1,
+            )
 
-    def run(self) -> None:  # noqa: C901, PLR0912
-        """Run integration test.
+            raise
 
-        Raises
-        ------
-            AssertionError: If test fails.
-
-        """
+    def run(self) -> None:
+        """Run integration test."""
         input_data, input_data_before, _, result, control = self.get_test_gdfs()
+
+        # Run this first so if diff saving is on you can see the result (provided
+        # no errors happen during algorithm execution).
+        diff_env = os.environ.get("GEOGENALG_TEST_SAVE_DIFF")
+        save_diff = diff_env is not None and diff_env.lower() in {
+            "true",
+            "1",
+            "on",
+        }
+
+        if not save_diff:
+            assert_geodataframe_equal(
+                result,
+                control,
+                **self.assert_function_arguments,
+            )
+            # Test GeoSeries separately, because assert_geodataframe_equal
+            # does not check that Z values are equal.
+            assert_series_equal(result.geometry, control.geometry)
+        else:
+            self._assert_and_save_diffs(result, control)
 
         assert input_data.crs == result.crs
         assert input_data.crs == control.crs
@@ -144,46 +170,8 @@ class IntegrationTest:
         # TODO: we should probably ensure that reference data is also unmodified
         assert_geodataframe_equal(input_data, input_data_before)
 
-        # TODO: change these to failure states? However, that would
-        # require changes to some algorithms, so only warn for now.
-        if not input_data.has_z.all():
-            warn(
-                f"{type(self.algorithm).__name__}: Input data should have only geometries with z included.",
-                stacklevel=2,
-            )
-            if not control.has_z.all():
-                warn(
-                    f"{type(self.algorithm).__name__}: Control data should have only geometries with z included.",
-                    stacklevel=2,
-                )
-
-        if input_data.has_z.any() and not input_data.has_z.all():
-            msg = "Input data has mixed 2.5D and 2D geometries."
-            raise AssertionError(msg)
-
-        if result.has_z.any() and not result.has_z.all():
-            msg = "Result has mixed 2.5D and 2D geometries."
-            raise AssertionError(msg)
-
-        if control.has_z.any() and not control.has_z.all():
-            msg = "Control data has mixed 2.5D and 2D geometries."
-            raise AssertionError(msg)
-
-        if control.has_z.all() != result.has_z.all():
-            msg = "Control or result data has z when other does not."
-            raise AssertionError(msg)
-
-        input_has_only_single_geometries = all(
-            "Multi" not in geom_type
-            for geom_type in input_data.geometry.geom_type.values
-        )
-        result_has_only_single_geometries = all(
-            "Multi" not in geom_type for geom_type in result.geometry.geom_type.values
-        )
-
-        if input_has_only_single_geometries and not result_has_only_single_geometries:
-            msg = "Input has only single geometries but result does not."
-            raise AssertionError(msg)
+        self._check_test_data_has_z_coordinates(input_data, control, result)
+        self._check_test_data_single_geometries(input_data, result)
 
         if self.check_missing_reference:
             with pytest.raises(
@@ -203,22 +191,6 @@ class IntegrationTest:
                 )
 
         # TODO: test reference data geom types?
-
-        diff_env = os.environ.get("GEOGENALG_TEST_SAVE_DIFF")
-        save_diff = diff_env is not None and diff_env.lower() in {
-            "true",
-            "1",
-            "on",
-        }
-
-        if not save_diff:
-            assert_geodataframe_equal(
-                result,
-                control,
-                **self.assert_function_arguments,
-            )
-        else:
-            self._assert_and_save_diffs(result, control)
 
         # By default run algorithm twice with same data, to test that it
         # produces same results with different geometry column names. Allow
@@ -245,3 +217,65 @@ class IntegrationTest:
                 self._assert_and_save_diffs(
                     result_from_geom_column, control_from_geom_column
                 )
+
+    def _check_test_data_has_z_coordinates(
+        self,
+        input_data: GeoDataFrame,
+        control: GeoDataFrame,
+        result: GeoDataFrame,
+    ) -> None:
+        """Check that test data and results uniformly have z coordinates.
+
+        Raises
+        ------
+            AssertionError: If a check fails.
+
+        """
+        if not input_data.has_z.all():
+            msg = "Input data for integation test must have geometries with Z values."
+            raise AssertionError(msg)
+
+        if not control.has_z.all():
+            msg = "Control data for integation test must have geometries with Z values."
+            raise AssertionError(msg)
+
+        if input_data.has_z.any() and not input_data.has_z.all():
+            msg = "Input data has mixed 2.5D and 2D geometries."
+            raise AssertionError(msg)
+
+        if result.has_z.any() and not result.has_z.all():
+            msg = "Result has mixed 2.5D and 2D geometries."
+            raise AssertionError(msg)
+
+        if control.has_z.any() and not control.has_z.all():
+            msg = "Control data has mixed 2.5D and 2D geometries."
+            raise AssertionError(msg)
+
+        if control.has_z.all() != result.has_z.all():
+            msg = "Control or result data has z when other does not."
+            raise AssertionError(msg)
+
+    def _check_test_data_single_geometries(
+        self,
+        input_data: GeoDataFrame,
+        result: GeoDataFrame,
+    ) -> None:
+        """Check that if input data has only single geometries, result does also.
+
+        Raises
+        ------
+            AssertionError: If a check fails.
+
+        """
+        input_has_only_single_geometries = all(
+            "Multi" not in geom_type
+            for geom_type in input_data.geometry.geom_type.to_numpy()
+        )
+        result_has_only_single_geometries = all(
+            "Multi" not in geom_type
+            for geom_type in result.geometry.geom_type.to_numpy()
+        )
+
+        if input_has_only_single_geometries and not result_has_only_single_geometries:
+            msg = "Input has only single geometries but result does not."
+            raise AssertionError(msg)
