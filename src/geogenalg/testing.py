@@ -76,6 +76,7 @@ class TestGeoDataFrames(NamedTuple):
     input_data: GeoDataFrame
     input_data_before: GeoDataFrame
     reference_data: dict[str, GeoDataFrame]
+    reference_data_before: dict[str, GeoDataFrame]
     result: GeoDataFrame
     control: GeoDataFrame
 
@@ -280,6 +281,7 @@ def get_test_gdfs(  # noqa: PLR0913
         )
 
     input_data_before = input_data.copy()
+    reference_data_before = {key: data.copy() for key, data in reference_data.items()}
 
     result = get_alg_results_from_geopackage(
         alg,
@@ -298,6 +300,7 @@ def get_test_gdfs(  # noqa: PLR0913
         input_data,
         input_data_before,
         reference_data,
+        reference_data_before,
         result,
         control,
     )
