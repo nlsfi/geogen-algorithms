@@ -130,7 +130,6 @@ def get_cluster_centroids(
         return centroid
 
     gdf.geometry = gdf.geometry.apply(_make_centroid)
-    gdf.crs = input_gdf.crs
 
     return gdf
 
