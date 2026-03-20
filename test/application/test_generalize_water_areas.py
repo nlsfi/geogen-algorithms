@@ -15,10 +15,10 @@ UNIQUE_ID_COLUMN = "kmtk_id"
 
 
 def test_generalize_lakes(testdata_path: Path):
-    gpkg = GeoPackagePath(testdata_path / "lakes.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "water_areas.gpkg")
     IntegrationTest(
         input_uri=gpkg.to_input("lake_part"),
-        control_uri=gpkg.to_input("control"),
+        control_uri=gpkg.to_input("control_lakes"),
         algorithm=GeneralizeWaterAreas(
             min_area=4000.0,
             island_min_area=100.0,
@@ -38,10 +38,10 @@ def test_generalize_lakes(testdata_path: Path):
 
 
 def test_generalize_sea(testdata_path: Path):
-    gpkg = GeoPackagePath(testdata_path / "sea.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "water_areas.gpkg")
     IntegrationTest(
         input_uri=gpkg.to_input("sea_part"),
-        control_uri=gpkg.to_input("control"),
+        control_uri=gpkg.to_input("control_sea"),
         algorithm=GeneralizeWaterAreas(
             min_area=4000.0,
             island_min_area=100.0,
@@ -57,7 +57,7 @@ def test_generalize_sea(testdata_path: Path):
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
-            "shoreline": gpkg.to_input("shoreline"),
+            "shoreline": gpkg.to_input("sea_shoreline"),
         },
         check_missing_reference=False,
     ).run()
