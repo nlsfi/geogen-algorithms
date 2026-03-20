@@ -22,7 +22,10 @@ def test_generalize_shoreline(
     IntegrationTest(
         input_uri=gpkg.to_input("original_shoreline"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeShoreline(),
+        algorithm=GeneralizeShoreline(
+            buffer_distance=7.5,
+            reference_key="areas",
+        ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
             "areas": gpkg.to_input("generalized_lakes"),

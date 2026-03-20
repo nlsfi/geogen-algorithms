@@ -26,6 +26,7 @@ def test_generalize_building_areas_by_geometry(testdata_path: Path) -> None:
             threshold_building_area_hole=500.0,
             simplify_tolerance_single_buildings=10.0,
             simplify_tolerance_building_areas=10.0,
+            network_buffer_distance=10.0,
             reference_key="roads",
         ),
         reference_uris={

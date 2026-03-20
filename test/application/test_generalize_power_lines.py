@@ -22,9 +22,14 @@ def test_generalize_power_lines(
         input_uri=gpkg.to_input("power_lines"),
         control_uri=gpkg.to_input("control"),
         algorithm=GeneralizePowerLines(
-            class_column="kohdeluokka",
-            classes_for_higher_priority_lines=[22311],
+            distance_threshold_for_parallel_lines=50.0,
             classes_for_merge_parallel_lines=[22311],
+            classes_for_higher_priority_lines=[22311],
+            class_column="kohdeluokka",
+            length_threshold=100.0,
+            simplification_tolerance=0.0,
+            reference_key_fences="fences",
+            reference_key_substations="substations",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
