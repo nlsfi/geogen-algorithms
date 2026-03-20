@@ -38,7 +38,7 @@ AssertFunctionParameter = Literal[
 ]
 
 
-class TestDiffWarning(UserWarning):  # noqa: D101
+class TestReportWarning(UserWarning):  # noqa: D101
     pass
 
 
@@ -127,7 +127,7 @@ def assert_gdf_equal_save_diff(  # noqa: C901
         warn(
             "Exception occured while checking GeoDataFrame "
             + f"equality. Saving diff to {directory}",
-            category=TestDiffWarning,
+            category=TestReportWarning,
             stacklevel=3,
         )
 
