@@ -21,8 +21,8 @@ from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
 from geogenalg.testing import (
     AssertFunctionParameter,
     GeoPackageInput,
-    TestDiffWarning,
     TestGeoDataFrames,
+    TestReportWarning,
     assert_gdf_equal_save_diff,
     get_test_gdfs,
 )
@@ -88,51 +88,51 @@ class IntegrationTest:
             rename_geometry=geometry_column,
         )
 
-    def _assert_and_save_diffs(
+    def _assert_and_save_report(
         self,
         result: GeoDataFrame,
         control: GeoDataFrame,
     ) -> None:
-        diff_dir: Path | str | None = os.environ.get("GEOGENALG_TEST_DIFF_DIR")
-        dir_specific = os.environ.get("GEOGENALG_TEST_DIFF_DIR_SPECIFIC")
+        report_dir: Path | str | None = os.environ.get("GEOGENALG_TEST_REPORT_DIR")
+        dir_specific = os.environ.get("GEOGENALG_TEST_REPORT_DIR_SPECIFIC")
         dir_is_specific = dir_specific is not None and dir_specific.lower() in {
             "true",
             "1",
             "on",
         }
 
-        if diff_dir is None:
+        if report_dir is None:
             warn(
-                "No directory specified for diff. Using temporary directory by default. "
-                + "You can set the GEOGENALG_TEST_DIFF_DIR environment variable to save to "
-                + "a set location. By default diffs will be saved to a subdirectory according "
+                "No directory specified for report. Using temporary directory by default. "
+                + "You can set the GEOGENALG_TEST_REPORT_DIR environment variable to save to "
+                + "a set location. By default report will be saved to a subdirectory according "
                 + "to algorithm name and a timestamp. To save specifically to the set directory "
-                + "and overwrite contents, set GEOGENALG_TEST_DIFF_DIR_SPECIFIC=true.",
-                category=TestDiffWarning,
+                + "and overwrite contents, set GEOGENALG_TEST_REPORT_DIR_SPECIFIC=true.",
+                category=TestReportWarning,
                 stacklevel=1,
             )
-            diff_dir = Path(gettempdir()) / "geogenalg_tests"
+            report_dir = Path(gettempdir()) / "geogenalg_tests"
         else:
-            diff_dir = Path(diff_dir)
+            report_dir = Path(report_dir)
 
         if not dir_is_specific:
             tz = datetime.now().astimezone().tzinfo
             timestamp = datetime.now(tz=tz).strftime("%Y_%m_%d-%H_%M_%S")
             prefix = self.algorithm.__class__.__name__ + "_"
-            diff_dir /= f"{prefix}{timestamp}"
+            report_dir /= f"{prefix}{timestamp}"
 
         try:
             assert_gdf_equal_save_diff(
                 result,
                 control,
                 assert_function_arguments=self.assert_function_arguments,
-                directory=diff_dir,
+                directory=report_dir,
             )
         except:
             warn(
                 "If the result is okay, you can make it the new control data by running: \n\n"
-                + f"python tools/tests/write_layer.py {diff_dir}/result.gpkg {self.control_uri.file}@{self.control_uri.layer_name}\n\n",
-                category=TestDiffWarning,
+                + f"python tools/tests/write_layer.py {report_dir}/result.gpkg {self.control_uri.file}@{self.control_uri.layer_name}\n\n",
+                category=TestReportWarning,
                 stacklevel=1,
             )
 
@@ -142,16 +142,16 @@ class IntegrationTest:
         """Run integration test."""
         input_data, input_data_before, _, result, control = self.get_test_gdfs()
 
-        # Run this first so if diff saving is on you can see the result (provided
+        # Run this first so if report saving is on you can see the result (provided
         # no errors happen during algorithm execution).
-        diff_env = os.environ.get("GEOGENALG_TEST_SAVE_DIFF")
-        save_diff = diff_env is not None and diff_env.lower() in {
+        report_env = os.environ.get("GEOGENALG_TEST_REPORT_SAVE")
+        save_report = report_env is not None and report_env.lower() in {
             "true",
             "1",
             "on",
         }
 
-        if not save_diff:
+        if not save_report:
             assert_geodataframe_equal(
                 result,
                 control,
@@ -161,7 +161,7 @@ class IntegrationTest:
             # does not check that Z values are equal.
             assert_series_equal(result.geometry, control.geometry)
         else:
-            self._assert_and_save_diffs(result, control)
+            self._assert_and_save_report(result, control)
 
         assert input_data.crs == result.crs
         assert input_data.crs == control.crs
@@ -196,7 +196,7 @@ class IntegrationTest:
         # produces same results with different geometry column names. Allow
         # disabling this by environment variable to speed up tests during
         # development.
-        geom_column = os.environ.get("GEOGENALG_TEST_NO_GEOM_COLUMNS")
+        geom_column = os.environ.get("GEOGENALG_TEST_ONE_GEOM_COLUMN")
         test_geom_column = geom_column is None or geom_column.lower() not in {
             "true",
             "1",
@@ -207,14 +207,14 @@ class IntegrationTest:
             _, _, _, result_from_geom_column, control_from_geom_column = (
                 self.get_test_gdfs(geometry_column="geom")
             )
-            if not save_diff:
+            if not save_report:
                 assert_geodataframe_equal(
                     result_from_geom_column,
                     control_from_geom_column,
                     **self.assert_function_arguments,
                 )
             else:
-                self._assert_and_save_diffs(
+                self._assert_and_save_report(
                     result_from_geom_column, control_from_geom_column
                 )
 
