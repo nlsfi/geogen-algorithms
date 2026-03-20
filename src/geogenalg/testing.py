@@ -12,6 +12,7 @@ from warnings import warn
 
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
+from pandas.testing import assert_series_equal
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.utility.dataframe_processing import (
@@ -37,8 +38,8 @@ AssertFunctionParameter = Literal[
 ]
 
 
-class DiffWarning(UserWarning):  # noqa: D101
-    pass
+class TestReportWarning(UserWarning):  # noqa: D101
+    __test__ = False
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ class TestGeoDataFrames(NamedTuple):
     input_data: GeoDataFrame
     input_data_before: GeoDataFrame
     reference_data: dict[str, GeoDataFrame]
+    reference_data_before: dict[str, GeoDataFrame]
     result: GeoDataFrame
     control: GeoDataFrame
 
@@ -115,6 +117,10 @@ def assert_gdf_equal_save_diff(  # noqa: C901
 
     try:
         assert_geodataframe_equal(result, control, **assert_function_arguments)
+
+        # Test GeoSeries separately, because assert_geodataframe_equal
+        # does not check that Z values are equal.
+        assert_series_equal(result.geometry, control.geometry)
     except:
         if not directory.exists():
             directory.mkdir(parents=True)
@@ -122,7 +128,7 @@ def assert_gdf_equal_save_diff(  # noqa: C901
         warn(
             "Exception occured while checking GeoDataFrame "
             + f"equality. Saving diff to {directory}",
-            category=DiffWarning,
+            category=TestReportWarning,
             stacklevel=3,
         )
 
@@ -275,6 +281,7 @@ def get_test_gdfs(  # noqa: PLR0913
         )
 
     input_data_before = input_data.copy()
+    reference_data_before = {key: data.copy() for key, data in reference_data.items()}
 
     result = get_alg_results_from_geopackage(
         alg,
@@ -293,6 +300,7 @@ def get_test_gdfs(  # noqa: PLR0913
         input_data,
         input_data_before,
         reference_data,
+        reference_data_before,
         result,
         control,
     )

@@ -31,7 +31,7 @@ UNIQUE_ID_COLUMN = "mtk_id"
 
 
 def test_generalize_buildings_50k(testdata_path: Path) -> None:
-    gpkg = GeoPackagePath(testdata_path / "buildings_helsinki.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "buildings.gpkg")
 
     IntegrationTest(
         input_uri=gpkg.to_input("buildings"),
@@ -48,6 +48,8 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
             classes_for_always_kept_buildings=[],
             unique_key_column="mtk_id",
             building_class_column="kayttotarkoitus",
+            original_area_column="original_area",
+            main_angle_column="main_angle",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
@@ -55,7 +57,7 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
 
 
 def test_generalize_buildings_100k(testdata_path: Path) -> None:
-    gpkg = GeoPackagePath(testdata_path / "buildings_helsinki.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "buildings.gpkg")
 
     IntegrationTest(
         input_uri=gpkg.to_input("control_50k"),
@@ -72,6 +74,8 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
             classes_for_always_kept_buildings=[],
             unique_key_column="mtk_id",
             building_class_column="kayttotarkoitus",
+            original_area_column="original_area",
+            main_angle_column="main_angle",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,

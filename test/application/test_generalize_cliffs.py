@@ -20,7 +20,11 @@ def test_generalize_cliffs(testdata_path: Path) -> None:
     IntegrationTest(
         input_uri=gpkg.to_input("cliffs_source"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeCliffs(),
+        algorithm=GeneralizeCliffs(
+            buffer_size=20.0,
+            length_threshold=50.0,
+            reference_key="roads",
+        ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=True,
         reference_uris={

@@ -16,8 +16,8 @@ from shapely import Point, Polygon, box
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.testing import (
-    DiffWarning,
     GeoPackageInput,
+    TestReportWarning,
     assert_gdf_equal_save_diff,
     get_alg_results_from_geopackage,
     get_test_gdfs,
@@ -49,7 +49,7 @@ def test_assert_gdf_equal_index_mismatch():
     )
 
     with pytest.raises(AssertionError):  # noqa: SIM117
-        with catch_warnings(category=DiffWarning, action="ignore"):
+        with catch_warnings(category=TestReportWarning, action="ignore"):
             assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
@@ -100,7 +100,7 @@ def test_assert_gdf_equal_save_attribute_geom():
     )
 
     with pytest.raises(AssertionError):  # noqa: SIM117
-        with catch_warnings(category=DiffWarning, action="ignore"):
+        with catch_warnings(category=TestReportWarning, action="ignore"):
             assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
@@ -135,7 +135,7 @@ def test_assert_gdf_equal_save_diff_geom():
     )
 
     with pytest.raises(AssertionError):  # noqa: SIM117
-        with catch_warnings(category=DiffWarning, action="ignore"):
+        with catch_warnings(category=TestReportWarning, action="ignore"):
             assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
@@ -372,7 +372,7 @@ def test_get_test_gdfs(
     ref_data.to_file(ref_path.file, layer=ref_path.layer_name)
     control_data.to_file(control_path.file, layer=control_path.layer_name)
 
-    other_input, input_before, other_ref, result, control = get_test_gdfs(
+    other_input, input_before, other_ref, ref_before, result, control = get_test_gdfs(
         input_path,
         control_path,
         MockAlg("result"),
@@ -392,3 +392,6 @@ def test_get_test_gdfs(
 
     assert_geodataframe_equal(result, result_expected)
     assert_geodataframe_equal(control, control_expected)
+
+    for key, ref_gdf in other_ref.items():
+        assert_geodataframe_equal(ref_gdf, ref_before[key])

@@ -27,6 +27,7 @@ def test_generalize_roads(
         algorithm=GeneralizeRoads(
             threshold_distance=10.0,
             threshold_length=75.0,
+            reference_key="network",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={

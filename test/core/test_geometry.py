@@ -1895,7 +1895,7 @@ def test_polygon_rings_to_multilinestring(
                 ]
             ),
         ),
-        (  # split_ring_with_line_at_segment
+        (  # split_ring_with_line_at_vertexes
             LineString([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]),
             LineString([[-5, -5], [5, 5]]),
             MultiLineString(

@@ -15,22 +15,23 @@ UNIQUE_ID_COLUMN = "kmtk_id"
 
 
 def test_generalize_lakes(testdata_path: Path):
-    gpkg = GeoPackagePath(testdata_path / "lakes.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "water_areas.gpkg")
     IntegrationTest(
         input_uri=gpkg.to_input("lake_part"),
-        control_uri=gpkg.to_input("control"),
+        control_uri=gpkg.to_input("control_lakes"),
         algorithm=GeneralizeWaterAreas(
             min_area=4000.0,
-            island_min_area=100.0,
             area_simplification_tolerance=10.0,
             thin_section_width=20.0,
             thin_section_min_size=200.0,
             thin_section_exaggerate_by=3.0,
+            island_min_area=100.0,
             island_min_width=185.0,
             island_min_elongation=0.25,
             island_exaggerate_by=3.0,
             island_simplification_tolerance=10.0,
             smoothing_passes=3,
+            reference_key="shoreline",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
@@ -38,26 +39,27 @@ def test_generalize_lakes(testdata_path: Path):
 
 
 def test_generalize_sea(testdata_path: Path):
-    gpkg = GeoPackagePath(testdata_path / "sea.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "water_areas.gpkg")
     IntegrationTest(
         input_uri=gpkg.to_input("sea_part"),
-        control_uri=gpkg.to_input("control"),
+        control_uri=gpkg.to_input("control_sea"),
         algorithm=GeneralizeWaterAreas(
             min_area=4000.0,
-            island_min_area=100.0,
             area_simplification_tolerance=10.0,
             thin_section_width=20.0,
             thin_section_min_size=200.0,
             thin_section_exaggerate_by=3.0,
+            island_min_area=100.0,
             island_min_width=185.0,
             island_min_elongation=0.25,
             island_exaggerate_by=3.0,
             island_simplification_tolerance=10.0,
             smoothing_passes=3,
+            reference_key="shoreline",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
-            "shoreline": gpkg.to_input("shoreline"),
+            "shoreline": gpkg.to_input("sea_shoreline"),
         },
         check_missing_reference=False,
     ).run()

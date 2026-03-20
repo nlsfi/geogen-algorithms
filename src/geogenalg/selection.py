@@ -41,7 +41,7 @@ def remove_disconnected_short_lines(
 
     """
     lines = list(input_gdf.geometry)
-    endpoints = find_all_endpoints(lines)
+    endpoints = find_all_endpoints(lines, force_point_to_2d=True)
     min_connections = 2
 
     # Build mapping: Point -> set of line indices touching this point

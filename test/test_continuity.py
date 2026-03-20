@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from collections import defaultdict
 from collections.abc import Callable
 
 import pytest
@@ -12,7 +11,7 @@ from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from geopandas.tools import overlay
 from shapely import box
-from shapely.geometry import LineString, MultiLineString
+from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.continuity import (
@@ -35,40 +34,70 @@ from geogenalg.continuity import (
 
 
 @pytest.mark.parametrize(
-    ("lines", "expected_results"),
+    ("lines", "expected_results", "force_point_to_2d"),
     [
         (
             [LineString([(0, 0), (1, 1)])],
-            [((0, 0), 1), ((1, 1), 1)],
+            [(Point(0, 0), 0, 1), (Point(1, 1), 0, 1)],
+            False,
         ),
         (
             [LineString([(0, 0), (1, 1)]), LineString([(1, 1), (2, 2)])],
-            [((0, 0), 1), ((1, 1), 2), ((2, 2), 1)],
+            [
+                (Point(0, 0), 0, 1),
+                (Point(1, 1), 0, 2),
+                (Point(1, 1), 1, 2),
+                (Point(2, 2), 1, 1),
+            ],
+            False,
         ),
         (
             [MultiLineString([[(0, 0), (0.5, 0.5), (1, 0)], [(1, 0), (2, 0)]])],
-            [((0, 0), 1), ((1, 0), 2), ((2, 0), 1)],
+            [
+                (Point(0, 0), 0, 1),
+                (Point(1, 0), 0, 2),
+                (Point(1, 0), 0, 2),
+                (Point(2, 0), 0, 1),
+            ],
+            False,
         ),
         (
             [LineString([])],
             [],
+            False,
+        ),
+        (
+            [LineString([(0, 0, 0), (1, 1, 5)])],
+            [(Point(0, 0, 0), 0, 1), (Point(1, 1, 5), 0, 1)],
+            False,
+        ),
+        (
+            [LineString([(0, 0, 0), (1, 1, 5)])],
+            [(Point(0, 0), 0, 1), (Point(1, 1), 0, 1)],
+            True,
         ),
     ],
-    ids=["single_line", "shared_endpoint", "multi_line", "empty_line"],
+    ids=[
+        "single_line",
+        "shared_endpoint",
+        "multi_line",
+        "empty_line",
+        "3d",
+        "force_2d",
+    ],
 )
-def test_find_all_endpoints(lines: list, expected_results: list):
-    result = find_all_endpoints(lines)
-    coord_count = defaultdict(int)
-    for pt, _, count in result:
-        key = (round(pt.x, 5), round(pt.y, 5))
-        coord_count[key] = count
-
-    expected_dict = dict(expected_results)
-
-    assert len(coord_count) == len(expected_dict)
-    for coord, count in expected_dict.items():
-        assert coord in coord_count
-        assert coord_count[coord] == count
+def test_find_all_endpoints(
+    lines: list,
+    expected_results: list,
+    force_point_to_2d: bool,
+):
+    assert (
+        find_all_endpoints(
+            lines,
+            force_point_to_2d=force_point_to_2d,
+        )
+        == expected_results
+    )
 
 
 @pytest.mark.parametrize(

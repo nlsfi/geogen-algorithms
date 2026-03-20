@@ -28,6 +28,10 @@ UNIQUE_ID_COLUMN = "kmtk_id"
             GeneralizePoints(
                 cluster_distance=30.0,
                 displace=False,
+                displace_threshold=70.0,
+                displace_points_iterations=10,
+                aggregation_functions=None,
+                is_cluster_column="is_cluster",
             ),
         ),
         (
@@ -36,11 +40,14 @@ UNIQUE_ID_COLUMN = "kmtk_id"
             GeneralizePoints(
                 cluster_distance=30.0,
                 displace=False,
+                displace_threshold=70.0,
+                displace_points_iterations=10,
                 aggregation_functions={
                     "boulder_in_water_type_id": lambda values: min(values)
                     if len(values) == set(values)
                     else 2
                 },
+                is_cluster_column="is_cluster",
             ),
         ),
         (
@@ -49,6 +56,10 @@ UNIQUE_ID_COLUMN = "kmtk_id"
             GeneralizePoints(
                 cluster_distance=30.0,
                 displace=True,
+                displace_threshold=70.0,
+                displace_points_iterations=10,
+                aggregation_functions=None,
+                is_cluster_column="is_cluster",
             ),
         ),
     ],

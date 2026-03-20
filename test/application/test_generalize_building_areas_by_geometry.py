@@ -16,7 +16,7 @@ UNIQUE_ID_COLUMN = "mtk_id"
 
 
 def test_generalize_building_areas_by_geometry(testdata_path: Path) -> None:
-    gpkg = GeoPackagePath(testdata_path / "building_areas_geometry.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "building_areas_by_geometry.gpkg")
 
     IntegrationTest(
         input_uri=gpkg.to_input("buildings"),
@@ -26,6 +26,7 @@ def test_generalize_building_areas_by_geometry(testdata_path: Path) -> None:
             threshold_building_area_hole=500.0,
             simplify_tolerance_single_buildings=10.0,
             simplify_tolerance_building_areas=10.0,
+            network_buffer_distance=10.0,
             reference_key="roads",
         ),
         reference_uris={

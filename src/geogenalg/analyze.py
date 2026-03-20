@@ -290,7 +290,12 @@ def calculate_coverage(
 
     base_features["base_feature_id"] = base_features.index
 
-    intersections = overlay(overlay_features, base_features, how="intersection")
+    intersections = overlay(
+        overlay_features,
+        base_features,
+        how="intersection",
+        keep_geom_type=False,
+    )
     intersections["intersect_area"] = intersections.geometry.area
 
     combined_overlay_area = (

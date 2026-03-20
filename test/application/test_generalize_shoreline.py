@@ -17,12 +17,15 @@ UNIQUE_ID_COLUMN = "kmtk_id"
 def test_generalize_shoreline(
     testdata_path: Path,
 ) -> None:
-    gpkg = GeoPackagePath(testdata_path / "lakes_to_shoreline.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "shoreline.gpkg")
 
     IntegrationTest(
         input_uri=gpkg.to_input("original_shoreline"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeShoreline(),
+        algorithm=GeneralizeShoreline(
+            buffer_distance=7.5,
+            reference_key="areas",
+        ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
             "areas": gpkg.to_input("generalized_lakes"),
