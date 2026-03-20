@@ -39,7 +39,7 @@ AssertFunctionParameter = Literal[
 
 
 class TestReportWarning(UserWarning):  # noqa: D101
-    pass
+    __test__ = False
 
 
 @dataclass(frozen=True)
