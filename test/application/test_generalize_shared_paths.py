@@ -24,6 +24,8 @@ def test_generalize_shared_paths(
         control_uri=gpkg.to_input("control_shared_paths"),
         algorithm=GeneralizeSharedPaths(
             detection_distance=25.0,
+            minimum_percentage=90.0,
+            reference_key="roads",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         # Use control from GeneralizeRoads test as reference, as these are intended

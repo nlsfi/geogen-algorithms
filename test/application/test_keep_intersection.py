@@ -37,7 +37,9 @@ def test_keep_intersection(
     IntegrationTest(
         input_uri=gpkg.to_input(f"data_{layer_suffix}"),
         control_uri=gpkg.to_input(f"control_{layer_suffix}"),
-        algorithm=KeepIntersection(),
+        algorithm=KeepIntersection(
+            reference_key="mask",
+        ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
             "mask": gpkg.to_input("mask"),
