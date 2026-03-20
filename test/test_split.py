@@ -3,6 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+import re
 
 import pytest
 from geopandas import GeoDataFrame
@@ -304,3 +305,10 @@ def test_explode_and_hash_id(
         result,
         control,
     )
+
+
+def test_explode_and_hash_id_raises():
+    with pytest.raises(
+        ValueError, match=re.escape("GeoDataFrame must have a string index.")
+    ):
+        explode_and_hash_id(GeoDataFrame(index=[1]), "")
