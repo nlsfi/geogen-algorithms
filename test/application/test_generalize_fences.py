@@ -15,11 +15,11 @@ UNIQUE_ID_COLUMN = "mtk_id"
 
 
 def test_generalize_fences(testdata_path: Path) -> None:
-    gpkg = GeoPackagePath(testdata_path / "fences_rovaniemi.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "fences.gpkg")
 
     IntegrationTest(
-        input_uri=gpkg.to_input("mtk_fences"),
-        control_uri=gpkg.to_input("generalized_fences"),
+        input_uri=gpkg.to_input("fences"),
+        control_uri=gpkg.to_input("control"),
         algorithm=GeneralizeFences(
             closing_fence_area_threshold=2000,
             closing_fence_area_with_mast_threshold=8000,
@@ -32,6 +32,6 @@ def test_generalize_fences(testdata_path: Path) -> None:
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=True,
         reference_uris={
-            "masts": gpkg.to_input("mtk_masts"),
+            "masts": gpkg.to_input("masts"),
         },
     ).run()

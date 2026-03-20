@@ -16,8 +16,8 @@ from shapely import Point, Polygon, box
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.testing import (
-    DiffWarning,
     GeoPackageInput,
+    TestDiffWarning,
     assert_gdf_equal_save_diff,
     get_alg_results_from_geopackage,
     get_test_gdfs,
@@ -49,7 +49,7 @@ def test_assert_gdf_equal_index_mismatch():
     )
 
     with pytest.raises(AssertionError):  # noqa: SIM117
-        with catch_warnings(category=DiffWarning, action="ignore"):
+        with catch_warnings(category=TestDiffWarning, action="ignore"):
             assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
@@ -100,7 +100,7 @@ def test_assert_gdf_equal_save_attribute_geom():
     )
 
     with pytest.raises(AssertionError):  # noqa: SIM117
-        with catch_warnings(category=DiffWarning, action="ignore"):
+        with catch_warnings(category=TestDiffWarning, action="ignore"):
             assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"
@@ -135,7 +135,7 @@ def test_assert_gdf_equal_save_diff_geom():
     )
 
     with pytest.raises(AssertionError):  # noqa: SIM117
-        with catch_warnings(category=DiffWarning, action="ignore"):
+        with catch_warnings(category=TestDiffWarning, action="ignore"):
             assert_gdf_equal_save_diff(gdf_result, gdf_control, directory=temp_dir_path)
 
     result_path = temp_dir_path / "result.gpkg"

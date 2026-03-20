@@ -12,6 +12,7 @@ from warnings import warn
 
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
+from pandas.testing import assert_series_equal
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.utility.dataframe_processing import (
@@ -37,7 +38,7 @@ AssertFunctionParameter = Literal[
 ]
 
 
-class DiffWarning(UserWarning):  # noqa: D101
+class TestDiffWarning(UserWarning):  # noqa: D101
     pass
 
 
@@ -115,6 +116,10 @@ def assert_gdf_equal_save_diff(  # noqa: C901
 
     try:
         assert_geodataframe_equal(result, control, **assert_function_arguments)
+
+        # Test GeoSeries separately, because assert_geodataframe_equal
+        # does not check that Z values are equal.
+        assert_series_equal(result.geometry, control.geometry)
     except:
         if not directory.exists():
             directory.mkdir(parents=True)
@@ -122,7 +127,7 @@ def assert_gdf_equal_save_diff(  # noqa: C901
         warn(
             "Exception occured while checking GeoDataFrame "
             + f"equality. Saving diff to {directory}",
-            category=DiffWarning,
+            category=TestDiffWarning,
             stacklevel=3,
         )
 
