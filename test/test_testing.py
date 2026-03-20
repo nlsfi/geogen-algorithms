@@ -372,7 +372,7 @@ def test_get_test_gdfs(
     ref_data.to_file(ref_path.file, layer=ref_path.layer_name)
     control_data.to_file(control_path.file, layer=control_path.layer_name)
 
-    other_input, input_before, other_ref, result, control = get_test_gdfs(
+    other_input, input_before, other_ref, ref_before, result, control = get_test_gdfs(
         input_path,
         control_path,
         MockAlg("result"),
@@ -392,3 +392,6 @@ def test_get_test_gdfs(
 
     assert_geodataframe_equal(result, result_expected)
     assert_geodataframe_equal(control, control_expected)
+
+    for key, ref_gdf in other_ref.items():
+        assert_geodataframe_equal(ref_gdf, ref_before[key])

@@ -105,7 +105,7 @@ class IntegrationTest:
             warn(
                 "No directory specified for report. Using temporary directory by default. "
                 + "You can set the GEOGENALG_TEST_REPORT_DIR environment variable to save to "
-                + "a set location. By default report will be saved to a subdirectory according "
+                + "a set location. By default the report will be saved to a subdirectory according "
                 + "to algorithm name and a timestamp. To save specifically to the set directory "
                 + "and overwrite contents, set GEOGENALG_TEST_REPORT_DIR_SPECIFIC=true.",
                 category=TestReportWarning,
@@ -129,9 +129,12 @@ class IntegrationTest:
                 directory=report_dir,
             )
         except:
+            script_path = (
+                Path(__file__).parent.parent / "tools/tests/write_layer.py"
+            ).resolve()
             warn(
                 "If the result is okay, you can make it the new control data by running: \n\n"
-                + f"python tools/tests/write_layer.py {report_dir}/result.gpkg {self.control_uri.file}@{self.control_uri.layer_name}\n\n",
+                + f"python {script_path} {report_dir}/result.gpkg {self.control_uri.file}@{self.control_uri.layer_name}\n\n",
                 category=TestReportWarning,
                 stacklevel=1,
             )
@@ -140,7 +143,7 @@ class IntegrationTest:
 
     def run(self) -> None:
         """Run integration test."""
-        input_data, input_data_before, _, result, control = self.get_test_gdfs()
+        test_gdfs = self.get_test_gdfs()
 
         # Run this first so if report saving is on you can see the result (provided
         # no errors happen during algorithm execution).
@@ -153,31 +156,37 @@ class IntegrationTest:
 
         if not save_report:
             assert_geodataframe_equal(
-                result,
-                control,
+                test_gdfs.result,
+                test_gdfs.control,
                 **self.assert_function_arguments,
             )
             # Test GeoSeries separately, because assert_geodataframe_equal
             # does not check that Z values are equal.
-            assert_series_equal(result.geometry, control.geometry)
+            assert_series_equal(test_gdfs.result.geometry, test_gdfs.control.geometry)
         else:
-            self._assert_and_save_report(result, control)
+            self._assert_and_save_report(test_gdfs.result, test_gdfs.control)
 
-        assert input_data.crs == result.crs
-        assert input_data.crs == control.crs
+        assert test_gdfs.input_data.crs == test_gdfs.result.crs
+        assert test_gdfs.input_data.crs == test_gdfs.control.crs
 
-        # Ensure input data was not modified.
-        # TODO: we should probably ensure that reference data is also unmodified
-        assert_geodataframe_equal(input_data, input_data_before)
+        # Ensure input and reference data was not modified.
+        assert_geodataframe_equal(test_gdfs.input_data, test_gdfs.input_data_before)
+        for key in test_gdfs.reference_data:
+            assert_geodataframe_equal(
+                test_gdfs.reference_data[key],
+                test_gdfs.reference_data_before[key],
+            )
 
-        self._check_test_data_has_z_coordinates(input_data, control, result)
-        self._check_test_data_single_geometries(input_data, result)
+        self._check_test_data_has_z_coordinates(
+            test_gdfs.input_data, test_gdfs.control, test_gdfs.result
+        )
+        self._check_test_data_single_geometries(test_gdfs.input_data, test_gdfs.result)
 
         if self.check_missing_reference:
             with pytest.raises(
                 MissingReferenceError, match=r"Reference data is missing."
             ):
-                self.algorithm.execute(input_data)
+                self.algorithm.execute(test_gdfs.input_data)
 
         for string in GEOMETRY_TYPE_STRINGS:
             if string in self.algorithm.valid_input_geometry_types:
@@ -192,8 +201,8 @@ class IntegrationTest:
 
         # TODO: test reference data geom types?
 
-        # By default run algorithm twice with same data, to test that it
-        # produces same results with different geometry column names. Allow
+        # By default run the algorithm twice with same data, to test that it
+        # produces the same results with different geometry column names. Allow
         # disabling this by environment variable to speed up tests during
         # development.
         geom_column = os.environ.get("GEOGENALG_TEST_ONE_GEOM_COLUMN")
@@ -204,7 +213,7 @@ class IntegrationTest:
         }
 
         if test_geom_column:
-            _, _, _, result_from_geom_column, control_from_geom_column = (
+            _, _, _, _, result_from_geom_column, control_from_geom_column = (
                 self.get_test_gdfs(geometry_column="geom")
             )
             if not save_report:
@@ -217,6 +226,12 @@ class IntegrationTest:
                 self._assert_and_save_report(
                     result_from_geom_column, control_from_geom_column
                 )
+        else:
+            warn(
+                "Testing with two different geometry columns is disabled.",
+                category=TestReportWarning,
+                stacklevel=1,
+            )
 
     def _check_test_data_has_z_coordinates(
         self,
@@ -224,7 +239,7 @@ class IntegrationTest:
         control: GeoDataFrame,
         result: GeoDataFrame,
     ) -> None:
-        """Check that test data and results uniformly have z coordinates.
+        """Check that test data and results have z coordinates.
 
         Raises
         ------
