@@ -117,8 +117,9 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
             buffer_distance=self.buffer_distance,
         ).explode(as_index=False)
 
-        gdf.geometry = gdf.buffer(-self.sliver_buffer_distance, join_style="bevel")
-        gdf.geometry = gdf.buffer(self.sliver_buffer_distance, join_style="bevel")
+        gdf.geometry = gdf.buffer(
+            -self.sliver_buffer_distance, join_style="bevel"
+        ).buffer(self.sliver_buffer_distance, join_style="bevel")
         gdf = gdf.loc[~gdf.geometry.is_empty]
         gdf = gdf.explode(as_index=False)
 
