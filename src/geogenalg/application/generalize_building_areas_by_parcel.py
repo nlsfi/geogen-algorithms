@@ -48,6 +48,8 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
     """Used to select type of building, residential for example."""
     building_coverage_column: str = "building_coverage"
     """Name of column containing coverage percentage values."""
+    sliver_buffer_distance: float = 5.0
+    """Buffer distance used to erode small slivers out."""
     reference_key: str = "parcels"
     """Reference data key for parcel data."""
 
@@ -114,6 +116,11 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
             high_coverage_parcels,
             buffer_distance=self.buffer_distance,
         ).explode(as_index=False)
+
+        gdf.geometry = gdf.buffer(-self.sliver_buffer_distance, join_style="bevel")
+        gdf.geometry = gdf.buffer(self.sliver_buffer_distance, join_style="bevel")
+        gdf = gdf.loc[~gdf.geometry.is_empty]
+        gdf = gdf.explode(as_index=False)
 
         gdf = hash_index_from_geometry(gdf, "buildingareasparcel")
         return assign_nearest_z(data, gdf)
