@@ -14,6 +14,7 @@ from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 from geogenalg.selection import remove_small_holes
+from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 
 
 @supports_identity
@@ -56,7 +57,7 @@ class GeneralizeBuildingAreasByGeometry(BaseAlgorithm):
         reference_network = (
             reference_data[self.reference_key]
             if self.reference_key in reference_data
-            else GeoDataFrame(geometry=[], crs=data.crs)
+            else copy_gdf_as_empty(data)
         )
 
         gdf = data.copy()
