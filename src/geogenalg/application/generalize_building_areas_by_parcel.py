@@ -46,8 +46,8 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
     """Column containing attributes describing the intended use of a building."""
     building_type_to_select: int = 1
     """Used to select type of building, residential for example."""
-    building_coverage_column: str = "building_coverage"
-    """Name of column containing coverage percentage values."""
+    sliver_buffer_distance: float = 5.0
+    """Buffer distance used to erode small slivers out."""
     reference_key: str = "parcels"
     """Reference data key for parcel data."""
 
@@ -62,6 +62,8 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
     ) -> GeoDataFrame:
         if self.reference_key not in reference_data:
             raise MissingReferenceError
+
+        building_coverage_column = "__coverage"
         result_gdf = data.copy()
         parcels_gdf = reference_data[self.reference_key]
         """landcover_gdf = reference_data["landcovers"]"""
@@ -96,14 +98,13 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
         parcels_with_coverage = calculate_coverage(
             overlay_features=filtered_buildings,
             base_features=parcels_gdf,
-            coverage_attribute=self.building_coverage_column,
+            coverage_attribute=building_coverage_column,
         )
 
         # 3 - Select parcels with high building coverage
 
         high_coverage_mask = (
-            parcels_with_coverage[self.building_coverage_column]
-            > self.coverage_threshold
+            parcels_with_coverage[building_coverage_column] > self.coverage_threshold
         )
 
         high_coverage_parcels = parcels_with_coverage[high_coverage_mask].copy()
@@ -114,6 +115,12 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
             high_coverage_parcels,
             buffer_distance=self.buffer_distance,
         ).explode(as_index=False)
+
+        gdf.geometry = gdf.buffer(
+            -self.sliver_buffer_distance, join_style="bevel"
+        ).buffer(self.sliver_buffer_distance, join_style="bevel")
+        gdf = gdf.loc[~gdf.geometry.is_empty]
+        gdf = gdf.explode(as_index=False)
 
         gdf = hash_index_from_geometry(gdf, "buildingareasparcel")
         return assign_nearest_z(data, gdf)
