@@ -13,8 +13,8 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
-from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.dissolve_polygons import DissolvePolygons
+from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.generalize_building_areas_by_geometry import (
     GeneralizeBuildingAreasByGeometry,
 )
