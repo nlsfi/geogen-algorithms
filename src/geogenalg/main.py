@@ -13,6 +13,7 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
+from geogenalg.application.dissolve_polygons import DissolvePolygons
 from geogenalg.application.generalize_building_areas_by_geometry import (
     GeneralizeBuildingAreasByGeometry,
 )
@@ -386,6 +387,7 @@ def build_app() -> None:  # noqa: PLR0914
         "power_lines": GeneralizePowerLines,
         "building_areas_by_parcel": GeneralizeBuildingAreasByParcel,
         "building_areas_by_geometry": GeneralizeBuildingAreasByGeometry,
+        "dissolve_polygons": DissolvePolygons,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -450,6 +452,7 @@ def build_app() -> None:  # noqa: PLR0914
             list[str]: TransformedTypeInformation(
                 transformed_type=list[str],
                 custom_default=[],
+                extra_parse_help="Can be specified multiple times.",
             ),
         }
 
