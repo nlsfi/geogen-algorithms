@@ -21,7 +21,11 @@ def test_dissolve_polygons(
     IntegrationTest(
         input_uri=gpkg.to_input("data"),
         control_uri=gpkg.to_input("control"),
-        algorithm=DissolvePolygons(),
+        algorithm=DissolvePolygons(
+            hash_prefix="dissolvepolygons",
+            by_column=[],
+            inherit_from="most_intersection",
+        ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
     ).run()
