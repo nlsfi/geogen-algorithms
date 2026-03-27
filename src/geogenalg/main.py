@@ -14,6 +14,7 @@ from types import FunctionType
 from typing import Annotated, Any, cast
 
 from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
+from geogenalg.application.dissolve_polygons import DissolvePolygons
 from geogenalg.application.generalize_building_areas_by_geometry import (
     GeneralizeBuildingAreasByGeometry,
 )
@@ -432,6 +433,7 @@ def build_app() -> None:  # noqa: PLR0914
         "building_areas_by_parcel": GeneralizeBuildingAreasByParcel,
         "building_areas_by_geometry": GeneralizeBuildingAreasByGeometry,
         "building_areas": GeneralizeBuildingAreas,
+        "dissolve_polygons": DissolvePolygons,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -498,7 +500,7 @@ def build_app() -> None:  # noqa: PLR0914
             frozenset[str]: TransformedTypeInformation(
                 transformed_type=list[str],
                 custom_default=frozenset(),
-                extra_parse_help=("Can be specified multiple times."),
+                extra_parse_help="Can be specified multiple times.",
             ),
         }
 
