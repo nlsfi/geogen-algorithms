@@ -27,7 +27,6 @@ def test_generalize_building_areas(testdata_path: Path) -> None:
             parcel_building_type_to_select=1,
             geometry_buildings_simplify_tolerance=10.0,
             roads_buffer_distance=10.0,
-            threshold_building_area_hole=500.0,
             threshold_building_area_far=20000.0,
             threshold_building_area_near=4000.0,
             near_area_distance=50.0,
