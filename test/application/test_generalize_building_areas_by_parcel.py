@@ -27,7 +27,6 @@ def test_generalize_building_areas_by_parcel(testdata_path: Path) -> None:
             buffer_distance=20,
             building_type_column="kohdeluokka",
             building_type_to_select=42211,
-            building_coverage_column="building_coverage",
             reference_key="parcels",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
