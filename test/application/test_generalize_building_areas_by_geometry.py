@@ -22,12 +22,9 @@ def test_generalize_building_areas_by_geometry(testdata_path: Path) -> None:
         input_uri=gpkg.to_input("buildings"),
         control_uri=gpkg.to_input("control"),
         algorithm=GeneralizeBuildingAreasByGeometry(
-            threshold_building_area=1000.0,
-            threshold_building_area_hole=500.0,
-            simplify_tolerance_single_buildings=10.0,
-            simplify_tolerance_building_areas=10.0,
-            network_buffer_distance=10.0,
-            reference_key="roads",
+            buildings_simplify_tolerance=10.0,
+            boffet_area_buffer=10.0,
+            boffet_area_erosion=10.0,
         ),
         reference_uris={
             "roads": gpkg.to_input("roads"),
