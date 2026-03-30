@@ -162,15 +162,7 @@ def remove_small_polygons(
             A version of the input GeoDataFrame where only polygons with
             area greater than or equal to the threshold remain.
 
-    Raises:
-    ------
-    ValueError: If area_threshold <= 0 or CRS is not projected.
-
     """
-    if area_threshold <= 0:
-        msg = "area_threshold must be > 0."
-        raise ValueError(msg)
-
     # Drop missing/empty geometries before area calculation
     gdf = polygons_gdf.dropna(subset=[polygons_gdf.geometry.name]).loc[
         ~polygons_gdf.geometry.is_empty
