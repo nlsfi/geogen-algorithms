@@ -179,9 +179,10 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         # are close to other areas and areas which are far from other areas.
         is_near = gdf["is_near"] <= self.near_area_distance
         is_far = ~is_near
+        area = gdf.geometry.area
         gdf = gdf.loc[
-            (is_near & (gdf.geometry.area > self.threshold_building_area_near))
-            | (is_far & (gdf.geometry.area > self.threshold_building_area_far))
+            (is_near & (area > self.threshold_building_area_near))
+            | (is_far & (area > self.threshold_building_area_far))
         ]
 
         gdf = gdf.drop("is_near", axis=1)
