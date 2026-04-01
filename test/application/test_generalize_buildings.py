@@ -46,7 +46,6 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
             classes_for_low_priority_buildings=frozenset([6, 4]),
             classes_for_point_buildings=frozenset([8]),
             classes_for_always_kept_buildings=frozenset(),
-            unique_key_column="mtk_id",
             building_class_column="kayttotarkoitus",
             original_area_column="original_area",
             main_angle_column="main_angle",
@@ -72,7 +71,6 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
             classes_for_low_priority_buildings=frozenset([6, 4]),
             classes_for_point_buildings=frozenset([8]),
             classes_for_always_kept_buildings=frozenset(),
-            unique_key_column="mtk_id",
             building_class_column="kayttotarkoitus",
             original_area_column="original_area",
             main_angle_column="main_angle",
@@ -187,7 +185,6 @@ def test_filter_buildings_by_area_and_class(
         minimum_distance_to_isolated_building=10,
         hole_threshold=10,
         classes_for_point_buildings=frozenset([3, 2]),
-        unique_key_column="id",
     )
 
     result_gdf = alg._filter_buildings_by_area_and_class(input_gdf)
@@ -252,7 +249,6 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
         minimum_distance_to_isolated_building=10,
         hole_threshold=10,
         classes_for_point_buildings=frozenset([3, 2]),
-        unique_key_column="id",
     )
     result_gdf = alg._filter_buildings_by_area_and_class(gdf)
 
