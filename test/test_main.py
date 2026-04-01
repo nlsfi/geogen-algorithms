@@ -18,6 +18,7 @@ from geogenalg.main import (
     geopackage_uri,
     get_basealgorithm_attribute_docstrings,
     get_class_attribute_docstrings,
+    input_geopackage_uris,
     int_or_str_list,
     named_geopackage_uri,
 )
@@ -212,3 +213,35 @@ def test_main():
 )
 def test_int_or_str_list(input_string: str, expected: NamedGeoPackageURI):
     assert int_or_str_list(input_string) == expected
+
+
+@pytest.mark.parametrize(
+    ("input_string", "expected"),
+    [
+        (
+            "/path/to/geopackage.gpkg+/path/to/other/geopackage.gpkg@layer_name+relative.gpkg|lyr",
+            [
+                GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name=None),
+                GeoPackageURI(
+                    file="/path/to/other/geopackage.gpkg", layer_name="layer_name"
+                ),
+                GeoPackageURI(file="relative.gpkg", layer_name="lyr"),
+            ],
+        ),
+        (
+            "/path/to/geopackage.gpkg|layer",
+            [GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name="layer")],
+        ),
+        (
+            '"/path/to/geopackage.gpkg|layer"',
+            [GeoPackageURI(file="/path/to/geopackage.gpkg", layer_name="layer")],
+        ),
+    ],
+    ids=[
+        "multiple",
+        "with layer",
+        "quotes",
+    ],
+)
+def test_input_geopackage_uris(input_string: str, expected: GeoPackageURI):
+    assert input_geopackage_uris(input_string) == expected

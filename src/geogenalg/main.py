@@ -173,6 +173,21 @@ def named_geopackage_uri(value: str) -> NamedGeoPackageURI:
     return NamedGeoPackageURI(name=name, uri=uri)
 
 
+def input_geopackage_uris(value: str) -> list[GeoPackageURI]:
+    """Parse string into a list of GeoPackageURIs.
+
+    Args:
+    ----
+        value: string to parse
+
+    Returns:
+    -------
+        List of GeoPackageURIs.
+
+    """
+    return [geopackage_uri(uri) for uri in value.split("+")]
+
+
 def int_or_str_list(value: str) -> int | str:
     """Parse string into an int if possible, keep as is otherwise.
 
@@ -281,6 +296,20 @@ def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str
     return output
 
 
+MultipleGeoPackagesArgument = Annotated[
+    GeoPackageURI,
+    typer.Argument(
+        parser=input_geopackage_uris,
+        help="Path(s) to a GeoPackage, with layer name optionally specified, "
+        + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg|my_layer_name". '
+        + "You can also specify multiple inputs by delimiting them with the '+' "
+        + 'symbol ("my_geopackage.gpkg@layer+other_geopackage.gpkg@other_layer"). '
+        + "In this case the given inputs will be combined. This can be "
+        + "used to f.e. combine datasets with different geometry types to use "
+        + "with algorithms which accept multiple geometry types.",
+    ),
+]
+
 GeoPackageArgument = Annotated[
     GeoPackageURI,
     typer.Argument(
@@ -318,7 +347,10 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
     ) -> None:
         args = kwargs
 
-        input_geopackage = cast("GeoPackageArgument", args.pop("input_geopackage"))
+        input_geopackages = cast(
+            "list[GeoPackageURI]",
+            args.pop("input_geopackages"),
+        )
         output_geopackage = cast("GeoPackageArgument", args.pop("output_geopackage"))
         unique_id_column = cast("str", args.pop("unique_id_column"))
 
@@ -348,14 +380,20 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
 
         instance = algorithm(**kwargs)
 
-        if unique_id_column is not None:
-            in_gdf = read_gdf_from_file_and_set_index(
-                input_geopackage.file,
-                unique_id_column,
-                layer=input_geopackage.layer_name,
-            )
-        else:
-            in_gdf = read_file(input_geopackage.file, layer=input_geopackage.layer_name)
+        input_gdfs = []
+        for uri in input_geopackages:
+            if unique_id_column is not None:
+                in_gdf = read_gdf_from_file_and_set_index(
+                    uri.file,
+                    unique_id_column,
+                    layer=uri.layer_name,
+                )
+            else:
+                in_gdf = read_file(uri.file, layer=uri.layer_name)
+
+            input_gdfs.append(in_gdf)
+
+        in_gdf = input_gdfs[0] if len(input_gdfs) == 1 else combine_gdfs(input_gdfs)
 
         output = instance.execute(in_gdf, reference_data=reference_data)
         output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
@@ -406,9 +444,9 @@ def build_app() -> None:  # noqa: PLR0914
 
         parameters = [
             Parameter(
-                name="input_geopackage",
+                name="input_geopackages",
                 kind=Parameter.POSITIONAL_OR_KEYWORD,
-                annotation=GeoPackageArgument,
+                annotation=MultipleGeoPackagesArgument,
             ),
             Parameter(
                 name="output_geopackage",

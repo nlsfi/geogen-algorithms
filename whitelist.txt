@@ -40,6 +40,7 @@ geodataframe
 geogenalg
 geoms
 geopackage
+geopackages
 geopandas
 geoseries
 getfullargspec
