@@ -131,7 +131,7 @@ def dissolve_and_inherit_attributes(
             polygon geometries.
 
     """
-    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+    if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
         msg = "Dissolve only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
@@ -156,10 +156,18 @@ def dissolve_and_inherit_attributes(
             intersecting_polygons_gdf = gdf[
                 gdf.geometry.intersects(dissolved_geom)
             ].copy()
-        else:
+        elif isinstance(by_column, str):
             intersecting_polygons_gdf = gdf[
-                (gdf[by_column] == dissolved_row[by_column])
-                & (gdf.geometry.intersects(dissolved_geom))
+                (gdf.geometry.intersects(dissolved_geom))
+                & (gdf[by_column] == dissolved_row[by_column])
+            ].copy()
+        else:  # list[str]
+            mask = gdf[by_column[0]] == dissolved_row[by_column[0]]
+            for column in by_column[1:]:
+                mask &= gdf[column] == dissolved_row[column]
+
+            intersecting_polygons_gdf = gdf[
+                (gdf.geometry.intersects(dissolved_geom)) & mask
             ].copy()
 
         if intersecting_polygons_gdf.empty:
@@ -237,7 +245,7 @@ def buffer_and_merge_polygons(
             polygon geometries.
 
     """
-    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+    if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
         msg = "Buffer and merge polygons works only with (Multi)Polygon geometries."
         raise GeometryTypeError(msg)
 
@@ -295,7 +303,7 @@ def dissolve_polygon_layers(input_gdfs: list[GeoDataFrame]) -> GeoDataFrame:
     combined = combine_gdfs(input_gdfs, ignore_index=True)
 
     # Validate geometry type
-    if not check_gdf_geometry_type(combined, ["Polygon", "MultiPolygon"]):
+    if not check_gdf_geometry_type(combined, {"Polygon", "MultiPolygon"}):
         error_msg_2 = "Only Polygon or MultiPolygon geometries are supported."
         raise GeometryTypeError(error_msg_2)
 
