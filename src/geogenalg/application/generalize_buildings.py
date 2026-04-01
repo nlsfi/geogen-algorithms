@@ -80,8 +80,6 @@ class GeneralizeBuildings(BaseAlgorithm):
     """Building classes always represented as points."""
     classes_for_always_kept_buildings: frozenset[int | str] = frozenset()
     """Building classes that are always retained, regardless of thresholds."""
-    unique_key_column: str = "id"
-    """Column name containing the unique identifier."""
     building_class_column: str = "building_function"
     """Column name containing the building class information."""
     original_area_column: str = "original_area"
