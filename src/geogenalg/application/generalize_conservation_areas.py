@@ -3,7 +3,8 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass, field
+
+from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
@@ -55,7 +56,7 @@ class GeneralizeConservationAreas(BaseAlgorithm):
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""
-    group_by: list[str] = field(default_factory=list)
+    group_by: frozenset[str] = frozenset()
     """Column(s) whose values define the groups to be dissolved."""
 
     valid_input_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
@@ -118,7 +119,7 @@ class GeneralizeConservationAreas(BaseAlgorithm):
 
         result_gdf = dissolve_and_inherit_attributes(
             input_gdf=result_gdf,
-            by_column=self.group_by or None,
+            by_column=None if not self.group_by else list(self.group_by),
         )
 
         return hash_index_from_old_ids(result_gdf, "landcover", "old_ids")

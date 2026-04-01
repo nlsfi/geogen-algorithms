@@ -4,6 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 import os
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -143,7 +144,10 @@ class IntegrationTest:
 
     def run(self) -> None:
         """Run integration test."""
+        algorithm_before = deepcopy(self.algorithm)
         test_gdfs = self.get_test_gdfs()
+
+        assert self.algorithm == algorithm_before
 
         # Run this first so if report saving is on you can see the result (provided
         # no errors happen during algorithm execution).

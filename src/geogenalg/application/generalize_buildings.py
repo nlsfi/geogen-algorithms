@@ -3,7 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import ClassVar
 
 from cartagen.algorithms import buildings
@@ -74,11 +74,11 @@ class GeneralizeBuildings(BaseAlgorithm):
     building."""
     hole_threshold: float = 75
     """Minimum area for holes to retain inside polygon buildings."""
-    classes_for_low_priority_buildings: list[int | str] = field(default_factory=list)
+    classes_for_low_priority_buildings: frozenset[int | str] = frozenset()
     """Building classes treated as low-priority."""
-    classes_for_point_buildings: list[int | str] = field(default_factory=list)
+    classes_for_point_buildings: frozenset[int | str] = frozenset()
     """Building classes always represented as points."""
-    classes_for_always_kept_buildings: list[int | str] = field(default_factory=list)
+    classes_for_always_kept_buildings: frozenset[int | str] = frozenset()
     """Building classes that are always retained, regardless of thresholds."""
     unique_key_column: str = "id"
     """Column name containing the unique identifier."""
@@ -264,7 +264,7 @@ class GeneralizeBuildings(BaseAlgorithm):
                   Polygon or MultiPolygon geometries.
 
         """
-        if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+        if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
             msg = (
                 "generalize_polygon_buildings only supports "
                 + "Polygon or MultiPolygon geometries."
@@ -492,7 +492,7 @@ class GeneralizeBuildings(BaseAlgorithm):
                   Polygon or MultiPolygon geometries.
 
         """
-        if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+        if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
             msg = "Simplify buildings only supports Polygon or MultiPolygon geometries."
             raise GeometryTypeError(msg)
 

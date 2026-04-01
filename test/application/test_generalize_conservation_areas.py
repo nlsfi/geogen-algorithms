@@ -33,7 +33,7 @@ def test_generalize_conservation_areas(
             area_threshold=1000,
             hole_threshold=2000,
             smoothing=False,
-            group_by="layer",
+            group_by=frozenset(["layer"]),
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
