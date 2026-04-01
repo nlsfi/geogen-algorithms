@@ -3,7 +3,8 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from collections.abc import Callable
+
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from itertools import chain
@@ -49,7 +50,7 @@ class GeneralizePoints(BaseAlgorithm):
     """The number of times to repeat displacement loop."""
     cluster_distance: float = 20.0
     """Points within this distance of each other will be clustered."""
-    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None = None
+    aggregation_functions: Mapping[str, Callable[[Series], Any] | str] | None = None
     """Dictionary containing keys corresponding to a column in a GeoDataFrame
     and a function which will aggregate the column's values when creating
     centroid from multiple points. If the function is given as a string, it

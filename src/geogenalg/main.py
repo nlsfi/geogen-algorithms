@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 import os
 from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from inspect import Parameter, cleandoc, getfullargspec, getmro, getsource, signature
 from itertools import pairwise
@@ -94,6 +94,7 @@ class TransformedTypeInformation:
     parser: Callable[[str], Any] | None = None
     custom_default: Any | None = None
     extra_parse_help: str | None = None
+    transform_function: Callable[[Any], Any] | None = None
 
 
 def geopackage_uri(value: str) -> GeoPackageURI:
@@ -313,7 +314,7 @@ ReferenceGeoPackageList = Annotated[
 
 def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
     def _command_function(
-        **kwargs: GeoPackageArgument | GeoPackageOption | str | float,
+        **kwargs: GeoPackageArgument | GeoPackageOption,
     ) -> None:
         args = kwargs
 
@@ -339,6 +340,11 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
                         reference_gdf,
                     ]
                 )
+
+        # Transform lists to frozensets
+        for key, value in kwargs.items():
+            if isinstance(value, list):
+                kwargs[key] = frozenset(value)
 
         instance = algorithm(**kwargs)
 
@@ -434,24 +440,27 @@ def build_app() -> None:  # noqa: PLR0914
 
         # This should include any parameter types which are unnecessary/too
         # complex to support entering in the CLI.
-        ignored_types_for_cli = (dict[str, Callable[[Series], Any] | str] | None,)
+        ignored_types_for_cli = (Mapping[str, Callable[[Series], Any] | str] | None,)
 
         # Transform certain types defined on the algorithm-level to a helper
         # type with a custom parser.
         transformed_types_for_cli: dict[type, TransformedTypeInformation] = {
-            list[int | str]: TransformedTypeInformation(
+            # Typer doesn't handle sets so read them as lists, all of which are
+            # transformed to frozensets in _function_generator()
+            frozenset[int | str]: TransformedTypeInformation(
                 transformed_type=list[Any],
                 parser=int_or_str_list,
-                custom_default=[],
+                custom_default=frozenset(),
                 extra_parse_help=(
                     "Either an integer or a string. Can be specified multiple times. "
                     + "If you need to pass an integer as a string, you can add do so "
                     + "by appending str: in front of the integer, i.e. str:10."
                 ),
             ),
-            list[str]: TransformedTypeInformation(
+            frozenset[str]: TransformedTypeInformation(
                 transformed_type=list[str],
-                custom_default=[],
+                custom_default=frozenset(),
+                extra_parse_help=("Can be specified multiple times."),
             ),
         }
 

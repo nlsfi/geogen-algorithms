@@ -4,7 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from geopandas.geodataframe import GeoDataFrame
@@ -52,7 +52,7 @@ def get_cluster_centroids(
     input_gdf: GeoDataFrame,
     cluster_distance: float,
     *,
-    aggregation_functions: dict[str, Callable[[Series], Any] | str] | None = None,
+    aggregation_functions: Mapping[str, Callable[[Series], Any] | str] | None = None,
     old_ids_column: str = "old_ids",
 ) -> GeoDataFrame:
     """Cluster points in a GeoDataFrame and return their centroids.
@@ -98,7 +98,9 @@ def get_cluster_centroids(
     gdf[old_ids_column] = gdf.index
 
     if aggregation_functions is None:
-        aggregation_functions = {}
+        aggfunc = {}
+    else:
+        aggfunc = dict(aggregation_functions.items())
 
     # If the aggfunc parameter is passed into dissolve() and columns are
     # missing, they are dropped. Therefore explicitly define a default
@@ -107,15 +109,15 @@ def get_cluster_centroids(
         if column in {gdf.geometry.name, old_ids_column, cluster_id_column}:
             continue
 
-        if column not in aggregation_functions:
-            aggregation_functions[str(column)] = "first"
+        if column not in aggfunc:
+            aggfunc[str(column)] = "first"
 
-    aggregation_functions[old_ids_column] = lambda ids: tuple(ids.to_list())
+    aggfunc[old_ids_column] = lambda ids: tuple(ids.to_list())
 
     gdf = gdf.dissolve(
         by=cluster_id_column,
         as_index=False,
-        aggfunc=aggregation_functions,  # noqa: SC200
+        aggfunc=aggfunc,
     )
     gdf = gdf.drop(columns=[cluster_id_column])
 

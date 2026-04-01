@@ -4,7 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import ClassVar, Literal
 
 from geopandas import GeoDataFrame
@@ -55,7 +55,7 @@ class GeneralizeLandcover(BaseAlgorithm):
     """Cap style used in buffer operations."""
     buffer_join_style: Literal["round", "mitre", "bevel"] = "bevel"
     """Join style used in buffer operations."""
-    group_by: list[str] = field(default_factory=list)
+    group_by: frozenset[str] = frozenset()
     """Column(s) whose values define the groups to be dissolved."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
@@ -66,6 +66,8 @@ class GeneralizeLandcover(BaseAlgorithm):
         reference_data: dict[str, GeoDataFrame],  # noqa: ARG002
     ) -> GeoDataFrame:
         result_gdf = data.copy()
+
+        group_by = None if not self.group_by else list(self.group_by)
 
         def _buffer(gdf: GeoDataFrame, distance: float) -> None:
             gdf.geometry = gdf.geometry.buffer(
@@ -79,7 +81,7 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         result_gdf = dissolve_and_inherit_attributes(
             input_gdf=result_gdf,
-            by_column=self.group_by or None,
+            by_column=group_by,
         )
         result_gdf = hash_index_from_old_ids(result_gdf, "landcover", "old_ids")
 
@@ -94,7 +96,7 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         result_gdf = dissolve_and_inherit_attributes(
             input_gdf=result_gdf,
-            by_column=self.group_by or None,
+            by_column=group_by,
         )
         result_gdf = hash_index_from_old_ids(result_gdf, "landcover", "old_ids")
 

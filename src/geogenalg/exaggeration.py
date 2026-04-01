@@ -75,7 +75,7 @@ def extract_narrow_polygon_parts(
               polygon geometries.
 
     """
-    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+    if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
         msg = "Extract narrow parts only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 

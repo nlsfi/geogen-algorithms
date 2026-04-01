@@ -4,7 +4,7 @@
 #
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import ClassVar, cast, override
 
 from geopandas import GeoDataFrame
@@ -50,9 +50,9 @@ class GeneralizePowerLines(BaseAlgorithm):
 
     distance_threshold_for_parallel_lines: float = 50.0
     """Minimum distance for lines to be considered to be parallel."""
-    classes_for_merge_parallel_lines: list[int | str] = field(default_factory=list)
+    classes_for_merge_parallel_lines: frozenset[int | str] = frozenset()
     """Attribute values to distinguish which types of parallel lines will be merged."""
-    classes_for_higher_priority_lines: list[int | str] = field(default_factory=list)
+    classes_for_higher_priority_lines: frozenset[int | str] = frozenset()
     """Attribute values to distinguish which types of lines will be kept if
     lower priority lines run in parallel."""
     class_column: str = "function"

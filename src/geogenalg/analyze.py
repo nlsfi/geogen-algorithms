@@ -380,7 +380,7 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
               polygon geometries.
 
     """
-    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+    if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
         msg = "Classify polygons only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
@@ -443,7 +443,7 @@ def calculate_edge_adjacency(
             polygon or MultiPolygon geometries.
 
     """
-    if not check_gdf_geometry_type(input_gdf, ["Polygon", "MultiPolygon"]):
+    if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
         msg = (
             "Calculate edge adjacency only supports Polygon or MultiPolygon geometries."
         )

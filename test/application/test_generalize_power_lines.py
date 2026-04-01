@@ -23,8 +23,8 @@ def test_generalize_power_lines(
         control_uri=gpkg.to_input("control"),
         algorithm=GeneralizePowerLines(
             distance_threshold_for_parallel_lines=50.0,
-            classes_for_merge_parallel_lines=[22311],
-            classes_for_higher_priority_lines=[22311],
+            classes_for_merge_parallel_lines=frozenset([22311]),
+            classes_for_higher_priority_lines=frozenset([22311]),
             class_column="kohdeluokka",
             length_threshold=100.0,
             simplification_tolerance=0.0,
