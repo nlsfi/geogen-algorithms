@@ -328,6 +328,49 @@ def test_merge_lines_with_same_attribute_value_into_one(
             "group",
             "most_intersection",
         ),
+        # 8.
+        (
+            GeoDataFrame(
+                {
+                    "group_first": ["A", "A", "B"],
+                    "group_second": ["C", "C", "D"],
+                    "id": [1, 2, 3],
+                    "name": ["first", "second", "third"],
+                },
+                geometry=[
+                    box(0, 0, 2, 2),
+                    box(1, 1, 4, 4),
+                    box(1, 1.25, 3, -1),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "group_first": ["A", "B"],
+                    "group_second": ["C", "D"],
+                    "id": [2, 3],
+                    "name": ["second", "third"],
+                    "old_ids": [(2, 1), (3,)],
+                },
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 0],
+                            [0, 2],
+                            [1, 2],
+                            [1, 4],
+                            [4, 4],
+                            [4, 1],
+                            [2, 1],
+                            [2, 0],
+                            [0, 0],
+                        ]
+                    ),
+                    box(1, 1.25, 3, -1),
+                ],
+            ),
+            ["group_first", "group_second"],
+            "most_intersection",
+        ),
     ],
     ids=[
         "single polygon",  # 1.
@@ -337,12 +380,13 @@ def test_merge_lines_with_same_attribute_value_into_one(
         "two separate polygons in same group should not dissolve",  # 5.
         "three intersecting polygons with extra attributes, two in same group",  # 6.
         "three intersecting polygons with extra attributes, two in same group, inherit from most_intersection",  # 7.
+        "multiple_groups",  # 8.
     ],
 )
 def test_dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
     expected_gdf: GeoDataFrame,
-    by_column: str | None,
+    by_column: str | list[str] | None,
     inherit_from: Literal["min_id", "most_intersection"],
 ):
     input_gdf = input_gdf.set_index("id")
