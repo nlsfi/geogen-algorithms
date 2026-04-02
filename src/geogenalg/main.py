@@ -58,8 +58,9 @@ from geogenalg.utility.dataframe_processing import (
 )
 
 GEOPACKAGE_URI_HELP = (
-    "Path to a GeoPackage, with layer name optionally specified, "
-    + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg|my_layer_name"'
+    "Path to a GeoPackage, with layer name optionally specified after a @ or | symbol, "
+    + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg@my_layer_name" '
+    + '"file.gpkg|layer"'
 )
 
 
@@ -300,9 +301,8 @@ MultipleGeoPackagesArgument = Annotated[
     GeoPackageURI,
     typer.Argument(
         parser=input_geopackage_uris,
-        help="Path(s) to a GeoPackage, with layer name optionally specified, "
-        + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg|my_layer_name". '
-        + "You can also specify multiple inputs by delimiting them with the '+' "
+        help=GEOPACKAGE_URI_HELP
+        + ". You can also specify multiple inputs by delimiting them with the '+' "
         + 'symbol ("my_geopackage.gpkg@layer+other_geopackage.gpkg@other_layer"). '
         + "In this case the given inputs will be combined. This can be "
         + "used to f.e. combine datasets with different geometry types to use "
