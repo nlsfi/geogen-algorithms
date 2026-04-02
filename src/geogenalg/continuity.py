@@ -760,9 +760,14 @@ def _get_merged_line_connections(
     input_gdf: GeoDataFrame,
     reference_network: GeoDataFrame,
 ) -> GeoDataFrame:
+    merged_geom = input_gdf.union_all()
+
+    if isinstance(merged_geom, MultiLineString):
+        merged_geom = linemerge(merged_geom)
+
     merged = GeoDataFrame(
         geometry=[
-            linemerge(input_gdf.union_all()),
+            merged_geom,
         ],
         crs=input_gdf.crs,
     ).explode()
