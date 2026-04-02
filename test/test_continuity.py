@@ -1408,12 +1408,67 @@ def test_process_lines_and_reconnect(
                 ],
             ),
         ),
+        (
+            GeoDataFrame(  # single_line
+                {
+                    "type": [
+                        1,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ],
+            ),
+            GeoDataFrame(geometry=[]),
+            100.0,
+            "type",
+            GeoDataFrame(
+                {
+                    "type": [
+                        1,
+                    ],
+                    "contiguous_dead_end": [
+                        False,
+                    ],
+                    "contiguous_disconnected": [
+                        True,
+                    ],
+                    "contiguous_length": [
+                        1.0,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame({"type": []}),  # empty_input
+            GeoDataFrame(geometry=[]),
+            100.0,
+            "type",
+            GeoDataFrame({"type": []}),
+        ),
+        (
+            GeoDataFrame({"type": []}),  # empty_input_non_empty_reference
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ],
+            ),
+            100.0,
+            "type",
+            GeoDataFrame({"type": []}),
+        ),
     ],
     ids=[
         "has_some_dead_ends",
         "network",
         "disconnected",
         "line_type_column",
+        "single_line",
+        "empty_input",
+        "empty_input_non_empty_reference",
     ],
 )
 def test_add_contiguous_lines_information(
