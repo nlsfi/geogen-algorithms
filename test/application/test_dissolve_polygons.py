@@ -23,7 +23,7 @@ def test_dissolve_polygons(
         control_uri=gpkg.to_input("control"),
         algorithm=DissolvePolygons(
             hash_prefix="dissolvepolygons",
-            by_column=[],
+            by_column=frozenset(),
             inherit_from="most_intersection",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,

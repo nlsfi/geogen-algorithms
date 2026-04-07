@@ -3,7 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import ClassVar, Literal, override
 
 from geopandas.geodataframe import GeoDataFrame
@@ -32,7 +32,7 @@ class DissolvePolygons(BaseAlgorithm):
 
     hash_prefix: str = "dissolvepolygons"
     """Prefix used in hash input."""
-    by_column: list[str] = field(default_factory=list)
+    by_column: frozenset[str] = frozenset()
     """Column(s) whose values define the groups to be dissolved. If left empty,
     all input data is considered a single group to dissolve."""
     inherit_from: Literal["min_id", "most_intersection"] = "most_intersection"
@@ -50,7 +50,7 @@ class DissolvePolygons(BaseAlgorithm):
     ) -> GeoDataFrame:
         dissolved = dissolve_and_inherit_attributes(
             data,
-            by_column=self.by_column or None,
+            by_column=list(self.by_column) or None,
             inherit_from=self.inherit_from,
         )
 
