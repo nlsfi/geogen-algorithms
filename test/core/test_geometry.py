@@ -40,6 +40,8 @@ from geogenalg.core.exceptions import (
 from geogenalg.core.geometry import (
     Dimensions,
     LineExtendFrom,
+    add_topological_point,
+    add_topological_points,
     assign_nearest_z,
     centerline_length,
     chaikin_smooth_keep_topology,
@@ -52,6 +54,7 @@ from geogenalg.core.geometry import (
     extract_interior_rings,
     extract_interior_rings_gdf,
     get_topological_points,
+    insert_vertex,
     largest_part,
     lines_to_segments,
     mean_z,
@@ -60,10 +63,12 @@ from geogenalg.core.geometry import (
     perforate_polygon_with_gdf_exteriors,
     point_on_line,
     polygon_rings_to_multilinestring,
+    ramer_douglas_peucker_simplify_keep_coords,
     remove_line_segments_at_wide_sections,
     remove_small_parts,
     scale_line_to_length,
     segment_direction,
+    snap_to_closest_vertex_or_segment,
     split_linear_geometry,
 )
 
@@ -2019,3 +2024,358 @@ def test_extend_line_by_raises():
             10,
             extend_from=LineExtendFrom.START,
         )
+
+
+@pytest.mark.parametrize(
+    ("geom", "vertex", "index", "expected"),
+    [
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(0.5, 0),
+            1,
+            LineString([[0, 0], [0.5, 0], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(2.0, 0),
+            2,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [1, 1], [2, 3]]),
+            Point(1.75, 3),
+            3,
+            LineString([[0, 0], [1, 0], [1, 1], [1.75, 3], [2, 3]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(0.5, 0, 5),
+            1,
+            LineString([[0, 0], [0.5, 0], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0, 1], [1, 0, 2]]),
+            Point(0.5, 0, 5),
+            1,
+            LineString([[0, 0, 1], [0.5, 0, 5], [1, 0, 2]]),
+        ),
+        (
+            LineString([[0, 0, 1], [1, 0, 2]]),
+            Point(0.5, 0),
+            1,
+            LineString([[0, 0, 1], [0.5, 0, 0], [1, 0, 2]]),
+        ),
+    ],
+    ids=[
+        "one_segment",
+        "at_end",
+        "multiple_segments",
+        "vertex_has_z_line_does_not",
+        "vertex_has_z_so_does_line",
+        "line_has_z_vertex_does_not",
+    ],
+)
+def test_insert_vertex(
+    geom: LineString,
+    vertex: Point,
+    index: int,
+    expected: LineString,
+):
+    assert insert_vertex(geom, vertex, index) == expected
+
+
+@pytest.mark.parametrize(
+    ("geom", "point", "expected"),
+    [
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(0.50, 0),
+            LineString([[0, 0], [0.5, 0], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(0.50, 0),
+            LineString([[0, 0], [0.5, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(1.5, 0),
+            LineString([[0, 0], [1, 0], [1.5, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]]),
+            Point(2.0, 0.5),
+            LineString([[0, 0], [1, 0], [2, 0], [2.0, 0.5], [2, 1], [2, 2]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]]),
+            Point(2.0, 1.25),
+            LineString([[0, 0], [1, 0], [2, 0], [2, 1], [2.0, 1.25], [2, 2]]),
+        ),
+        (
+            LineString([[2, 2], [2, 1], [2, 0], [1, 0], [0, 0]]),
+            Point(2.0, 1.25),
+            LineString([[2, 2], [2.0, 1.25], [2, 1], [2, 0], [1, 0], [0, 0]]),
+        ),
+        (
+            LineString([[1, 0], [0, 0]]),
+            Point(0.50, 0),
+            LineString([[1, 0], [0.5, 0], [0, 0]]),
+        ),
+        (
+            LineString([[1, 0], [0, 0]]),
+            Point(0.20, 0),
+            LineString([[1, 0], [0.2, 0], [0, 0]]),
+        ),
+        (
+            LineString([[1, 0], [0, 0]]),
+            Point(0.20, 0, 5),
+            LineString([[1, 0], [0.2, 0], [0, 0]]),
+        ),
+        (
+            LineString([[1, 0, 1], [0, 0, 1]]),
+            Point(0.20, 0, 5),
+            LineString([[1, 0, 1], [0.2, 0, 5], [0, 0, 1]]),
+        ),
+        (
+            LineString([[1, 0], [0, 0]]),
+            Point(1, 0),
+            LineString([[1, 0], [0, 0]]),
+        ),
+        (
+            LineString([[1, 0], [0, 0]]),
+            Point(5, 5),
+            LineString([[1, 0], [0, 0]]),
+        ),
+    ],
+    ids=[
+        "one_segment",
+        "two_segments_add_to_first",
+        "two_segments_add_to_second",
+        "four_segments_add_to_third",
+        "four_segments_add_to_last",
+        "four_segments_add_to_last_reversed",
+        "one_segment_reversed",
+        "one_segment_reversed_not_exactly_in_middle",
+        "z_in_point_not_in_geom",
+        "z_in_point_and_in_geom",
+        "at_vertex",
+        "not_within",
+    ],
+)
+def test_add_topological_point(
+    geom: LineString,
+    point: Point,
+    expected: LineString,
+):
+    assert add_topological_point(geom, point) == expected
+
+
+@pytest.mark.parametrize(
+    ("geom", "points", "expected"),
+    [
+        (
+            LineString([[0, 0], [1, 0]]),
+            [Point(0.50, 0)],
+            LineString([[0, 0], [0.5, 0], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            [Point(0.50, 0), Point(0.1234, 0)],
+            LineString([[0, 0], [0.1234, 0], [0.5, 0], [1, 0]]),
+        ),
+        (
+            LineString([[2, 2], [2, 1], [2, 0], [1, 0], [0, 0]]),
+            [Point(0.5, 0), Point(2, 1.26), Point(2, 2), Point(2, 1.789)],
+            LineString(
+                [
+                    [2, 2],
+                    [2.0, 1.789],
+                    [2, 1.26],
+                    [2, 1],
+                    [2, 0],
+                    [1, 0],
+                    [0.5, 0],
+                    [0, 0],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "one_point",
+        "two_points",
+        "many_points_to_different_segments",
+    ],
+)
+def test_add_topological_points(
+    geom: LineString,
+    points: list[Point],
+    expected: LineString,
+):
+    assert add_topological_points(geom, points) == expected
+
+
+@pytest.mark.parametrize(
+    ("point", "snap_to", "tolerance", "z_behavior", "expected"),
+    [
+        (Point(0, 0.01), LineString([[0, 0], [1, 0]]), 0, "inherit", Point(0, 0)),
+        (Point(0, 2), LineString([[0, 0], [1, 0]]), 1, "inherit", Point(0, 0)),
+        (Point(0, 2), LineString([[0, 0], [1, 0]]), 3, "inherit", Point(0, 2)),
+        (Point(0, 0.01), box(0, 0, 1, -1), 0, "inherit", Point(0, 0)),
+        (Point(0, 0), Point(1, 1), 0, "inherit", Point(1, 1)),
+        (Point(0, 0, 5), Point(1, 1), 0, "inherit", Point(1, 1, 5)),
+        (Point(0, 0, 5), Point(1, 1), 0, "exclude", Point(1, 1)),
+    ],
+    ids=[
+        "snap_to_line",
+        "outside_tolerance",
+        "within_tolerance",
+        "snap_to_polygon",
+        "snap_to_point",
+        "z_inherit",
+        "z_exclude",
+    ],
+)
+def test_snap_to_closest_vertex_or_segment(
+    point: Point,
+    snap_to: BaseGeometry,
+    tolerance: float,
+    z_behavior: Literal["inherit", "exclude"],
+    expected: Point,
+):
+    assert (
+        snap_to_closest_vertex_or_segment(
+            point,
+            snap_to,
+            tolerance,
+            z_behavior,
+        )
+        == expected
+    )
+
+
+def test_add_topological_point_raises():
+    with pytest.raises(ValueError, match=r"Tolerance should be 0 or above."):
+        add_topological_point(
+            Point(),
+            Point(),
+            -1,
+        )
+
+
+def test_add_topological_points_raises():
+    with pytest.raises(ValueError, match=r"Tolerance should be 0 or above."):
+        add_topological_points(
+            Point(),
+            Point(),
+            -1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("geom", "tolerance", "keep_cords", "expected"),
+    [
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 2],
+                    [15, 0],
+                    [20, 4],
+                    [25, 8],
+                    [20, 10],
+                    [20, 15],
+                    [24, 20],
+                ]
+            ),
+            2,
+            set(),
+            LineString(
+                [
+                    [0, 0],
+                    [15, 0],
+                    [25, 8],
+                    [20, 10],
+                    [24, 20],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 2],
+                    [15, 0],
+                    [20, 4],
+                    [25, 8],
+                    [20, 10],
+                    [20, 15],
+                    [24, 20],
+                ]
+            ),
+            2,
+            {Point(-5, -5)},
+            LineString(
+                [
+                    [0, 0],
+                    [15, 0],
+                    [25, 8],
+                    [20, 10],
+                    [24, 20],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 2],
+                    [15, 0],
+                    [20, 4],
+                    [25, 8],
+                    [20, 10],
+                    [20, 15],
+                    [24, 20],
+                ]
+            ),
+            2,
+            {
+                Point(5, 0),
+                Point(10, 2),
+            },
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 2],
+                    [15, 0],
+                    [25, 8],
+                    [20, 10],
+                    [24, 20],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "no_keep_cords",
+        "keep_cord_not_in_line",
+        "has_keep_coords",
+    ],
+)
+def test_ramer_douglas_peucker_simplify_keep_coords(
+    geom: LineString,
+    tolerance: float,
+    keep_cords: set[Point],
+    expected: LineString,
+):
+    assert (
+        ramer_douglas_peucker_simplify_keep_coords(
+            geom,
+            tolerance,
+            keep_cords,
+        )
+        == expected
+    )
