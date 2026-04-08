@@ -3,7 +3,8 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from copy import deepcopy
 from enum import Enum
 from itertools import chain
 from math import atan2, degrees, pi, sqrt
@@ -34,7 +35,7 @@ from shapely.affinity import rotate, scale, translate
 from shapely.coords import CoordinateSequence
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
-from shapely.ops import linemerge, split
+from shapely.ops import linemerge, nearest_points, split
 
 from geogenalg.core.exceptions import (
     GeometryOperationError,
@@ -684,19 +685,18 @@ def extend_line_by(
     if extend_from == LineExtendFrom.END:
         point = point_on_line(last_segment, extend_by)
 
-        return extend_line_to_nearest(line, point, extend_from)
+        return insert_vertex(line, point, len(line.coords) + 1)
 
     if extend_from == LineExtendFrom.START:
         point = point_on_line(first_segment, -extend_by)
 
-        return extend_line_to_nearest(line, point, extend_from)
+        return insert_vertex(line, point, 0)
 
     point_1 = point_on_line(first_segment, -extend_by)
     point_2 = point_on_line(last_segment, extend_by)
 
-    multi_point = MultiPoint((point_1, point_2))
-
-    return extend_line_to_nearest(line, multi_point, extend_from)
+    new_line = insert_vertex(line, point_1, 0)
+    return insert_vertex(new_line, point_2, len(line.coords) + 1)
 
 
 def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
@@ -1147,8 +1147,8 @@ def split_linear_geometry(  # noqa: C901
 
     Returns
     -------
-        Processed geometry, always as a MultiLineString (even if no splitting)
-        occurred.
+        Processed geometry, always as a MultiLineString (even if no splitting
+        occurred).
 
     Raises
     ------
@@ -1200,7 +1200,7 @@ def split_linear_geometry(  # noqa: C901
         raise GeometryOperationError(msg)
 
     # Extra part does not occur always, if geom is split to a correct number of
-    # parts already, retun already.
+    # parts already, return early
     if len(diff.geoms) == len(splits_at.geoms):
         return diff
 
@@ -1215,3 +1215,251 @@ def split_linear_geometry(  # noqa: C901
         raise GeometryOperationError(msg)
 
     return MultiLineString(parts)
+
+
+def ramer_douglas_peucker_simplify_keep_coords(
+    geom: LineString,
+    tolerance: float,
+    keep_coords: set[Point],
+) -> LineString:
+    """Simplify linestring.
+
+    This is an implementation of the Ramer-Douglas-Peucker algorithm which
+    performs simplification of linear geometries. As an addition this
+    implementation allows to specify coordinates which will always be kept no
+    matter what.
+
+    Args:
+    ----
+        geom: Geometry to smooth.
+        tolerance: Distance parameter used in algorithm, higher value will result
+            in more vertices being removed.
+        keep_coords: Set of points to keep. If a corresponding coordinate exists
+            in the input geometry, it is guaranteed to remain unchanged. If the set
+            is empty, shapely's simplify function is used instead.
+
+    Returns:
+    -------
+        Smoothed geometry.
+
+    Note:
+    ----
+        If keeping of coordinates is not required, prefer shapely's simplify
+        function as it uses the same algorithm and is faster.
+
+    """
+    if not keep_coords:
+        return geom.simplify(tolerance)
+
+    CoordList = list[tuple[float, float]]  # noqa: N806
+
+    def rdp(coords: CoordList) -> CoordList:
+        furthest_distance = 0.0
+        furthest_point_index = -1
+
+        if len(coords) < 3:  # noqa: PLR2004
+            return coords
+
+        start_point = Point(coords[0])
+        end_point = Point(coords[-1])
+
+        for i in range(1, len(coords) - 1):
+            current_point = Point(coords[i])
+            if current_point in keep_coords:
+                furthest_distance = tolerance + 1
+                furthest_point_index = i
+                break
+
+            distance = current_point.distance(LineString([start_point, end_point]))
+
+            if distance > furthest_distance:
+                furthest_distance = distance
+                furthest_point_index = i
+
+        if furthest_distance > tolerance:
+            line_1 = rdp(coords[0 : furthest_point_index + 1])
+            line_2 = rdp(coords[furthest_point_index:])
+
+            return line_1[:-1] + line_2
+
+        return [
+            start_point.coords[0],
+            end_point.coords[0],
+        ]
+
+    coords = rdp(list(geom.coords))
+
+    return LineString(coords)
+
+
+def insert_vertex(
+    geom: LineString | LinearRing,
+    vertex: Point,
+    index: int,
+) -> LineString:
+    """Insert vertex to a linear geometry at given index.
+
+    If `geom` has z values but the vertex does not, the z coordinate for the
+    added vertex will default to 0.0.
+
+    Args:
+    ----
+        geom: Geometry to add the vertex to.
+        vertex: The vertex to add.
+        index: The index at which to insert the vertex. Must be a valid index.
+
+    Returns:
+    -------
+        Geometry with added vertex.
+
+    """
+    coords = list(geom.coords)
+    vertex_as_tuple: tuple[float, float] | tuple[float, float, float]
+    if geom.has_z:
+        vertex_as_tuple = (
+            vertex.x,
+            vertex.y,
+            vertex.z if vertex.has_z else 0.0,
+        )
+    else:
+        vertex_as_tuple = (
+            vertex.x,
+            vertex.y,
+        )
+
+    coords.insert(index, vertex_as_tuple)
+
+    return LineString(coords)
+
+
+def add_topological_point(
+    geom: LineString,
+    point: Point,
+    tolerance: float = 0.0,
+) -> LineString:
+    """Add new vertex to geometry if it resides on a segment.
+
+    If `point` does not intersect any segment (at the given distance tolerance)
+    the geometry is returned unchanged.
+
+    If `point` is already a vertex in the geometry it is not added.
+
+    Args:
+    ----
+        geom: Geometry to add vertices to.
+        point: Point to add to `geom`.
+        tolerance: Maximum distance the point can be off a segment.
+
+    Returns:
+    -------
+        Geometry with added vertex, or unchanged geometry if point was not on a
+        segment.
+
+    Raises:
+    ------
+        ValueError: If tolerance is below zero.
+
+    """
+    if tolerance < 0:
+        msg = "Tolerance should be 0 or above."
+        raise ValueError(msg)
+
+    # TODO: implement for polygons/multigeoms?
+    segments = explode_line(geom).geoms
+
+    point_2d = force_2d(point)
+    intersects_check_geom = point if tolerance == 0 else point.buffer(tolerance)
+
+    vertex_index = 0
+    for i in range(len(segments)):
+        segment = segments[i]
+        point_1 = force_2d(Point(segment.coords[0]))
+        point_2 = force_2d(Point(segment.coords[1]))
+
+        if not intersects_check_geom.intersects(segment) or point_2d in {
+            point_1,
+            point_2,
+        }:
+            vertex_index += 2
+            continue
+
+        return insert_vertex(geom, point, i + 1)
+
+    return geom
+
+
+def add_topological_points(
+    geom: LineString,
+    points: Iterable[Point],
+    tolerance: float = 0.0,
+) -> LineString:
+    """Add new vertices to geometry if they reside on a segment.
+
+    If a point does not intersect any segment it is not added to the geometry.
+
+    If a point is already a vertex in the geometry it is not added.
+
+    Args:
+    ----
+        geom: Geometry to add vertices to.
+        points: Points to add to `geom`.
+        tolerance: Maximum distance a point can be off a segment.
+
+    Returns:
+    -------
+        Geometry with added vertices (if any).
+
+    Raises:
+    ------
+        ValueError: If tolerance is below zero.
+
+    """
+    if tolerance < 0:
+        msg = "Tolerance should be 0 or above."
+        raise ValueError(msg)
+
+    # TODO: implement for polygons/multigeoms?
+    processed_geom = deepcopy(geom)
+    for point in points:
+        processed_geom = add_topological_point(processed_geom, point, tolerance)
+
+    return processed_geom
+
+
+def snap_to_closest_vertex_or_segment(
+    point: Point,
+    snap_to: BaseGeometry,
+    tolerance: float = 0.0,
+    z_behavior: Literal["inherit", "exclude"] = "inherit",
+) -> Point:
+    """Return point snapped to closest vertex or segment in reference geometry.
+
+    The difference to shapely's snap function is that it only snaps to vertices,
+    whereas this also snaps to segments.
+
+    Args:
+    ----
+        point: Point geometry to snap.
+        snap_to: Geometry to snap to.
+        tolerance: Maximum distance to snapped point. If distance is above this,
+            the point is returned unchanged.
+        z_behavior: Describes what should happen if input point has a z
+            coordinate. If "inherit", the snapped point will get input point's z
+            coordinate, if "exclude" the snapped point will not have a z
+            coordinate.
+
+
+    Returns:
+    -------
+        Snapped point if it was within the distance tolerance, otherwise the
+        unchanged point.
+
+    """
+    _, snap_point = nearest_points(point, snap_to)
+    if point.distance(snap_point) < tolerance:
+        return point
+
+    if z_behavior == "inherit" and point.has_z:
+        snap_point = Point(snap_point.x, snap_point.y, point.z)
+
+    return snap_point

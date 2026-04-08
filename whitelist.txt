@@ -59,8 +59,11 @@ loc
 multilinestring
 multipolygon
 nodata
+peucker
 polygonize
 pygeoops
+ramer
+rdp
 rect
 rglob
 segmentize

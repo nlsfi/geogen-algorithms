@@ -25,7 +25,7 @@ from geogenalg.core.geometry import (
     get_topological_points,
     split_linear_geometry,
 )
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
 
 def find_all_endpoints(
@@ -939,7 +939,7 @@ def smooth_contiguously(
 
     """
     if input_gdf.empty:
-        return input_gdf[0:0].copy()
+        return copy_gdf_as_empty(input_gdf)
 
     gdf = GeoDataFrame(
         geometry=[
