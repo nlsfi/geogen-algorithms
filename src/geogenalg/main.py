@@ -573,6 +573,7 @@ def build_app() -> None:  # noqa: PLR0914
             parameters=parameters
         )
 
+        app.pretty_exceptions_show_locals = False
         app.command(help=alg.__doc__)(algorithm_command_function)
 
 

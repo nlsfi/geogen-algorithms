@@ -11,6 +11,7 @@ bbox
 boffet
 bools
 cartagen
+catmull
 centerline
 centroid
 centroids
@@ -78,6 +79,7 @@ splitters
 sqrt
 stacklevel
 starmap
+subdivs
 testdata
 tolist
 topo
