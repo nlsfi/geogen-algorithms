@@ -68,6 +68,8 @@ from geogenalg.core.geometry import (
     remove_small_parts,
     scale_line_to_length,
     segment_direction,
+    smooth_around_connection_point_of_two_lines,
+    smooth_around_ring_closing_vertex,
     snap_to_closest_vertex_or_segment,
     split_linear_geometry,
 )
@@ -2379,3 +2381,214 @@ def test_ramer_douglas_peucker_simplify_keep_coords(
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("line", "spline_subdivisions", "expected"),
+    [
+        (
+            LineString([[0, 0], [1, 0]]),
+            10,
+            LineString([[0, 0], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [0.5, 1], [0.5, -1]]),
+            10,
+            LineString([[0, 0], [1, 0], [0.5, 1], [0.5, -1]]),
+        ),
+        (
+            LineString(),
+            10,
+            LineString(),
+        ),
+        (
+            LineString([[0, 0], [1, 1], [3, 1], [2, 0], [0, 0]]),
+            2,
+            LineString(
+                [
+                    [0, 0],
+                    [0.3079449839416705, 0.5000000000000001],
+                    [1, 1],
+                    [3, 1],
+                    [2, 0],
+                    [0.8385016254650557, -0.161498374534944],
+                    [0, 0],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "not_closed",
+        "not_valid",
+        "empty",
+        "ring",
+    ],
+)
+def test_smooth_around_ring_closing_vertex(
+    line: LineString,
+    spline_subdivisions: int,
+    expected: LineString,
+):
+    assert equals_exact(
+        smooth_around_ring_closing_vertex(
+            line, spline_subdivisions=spline_subdivisions
+        ),
+        expected,
+        tolerance=0.000000001,
+    )
+
+
+@pytest.mark.parametrize(
+    ("line_1", "line_2", "point", "spline_subdivisions", "expected_1", "expected_2"),
+    [
+        (
+            LineString(),
+            LineString(),
+            Point(),
+            10,
+            LineString(),
+            LineString(),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            LineString([[5, 5], [6, 5]]),
+            Point(0, 0),
+            10,
+            LineString([[0, 0], [1, 0]]),
+            LineString([[5, 5], [6, 5]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            LineString([[1, 0], [1, 1]]),
+            Point(5, 5),
+            10,
+            LineString([[0, 0], [1, 0]]),
+            LineString([[1, 0], [1, 1]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            LineString([[1, 0], [1, 1]]),
+            Point(0, 0),
+            10,
+            LineString([[0, 0], [1, 0]]),
+            LineString([[1, 0], [1, 1]]),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1.25, 0.25],
+                    [1.75, 1],
+                    [2.5, 2],
+                    [4, 3],
+                ]
+            ),
+            LineString(
+                [
+                    [4, 3],
+                    [5, 2],
+                    [6, 4.25],
+                    [5.5, 4.75],
+                    [5, 6],
+                ]
+            ),
+            Point(4, 3),
+            3,
+            LineString(
+                [
+                    [0, 0],
+                    [1.25, 0.25],
+                    [1.75, 1],
+                    [2.5, 2],
+                    [2.9661258867648237, 2.433208736292763],
+                    [3.5049204064058337, 2.842054416166005],
+                    [4, 3],
+                ]
+            ),
+            LineString(
+                [
+                    [4, 3],
+                    [4.363927764355153, 2.711489274491867],
+                    [4.693562719333668, 2.2261563204196673],
+                    [5, 2],
+                    [6, 4.25],
+                    [5.5, 4.75],
+                    [5, 6],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1.25, 0.25],
+                    [1.75, 1],
+                    [2.5, 2],
+                    [4, 3],
+                ]
+            ),
+            LineString(
+                [
+                    [4, 3],
+                    [5, 2],
+                    [6, 4.25],
+                    [5.5, 4.75],
+                    [5, 6],
+                    [0, 6],
+                    [-2, 3],
+                    [0, 0],
+                ]
+            ),
+            Point(4, 3),
+            3,
+            LineString(
+                [
+                    [0, 0],
+                    [1.25, 0.25],
+                    [1.75, 1],
+                    [2.5, 2],
+                    [2.9661258867648237, 2.433208736292763],
+                    [3.5049204064058337, 2.842054416166005],
+                    [4, 3],
+                ]
+            ),
+            LineString(
+                [
+                    [4, 3],
+                    [4.363927764355153, 2.711489274491867],
+                    [4.693562719333668, 2.2261563204196673],
+                    [5, 2],
+                    [6, 4.25],
+                    [5.5, 4.75],
+                    [5, 6],
+                    [0, 6],
+                    [-2, 3],
+                    [0, 0],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "empty_1",
+        "lines_disjoint",
+        "point_disjoint",
+        "point_disjoint_other",
+        "should_smooth",
+        "makes_ring",
+    ],
+)
+def test_smooth_around_connection_point_of_two_lines(
+    line_1: LineString,
+    line_2: LineString,
+    point: Point,
+    spline_subdivisions: int,
+    expected_1: LineString,
+    expected_2: LineString,
+):
+    result_1, result_2 = smooth_around_connection_point_of_two_lines(
+        line_1, line_2, point, spline_subdivisions=spline_subdivisions
+    )
+
+    assert equals_exact(result_1, expected_1, tolerance=0.000000001)
+
+    assert equals_exact(result_2, expected_2, tolerance=0.000000001)

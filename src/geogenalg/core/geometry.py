@@ -10,6 +10,7 @@ from itertools import chain
 from math import atan2, degrees, pi, sqrt
 from statistics import mean
 from typing import Literal, NamedTuple
+from warnings import warn
 
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import array, column_stack, ndarray, vstack  # noqa: SC200
@@ -29,6 +30,7 @@ from shapely import (
     get_coordinates,
     length,
     polygonize,
+    remove_repeated_points,
     shortest_line,
 )
 from shapely.affinity import rotate, scale, translate
@@ -36,6 +38,7 @@ from shapely.coords import CoordinateSequence
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from shapely.ops import linemerge, nearest_points, split
+from shapelysmooth import catmull_rom_smooth
 
 from geogenalg.core.exceptions import (
     GeometryOperationError,
@@ -172,7 +175,11 @@ def chaikin_smooth_skip_coords(
     return result
 
 
-def get_topological_points(geoseries: GeoSeries) -> list[Point]:
+def get_topological_points(
+    geoseries: GeoSeries,
+    *,
+    force_2d: bool = True,
+) -> list[Point]:
     """Find all topological points in a GeoSeries.
 
     Topological point referring to a point which is shared by two or more
@@ -181,6 +188,7 @@ def get_topological_points(geoseries: GeoSeries) -> list[Point]:
     Args:
     ----
         geoseries: The GeoSeries to find topological points in.
+        force_2d: Whether to find and return points as 2d geometries.
 
     Returns:
     -------
@@ -195,7 +203,10 @@ def get_topological_points(geoseries: GeoSeries) -> list[Point]:
     if geoseries.empty:
         return []
 
-    unique_points = geoseries.force_2d().extract_unique_points().union_all()
+    if force_2d:
+        unique_points = geoseries.force_2d().extract_unique_points().union_all()
+    else:
+        unique_points = geoseries.extract_unique_points().union_all()
 
     if isinstance(unique_points, Point):
         unique_points = MultiPoint([unique_points])
@@ -1294,7 +1305,7 @@ def ramer_douglas_peucker_simplify_keep_coords(
 
 def insert_vertex(
     geom: LineString | LinearRing,
-    vertex: Point,
+    vertex: Point | tuple[float, float] | tuple[float, float, float],
     index: int,
 ) -> LineString:
     """Insert vertex to a linear geometry at given index.
@@ -1314,20 +1325,27 @@ def insert_vertex(
 
     """
     coords = list(geom.coords)
-    vertex_as_tuple: tuple[float, float] | tuple[float, float, float]
-    if geom.has_z:
-        vertex_as_tuple = (
-            vertex.x,
-            vertex.y,
-            vertex.z if vertex.has_z else 0.0,
-        )
-    else:
-        vertex_as_tuple = (
-            vertex.x,
-            vertex.y,
-        )
 
-    coords.insert(index, vertex_as_tuple)
+    if isinstance(vertex, Point):
+        if geom.has_z:
+            coords.insert(
+                index,
+                (
+                    vertex.x,
+                    vertex.y,
+                    vertex.z if vertex.has_z else 0.0,
+                ),
+            )
+        else:
+            coords.insert(
+                index,
+                (vertex.x, vertex.y),
+            )
+    else:
+        coords.insert(
+            index,
+            vertex,
+        )
 
     return LineString(coords)
 
@@ -1463,3 +1481,210 @@ def snap_to_closest_vertex_or_segment(
         snap_point = Point(snap_point.x, snap_point.y, point.z)
 
     return snap_point
+
+
+def _get_vertex_circular(coords: CoordinateSequence, index: int) -> tuple[float, ...]:
+    """Get vertex while handling overflowing index by looping around to the start.
+
+    Returns
+    -------
+        Vertex at given index.
+
+    """
+    if index < 0:
+        return coords[index]
+
+    if index < len(coords):
+        return coords[index]
+
+    return coords[(index % len(coords)) + 1]
+
+
+def smooth_around_ring_closing_vertex(
+    line: LineString,
+    *,
+    spline_subdivisions: int = 10,
+) -> LineString:
+    """Smooth segments around closing vertex of closed linestring.
+
+    If `line` is invalid or not closed it is returned as is.
+    If line has z coordinates, smoothed vertices will default to 0.0.
+
+    Args:
+    ----
+        line: Line to smooth.
+        spline_subdivisions: How many vertices are added to smoothed segments.
+
+    Returns:
+    -------
+        Smoothed line (provided it was possible to smooth).
+
+    """
+    if not line.is_closed or not line.is_valid:
+        return line
+
+    smoothed_line = catmull_rom_smooth(
+        force_2d(line),
+        0.5,
+        subdivs=spline_subdivisions,
+    )
+
+    cut_vertexes_per_side_count = 1
+    smoothed_vertex_count = cut_vertexes_per_side_count * spline_subdivisions
+
+    line_cut = line.coords[
+        cut_vertexes_per_side_count : len(line.coords) - cut_vertexes_per_side_count
+    ]
+
+    if len(line_cut) < 2:  # noqa: PLR2004
+        return line
+
+    line_cut = LineString(line_cut)
+
+    before_vertices = [
+        _get_vertex_circular(smoothed_line.coords, i)
+        for i in range(-smoothed_vertex_count, 1)
+    ]
+    after_vertices = [
+        _get_vertex_circular(smoothed_line.coords, i)
+        for i in range(smoothed_vertex_count)
+    ]
+    after_vertices.reverse()
+
+    for vertex in before_vertices:
+        vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
+        line_cut = insert_vertex(
+            line_cut, vertex_with_z_handled, len(line_cut.coords) + 1
+        )
+
+    for vertex in after_vertices:
+        vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
+        line_cut = insert_vertex(line_cut, vertex_with_z_handled, 0)
+
+    return remove_repeated_points(line_cut)
+
+
+def smooth_around_connection_point_of_two_lines(  # noqa: C901, PLR0912, PLR0914
+    line_1: LineString,
+    line_2: LineString,
+    point: Point,
+    *,
+    spline_subdivisions: int = 10,
+) -> tuple[LineString, LineString]:
+    """Smooth segments in given lines which are around the given point.
+
+    If line has z coordinates, smoothed vertices will default to 0.0.
+
+    Args:
+    ----
+        line_1: Line to smooth.
+        line_2: Line to smooth.
+        point: Point around which segments are smoothed.
+        spline_subdivisions: How many vertices are added to smoothed segments.
+
+    Returns:
+    -------
+        Smoothed lines (provided they could be smoothed) in this order:
+        (line_1, line_2).
+
+    """
+    if not line_1.touches(line_2.boundary):
+        return line_1, line_2
+
+    if not point.intersects(line_1) or not point.intersects(line_2):
+        return line_1, line_2
+
+    combined_line = linemerge([line_1, line_2])
+
+    cut_index = -1
+    for i, vertex in enumerate(combined_line.coords):
+        if point.coords[0] == vertex:
+            cut_index = i
+
+    if cut_index == -1:
+        warn("Did not find matching vertex in combined line.", stacklevel=2)
+        return line_1, line_2
+
+    vertex_before = _get_vertex_circular(combined_line.coords, cut_index - 1)
+    vertex_after = _get_vertex_circular(combined_line.coords, cut_index + 1)
+
+    cut_index *= spline_subdivisions
+
+    # Use Catmull-Rom spline because it's not going to shift existing
+    # coordinates and is guaranteed to travel through them
+    smoothed_combined_line = catmull_rom_smooth(
+        force_2d(combined_line),
+        0.5,
+        subdivs=spline_subdivisions,
+    )
+
+    cut_vertexes_per_side_count = 1
+    smoothed_vertex_count = cut_vertexes_per_side_count * spline_subdivisions
+
+    before_vertices = [
+        _get_vertex_circular(smoothed_combined_line.coords, i)
+        for i in range(cut_index - smoothed_vertex_count, cut_index + 1)
+    ]
+    after_vertices = [
+        _get_vertex_circular(smoothed_combined_line.coords, i)
+        for i in range(cut_index, cut_index + smoothed_vertex_count)
+    ]
+    after_vertices.reverse()
+
+    smoothed_lines = []
+    for line in (line_1, line_2):
+        smooth_start = point.coords[0] == line.coords[0]
+        smooth_end = point.coords[0] == line.coords[-1]
+
+        if not smooth_start and not smooth_end:
+            continue
+
+        total_vertices = len(line.coords)
+
+        line_cut = line.coords[
+            cut_vertexes_per_side_count if smooth_start else 0 : total_vertices
+            - cut_vertexes_per_side_count
+            if smooth_end
+            else total_vertices
+        ]
+
+        if len(line_cut) < 2:  # noqa: PLR2004
+            warn("Could not cut line properly, not smoothing line.", stacklevel=2)
+            smoothed_lines.append(line)
+            continue
+        line_cut = LineString(line_cut)
+
+        before_in_coords = vertex_before in line.coords
+        after_in_coords = vertex_after in line.coords
+        if before_in_coords and not after_in_coords:
+            chosen_vertices = before_vertices
+        elif after_in_coords and not before_in_coords:
+            chosen_vertices = after_vertices
+        else:
+            warn(
+                "Could not determine where from to add vertices from, "
+                + "not smoothing line.",
+                stacklevel=2,
+            )
+            smoothed_lines.append(line)
+            continue
+
+        if smooth_end:
+            for vertex in chosen_vertices:
+                vertex_with_z_handled = (
+                    vertex if not line.has_z else (vertex[0], vertex[1], 0)
+                )
+                line_cut = insert_vertex(
+                    line_cut, vertex_with_z_handled, len(line_cut.coords) + 1
+                )
+
+        if smooth_start:
+            for vertex in chosen_vertices:
+                vertex_with_z_handled = (
+                    vertex if not line.has_z else (vertex[0], vertex[1], 0)
+                )
+                line_cut = insert_vertex(line_cut, vertex_with_z_handled, 0)
+
+        smoothed_lines.append(remove_repeated_points(line_cut))
+
+    return tuple(smoothed_lines)

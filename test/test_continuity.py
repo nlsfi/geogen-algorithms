@@ -29,7 +29,7 @@ from geogenalg.continuity import (
     get_segments_in_polygon_exteriors_but_not_in_lines,
     inspect_dead_end_candidates,
     process_lines_and_reconnect,
-    smooth_contiguously,
+    smooth_linestring_connections,
 )
 
 
@@ -1663,13 +1663,13 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
 @pytest.mark.parametrize(
     (
         "input_gdf",
-        "iterations",
+        "spline_subdivisions",
         "expected_gdf",
     ),
     [
         (
             GeoDataFrame(geometry=[]),
-            5,
+            10,
             GeoDataFrame(geometry=[]),
         ),
         (
@@ -1677,40 +1677,104 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
                 {"attribute": ["1", "2"]},
                 index=[1, 2],
                 geometry=[
-                    LineString([[0, 0], [1, 1]]),
-                    LineString([[1, 1], [2, 0]]),
+                    LineString(
+                        [
+                            [0, 0],
+                            [1.25, 0.25],
+                            [1.75, 1],
+                            [2.5, 2],
+                            [4, 3],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [4, 3],
+                            [5, 2],
+                            [6, 4.25],
+                            [5.5, 4.75],
+                            [5, 6],
+                        ]
+                    ),
                 ],
             ),
-            1,
+            3,
             GeoDataFrame(
                 {"attribute": ["1", "2"]},
                 index=[1, 2],
                 geometry=[
-                    LineString([[0, 0], [0.75, 0.75], [1, 0.75]]),
-                    LineString([[1, 0.75], [1.25, 0.75], [2, 0]]),
+                    LineString(
+                        [
+                            [0, 0],
+                            [1.25, 0.25],
+                            [1.75, 1],
+                            [2.5, 2],
+                            [2.9661258867648237, 2.433208736292763],
+                            [3.5049204064058337, 2.842054416166005],
+                            [4, 3],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [4, 3],
+                            [4.363927764355153, 2.711489274491867],
+                            [4.693562719333668, 2.2261563204196673],
+                            [5, 2],
+                            [6, 4.25],
+                            [5.5, 4.75],
+                            [5, 6],
+                        ]
+                    ),
                 ],
             ),
         ),
         (
             GeoDataFrame(
-                {"attribute": ["1", "2", "3", "4"]},
-                index=[1, 2, 3, 4],
+                {"attribute": ["1"]},
+                index=[1],
                 geometry=[
-                    LineString([[0, 0], [1, 1]]),
-                    LineString([[1, 1], [2, 0]]),
-                    LineString([[2, 0], [1, -1]]),
-                    LineString([[1, -1], [0, 0]]),
+                    LineString(
+                        [
+                            [0, 0],
+                            [1.25, 0.25],
+                            [1.75, 1],
+                            [2.5, 2],
+                            [4, 3],
+                            [5, 2],
+                            [6, 4.25],
+                            [5.5, 4.75],
+                            [5, 6],
+                            [0, 6],
+                            [-2, 3],
+                            [0, 0],
+                        ]
+                    ),
                 ],
             ),
-            1,
+            3,
             GeoDataFrame(
-                {"attribute": ["1", "2", "3", "4"]},
-                index=[1, 2, 3, 4],
+                {"attribute": ["1"]},
+                index=[1],
                 geometry=[
-                    LineString([[0.25, 0], [0.25, 0.25], [0.75, 0.75], [1, 0.75]]),
-                    LineString([[1, 0.75], [1.25, 0.75], [1.75, 0.25], [1.75, 0]]),
-                    LineString([[1.75, 0], [1.75, -0.25], [1.25, -0.75], [1, -0.75]]),
-                    LineString([[1, -0.75], [0.75, -0.75], [0.25, -0.25], [0.25, 0]]),
+                    LineString(
+                        [
+                            [0, 0],
+                            [0.4396802056781041, -0.0548478681379274],
+                            [0.884397910840029, 0.0588325415544701],
+                            [1.25, 0.25],
+                            [1.75, 1],
+                            [2.5, 2],
+                            [4, 3],
+                            [5, 2],
+                            [6, 4.25],
+                            [5.5, 4.75],
+                            [5, 6],
+                            [0, 6],
+                            [-2, 3],
+                            [-1.6343790296899408, 1.8411100158993157],
+                            [-0.8243136149354368, 0.6822200317986311],
+                            [0, 0],
+                        ]
+                    ),
                 ],
             ),
         ),
@@ -1721,17 +1785,18 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
         "ring",
     ],
 )
-def test_smooth_contiguously(
+def test_smooth_linestring_connections(
     input_gdf: GeoDataFrame,
-    iterations: int,
+    spline_subdivisions: int,
     expected_gdf: GeoDataFrame,
 ):
-    result = smooth_contiguously(
+    result = smooth_linestring_connections(
         input_gdf,
-        iterations=iterations,
+        spline_subdivisions=spline_subdivisions,
     )
     assert_geodataframe_equal(
         result,
         expected_gdf,
         check_like=True,
+        check_less_precise=True,
     )
