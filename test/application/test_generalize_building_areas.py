@@ -43,4 +43,5 @@ def test_generalize_building_areas(testdata_path: Path) -> None:
             "roads": gpkg.to_input("roads"),
         },
         check_missing_reference=True,
+        dummy_data_mandatory_columns=["building_function_id"],
     ).run()

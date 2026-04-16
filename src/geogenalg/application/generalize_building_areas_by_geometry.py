@@ -10,7 +10,10 @@ from cartagen.enrichment.urban.urban_areas import boffet_areas
 from geopandas import GeoDataFrame
 from geopandas.geoseries import GeoSeries
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    supports_identity,
+)
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 
@@ -35,7 +38,6 @@ class GeneralizeBuildingAreasByGeometry(BaseAlgorithm):
     buildings located on the edge."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
-    valid_reference_geometry_types: ClassVar = {"LineString"}
 
     @override
     def _execute(

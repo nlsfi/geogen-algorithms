@@ -13,12 +13,24 @@ from warnings import warn
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 from pandas.testing import assert_series_equal
+from shapely.geometry import (
+    GeometryCollection,
+    LinearRing,
+    LineString,
+    MultiLineString,
+    MultiPoint,
+    MultiPolygon,
+    Point,
+    Polygon,
+)
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.utility.dataframe_processing import (
     combine_gdfs,
     read_gdf_from_file_and_set_index,
 )
+from geogenalg.utility.validation import ShapelyGeometryTypeString
 
 if TYPE_CHECKING:
     from pandas import DataFrame
@@ -304,3 +316,58 @@ def get_test_gdfs(  # noqa: PLR0913
         result,
         control,
     )
+
+
+def dummy_geometry(geom_type: ShapelyGeometryTypeString) -> BaseGeometry:  # noqa: PLR0911
+    """Give dummy geometry for testing purposes according to given type.
+
+    Returns
+    -------
+        Dummy geometry of given input geometry type.
+
+    """
+    match geom_type:
+        case "Point":
+            return Point(0, 0, 0)
+        case "LineString":
+            return LineString([[0, 0, 0], [1, 0, 0]])
+        case "LinearRing":
+            return LinearRing([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0]])
+        case "Polygon":
+            return Polygon([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0]])
+        case "MultiPoint":
+            return MultiPoint([dummy_geometry("Point"), Point(1, 1, 0)])
+        case "MultiLineString":
+            return MultiLineString(
+                [
+                    dummy_geometry("LineString"),
+                    LineString([[0, 1, 0], [1, 1, 0]]),
+                ]
+            )
+        case "MultiPolygon":
+            return MultiPolygon(
+                [
+                    dummy_geometry("Polygon"),
+                    Polygon(
+                        [
+                            [10, 10, 0],
+                            [11, 10, 0],
+                            [11, 11, 0],
+                            [10, 11, 0],
+                            [10, 10, 0],
+                        ],
+                    ),
+                ]
+            )
+        case "GeometryCollection":
+            return GeometryCollection(
+                [
+                    dummy_geometry("Point"),
+                    dummy_geometry("LineString"),
+                    dummy_geometry("LinearRing"),
+                    dummy_geometry("Polygon"),
+                    dummy_geometry("MultiPoint"),
+                    dummy_geometry("MultiLineString"),
+                    dummy_geometry("MultiPolygon"),
+                ]
+            )

@@ -52,6 +52,7 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        dummy_data_mandatory_columns=["kayttotarkoitus"],
     ).run()
 
 
@@ -77,6 +78,7 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        dummy_data_mandatory_columns=["kayttotarkoitus"],
     ).run()
 
 
@@ -307,7 +309,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             GeoDataFrame(columns=["id", "class"], geometry=[]),
             "class",
             "id",
-            GeoDataFrame(columns=["id", "class"], geometry=[]),
+            GeoDataFrame(columns=["id", "class", "old_ids"], geometry=[]),
         ),
         (
             GeoDataFrame(

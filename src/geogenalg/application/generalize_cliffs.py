@@ -8,8 +8,11 @@ from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 
-from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import MissingReferenceError
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.selection import remove_close_line_segments, remove_short_lines
 from geogenalg.split import explode_and_hash_id
 
@@ -37,7 +40,15 @@ class GeneralizeCliffs(BaseAlgorithm):
     """Reference data key for roads data."""
 
     valid_input_geometry_types: ClassVar = {"LineString", "MultiLineString"}
-    valid_reference_geometry_types: ClassVar = {"LineString", "MultiLineString"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "LineString",
+                "MultiLineString",
+            },
+        ),
+    }
     required_projected_crs: ClassVar = False
 
     @override
@@ -46,23 +57,7 @@ class GeneralizeCliffs(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        """Execute algorithm.
-
-        Raises:
-            GeometryTypeError: If input GeoDataFrames have incorrect geometry types.
-            MissingReferenceError: If reference data is not found.
-
-        Returns:
-            Generalized cliff lines.
-
-        Raises:
-            MissingReferenceError: If reference data is missing.
-
-        """
-        if self.reference_key in reference_data:
-            roads_data = reference_data[self.reference_key]
-        else:
-            raise MissingReferenceError
+        roads_data = reference_data[self.reference_key]
 
         result = remove_close_line_segments(data, roads_data, self.buffer_size)
         result = remove_short_lines(result, self.length_threshold)

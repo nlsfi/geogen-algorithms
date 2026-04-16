@@ -3,11 +3,11 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import nan
 from pygeoops import centerline
+from shapely import LineString, MultiLineString
 
 from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.geometry import (
@@ -15,10 +15,7 @@ from geogenalg.core.geometry import (
     remove_line_segments_at_wide_sections,
     remove_small_parts,
 )
-from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
-
-if TYPE_CHECKING:
-    from shapely import LineString, MultiLineString
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf, copy_gdf_as_empty
 
 
 def thin_polygon_sections_to_lines(  # noqa: PLR0913
@@ -67,6 +64,15 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         ),
     )
 
+    if not isinstance(full_centerline, LineString | MultiLineString):
+        return copy_gdf_as_empty(
+            gdf,
+            add_columns={old_ids_column: "object"},
+        ), add_columns_to_gdf(
+            gdf,
+            {old_ids_column: "object"},
+        )
+
     lines = remove_line_segments_at_wide_sections(
         full_centerline.segmentize(width_check_distance),
         input_union,
@@ -76,10 +82,13 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
     lines = remove_small_parts(lines, min_line_length)
 
     if lines.is_empty:
-        if old_ids_column is not None:
-            gdf[old_ids_column] = nan
-
-        return copy_gdf_as_empty(gdf), gdf
+        return copy_gdf_as_empty(
+            gdf,
+            add_columns={old_ids_column: "object"},
+        ), add_columns_to_gdf(
+            gdf,
+            {old_ids_column: "object"},
+        )
 
     # Create a polygonal mask from lines which have been determined to be long
     # enough. This is used to remove thin sections from the polygons.
@@ -125,7 +134,13 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         gdf[old_ids_column] = None
 
     if new_lines.is_empty:
-        return copy_gdf_as_empty(gdf), gdf
+        return copy_gdf_as_empty(
+            gdf,
+            add_columns={old_ids_column: "object"},
+        ), add_columns_to_gdf(
+            gdf,
+            {old_ids_column: "object"},
+        )
 
     new_lines = GeoSeries(new_lines).explode(ignore_index=True)
     new_line_features = GeoDataFrame(

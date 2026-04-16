@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import gettempdir
 from typing import Any
+from uuid import uuid4
 from warnings import warn
 
 import pytest
@@ -25,6 +26,7 @@ from geogenalg.testing import (
     TestGeoDataFrames,
     TestReportWarning,
     assert_gdf_equal_save_diff,
+    dummy_geometry,
     get_test_gdfs,
 )
 from geogenalg.utility.validation import geometry_string_to_type
@@ -67,6 +69,8 @@ class IntegrationTest:
         default_factory=dict
     )
     """Any arguments to pass to geopandas.testing.assert_geodataframe_equal."""
+    dummy_data_mandatory_columns: list[str] = field(default_factory=list)
+    """For defining columns which are required for algorithm to pass."""
 
     def get_test_gdfs(self, *, geometry_column: str | None = None) -> TestGeoDataFrames:
         """Get GeoDataFrames used in test.
@@ -145,6 +149,8 @@ class IntegrationTest:
     def run(self) -> None:
         """Run integration test."""
         algorithm_before = deepcopy(self.algorithm)
+
+        self._check_algorithm_passes_with_dummy_data()
         test_gdfs = self.get_test_gdfs()
 
         assert self.algorithm == algorithm_before
@@ -298,3 +304,36 @@ class IntegrationTest:
         if input_has_only_single_geometries and not result_has_only_single_geometries:
             msg = "Input has only single geometries but result does not."
             raise AssertionError(msg)
+
+    def _check_algorithm_passes_with_dummy_data(
+        self,
+    ) -> None:
+        attribute_data = {column: [1] for column in self.dummy_data_mandatory_columns}
+        attribute_data["field_1"] = [1]
+        data = GeoDataFrame(
+            attribute_data,
+            index=[str(uuid4())],
+            geometry=[
+                dummy_geometry(next(iter(self.algorithm.valid_input_geometry_types)))
+            ],
+            crs="EPSG:3857",
+        )
+
+        # TODO: selecting next from a set is non-deterministic potentially
+        # resulting in flaky tests?
+
+        reference_data = {}
+        for key, ref in self.algorithm.reference_data_schema.items():
+            reference_data[getattr(self.algorithm, key)] = GeoDataFrame(
+                {
+                    "field_1": [1],
+                },
+                index=[str(uuid4())],
+                geometry=[dummy_geometry(next(iter(ref.valid_geometry_types)))],
+                crs="EPSG:3857",
+            )
+
+        self.algorithm.execute(
+            data,
+            reference_data,
+        )

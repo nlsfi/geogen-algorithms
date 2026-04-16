@@ -21,7 +21,11 @@ from shapely import (
     Polygon,
 )
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.core.exceptions import GeometryTypeError, InvalidCRSError
 
 
@@ -181,15 +185,22 @@ def test_wrong_geometry_type_input_data(input_data: GeoDataFrame):
 def test_wrong_geometry_type_reference_data(reference_data: GeoDataFrame):
     @supports_identity
     class MockAlg(BaseAlgorithm):
+        reference_key: str = "ref"
+
         valid_input_geometry_types: ClassVar = {"Point"}
-        valid_reference_geometry_types: ClassVar = {"Point"}
+        reference_data_schema: ClassVar = {
+            "reference_key": ReferenceDataInformation(
+                required=True,
+                valid_geometry_types={"Point"},
+            ),
+        }
 
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
 
     with pytest.raises(
         GeometryTypeError,
-        match=r"Reference data must contain only geometries of following types: Point.",
+        match=r'Reference data "ref" must contain only geometries of following types: Point.',
     ):
         MockAlg().execute(
             GeoDataFrame(geometry=[Point()], crs="EPSG:3857"), {"ref": reference_data}
@@ -262,6 +273,13 @@ def test_reference_invalid_crs(
 ):
     class MockAlg(BaseAlgorithm):
         valid_input_geometry_types: ClassVar = {"Point"}
+        reference_key: str = "ref"
+        reference_data_schema: ClassVar = {
+            "reference_key": ReferenceDataInformation(
+                required=True,
+                valid_geometry_types={"Point"},
+            ),
+        }
 
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data

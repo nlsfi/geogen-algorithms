@@ -10,8 +10,11 @@ from typing import ClassVar, override
 from geopandas import GeoDataFrame
 
 from geogenalg.analyze import calculate_coverage
-from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import MissingReferenceError
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 from geogenalg.merge import buffer_and_merge_polygons
@@ -50,7 +53,14 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
     """Reference data key for parcel data."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
-    valid_reference_geometry_types: ClassVar = {"Polygon"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "Polygon",
+            },
+        ),
+    }
 
     @override
     def _execute(
@@ -58,9 +68,6 @@ class GeneralizeBuildingAreasByParcel(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        if self.reference_key not in reference_data:
-            raise MissingReferenceError
-
         building_coverage_column = "__coverage"
         result_gdf = data.copy()
         parcels_gdf = reference_data[self.reference_key]

@@ -9,7 +9,11 @@ from typing import ClassVar, override
 
 from geopandas.geodataframe import GeoDataFrame
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.application.generalize_building_areas_by_geometry import (
     GeneralizeBuildingAreasByGeometry,
 )
@@ -17,7 +21,6 @@ from geogenalg.application.generalize_building_areas_by_parcel import (
     GeneralizeBuildingAreasByParcel,
 )
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
-from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 from geogenalg.utility.dataframe_processing import combine_gdfs
@@ -97,7 +100,20 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """Reference data key for parcel data."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
-    valid_reference_geometry_types: ClassVar = {"Polygon", "LineString"}
+    reference_data_schema: ClassVar = {
+        "reference_key_parcels": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "Polygon",
+            },
+        ),
+        "reference_key_roads": ReferenceDataInformation(
+            required=False,
+            valid_geometry_types={
+                "LineString",
+            },
+        ),
+    }
 
     @override
     def _execute(
@@ -105,9 +121,6 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        if self.reference_key_parcels not in reference_data:
-            raise MissingReferenceError
-
         reference_roads = (
             reference_data[self.reference_key_roads]
             if self.reference_key_roads in reference_data
@@ -158,6 +171,11 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             # or far from other areas
             area_threshold=0.0,
         ).execute(gdf)
+
+        if gdf.empty:
+            # GeneralizeLandCover may have eroded all areas away, which
+            # will cause overlay() to fail later -> return early
+            return gdf
 
         # Remove sections from building areas which are too close to the
         # reference roads

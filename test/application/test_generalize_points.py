@@ -83,4 +83,5 @@ def test_generalize_points(
         algorithm=algorithm,
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        dummy_data_mandatory_columns=["boulder_in_water_type_id"],
     ).run()

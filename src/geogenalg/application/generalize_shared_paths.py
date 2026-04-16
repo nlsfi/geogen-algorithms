@@ -9,12 +9,15 @@ from typing import ClassVar
 
 from geopandas import GeoDataFrame
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.continuity import (
     get_lines_along_reference_lines,
     process_lines_and_reconnect,
 )
-from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.core.geometry import (
     assign_nearest_z,
 )
@@ -44,29 +47,21 @@ class GeneralizeSharedPaths(BaseAlgorithm):
     """Reference data, higher priority layer"""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
-    valid_reference_geometry_types: ClassVar = {"LineString"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "LineString",
+            },
+        ),
+    }
 
     def _execute(
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        """Execute algorithm.
-
-        Raises
-        ------
-            MissingReferenceError: if no reference data is provided
-
-        Returns
-        -------
-        GeoDataFrame of LineStrings that are not contained within
-        the detection_distance threshold around reference data LineStrings.
-
-        """
-        if self.reference_key in reference_data:
-            reference_gdf = reference_data[self.reference_key]
-        else:
-            raise MissingReferenceError
+        reference_gdf = reference_data[self.reference_key]
 
         def _process(geodataframe: GeoDataFrame) -> GeoDataFrame:
             return get_lines_along_reference_lines(

@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import ClassVar, override
 
-from cartagen.utils.partitioning.network import network_faces
 from geopandas import GeoDataFrame
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.continuity import connect_nearby_endpoints
-from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.merge import merge_connecting_lines_by_attribute
 from geogenalg.selection import (
@@ -62,7 +64,14 @@ class GeneralizeFences(BaseAlgorithm):
     """Reference data key to use as a source of mast data."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
-    valid_reference_geometry_types: ClassVar = {"Point"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "Point",
+            },
+        ),
+    }
 
     @override
     def _execute(
@@ -70,26 +79,6 @@ class GeneralizeFences(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        """Execute algorithm.
-
-        Args:
-        ----
-            data: A GeoDataFrame containing the fence lines to be generalized.
-            reference_data: Should contain a Point GeoDataFrame.
-
-        Returns:
-        -------
-            GeoDataFrame containing the generalized fence lines.
-
-        Raises:
-        ------
-            MissingReferenceError: If reference data is missing.
-            KeyError: If specified attribute for merging lines is not specified.
-
-        """
-        if self.reference_key not in reference_data:
-            raise MissingReferenceError
-
         if self.attribute_for_line_merge not in data.columns:
             msg = (
                 "Specified `attribute_for_line_merge` "
@@ -123,8 +112,8 @@ class GeneralizeFences(BaseAlgorithm):
         # Combine original fence lines with helper lines
         combined_gdf = combine_gdfs([result_gdf, helper_lines_gdf], ignore_index=True)
 
-        # Calculate the CartaGen network faces to fill closing line geometries
-        faces = network_faces(list(combined_gdf.geometry), convex_hull=False)
+        # Calculate the network faces to fill closing line geometries
+        faces = combined_gdf.geometry.polygonize()
         faces_gdf = GeoDataFrame(geometry=list(faces))
 
         # Dissolve adjacent polygons into larger contiguous areas

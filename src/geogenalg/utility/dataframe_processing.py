@@ -9,7 +9,7 @@ from typing import Literal, NotRequired, TypedDict, Unpack
 
 from geopandas import GeoDataFrame, read_file
 from geopandas.geoseries import GeoSeries
-from pandas import concat
+from pandas import Series, concat
 
 from geogenalg.core.exceptions import GeoCombineError
 
@@ -25,18 +25,65 @@ class ConcatParameters(TypedDict):
     copy: NotRequired[bool]
 
 
-def copy_gdf_as_empty(input_gdf: GeoDataFrame) -> GeoDataFrame:
+def copy_gdf_as_empty(
+    input_gdf: GeoDataFrame,
+    *,
+    add_columns: dict[str | None, str] | None = None,
+) -> GeoDataFrame:
     """Copy GeoDataFrame, retaining its structure (columns, crs) but not any rows.
 
-    Returns
+    Args:
+    ----
+        input_gdf: GeoDataFrame to copy.
+        add_columns: Optionally define new columns to add to copied GeoDataFrame.
+            Key is column name, value is column dtype. If key is None, it will
+            not be added.
+
+    Returns:
     -------
         GeoDataFrame with input_gdf's columns and crs but without any rows.
 
     """
+    if add_columns is None:
+        add_columns = {}
+
     # If input_gdf does not have an active geometry column, a DataFrame would
     # be returned. Wrap in gdf constructor to ensure a GeoDataFrame is always
     # returned.
-    return GeoDataFrame(input_gdf.iloc[0:0].copy())
+    gdf = GeoDataFrame(input_gdf.iloc[0:0].copy())
+    for name, dtype in add_columns.items():
+        if name is None:
+            continue
+
+        gdf[name] = Series(dtype=dtype)
+    return gdf
+
+
+def add_columns_to_gdf(
+    input_gdf: GeoDataFrame,
+    add_columns: dict[str | None, str],
+) -> GeoDataFrame:
+    """Add columns to a GeoDataFrame.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame to add to.
+        add_columns: New columns to add to GeoDataFrame. Key is column name,
+            value is column dtype. If key is None, the column will not be added.
+
+    Returns:
+    -------
+        GeoDataFrame with added columns.
+
+    """
+    gdf = input_gdf.copy()
+    for name, dtype in add_columns.items():
+        if name is None:
+            continue
+
+        gdf[name] = Series(dtype=dtype)
+
+    return gdf
 
 
 def _combine_geo_objects(

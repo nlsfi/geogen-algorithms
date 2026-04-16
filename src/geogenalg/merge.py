@@ -6,12 +6,13 @@
 from typing import Literal
 
 from geopandas import GeoDataFrame
+from pandas import Series
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString
 
 from geogenalg.attributes import inherit_attributes
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -135,9 +136,6 @@ def dissolve_and_inherit_attributes(
         msg = "Dissolve only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
-    if input_gdf.empty:
-        return input_gdf
-
     gdf = input_gdf.copy()
 
     # Apply buffer(0) to clean geometries. It fixes invalid polygons and
@@ -206,7 +204,15 @@ def dissolve_and_inherit_attributes(
 
         features.append(feature)
 
-    output = GeoDataFrame(features, geometry=input_gdf.geometry.name, crs=input_gdf.crs)
+    if features:
+        output = GeoDataFrame(
+            features, geometry=input_gdf.geometry.name, crs=input_gdf.crs
+        )
+    else:
+        empty = copy_gdf_as_empty(input_gdf)
+        empty[old_ids_column] = Series(dtype="object")
+        return empty
+
     output.index.name = input_gdf.index.name
 
     return output

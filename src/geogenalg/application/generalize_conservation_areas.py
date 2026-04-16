@@ -10,11 +10,15 @@ from typing import ClassVar
 from geopandas import GeoDataFrame
 
 from geogenalg.analyze import calculate_edge_adjacency
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.identity import hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
-from geogenalg.utility.dataframe_processing import combine_gdfs, combine_geoseries
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 WATER_PROXIMITY_DISTANCE = 20
 WATER_RATIO_THRESHOLD = 0.5
@@ -58,9 +62,19 @@ class GeneralizeConservationAreas(BaseAlgorithm):
     """If True, polygons will be smoothed."""
     group_by: frozenset[str] = frozenset()
     """Column(s) whose values define the groups to be dissolved."""
+    reference_key: str = "water_areas"
+    """Reference data key for water area data."""
 
-    valid_input_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
-    valid_reference_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
+    valid_input_geometry_types: ClassVar = {"Polygon"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "Polygon",
+                "MultiPolygon",
+            },
+        ),
+    }
 
     def _execute(
         self,
@@ -69,12 +83,7 @@ class GeneralizeConservationAreas(BaseAlgorithm):
     ) -> GeoDataFrame:
         gdf = data.copy()
 
-        # Merge reference layers from the dictionary into a single GeoDataFrame
-        reference_geoms = [gdf.geometry for gdf in reference_data.values()]
-        combined_series = combine_geoseries(reference_geoms, ignore_index=True)
-        reference_gdf = GeoDataFrame(geometry=combined_series)
-        reference_gdf = reference_gdf.explode(index_parts=False).reset_index(drop=True)
-        reference_gdf = reference_gdf[~reference_gdf.geometry.is_empty]
+        reference_gdf = reference_data[self.reference_key]
 
         # Compute water adjacency ratio for each conservation area
         gdf = calculate_edge_adjacency(

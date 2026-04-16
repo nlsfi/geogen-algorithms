@@ -10,8 +10,11 @@ from typing import ClassVar, override
 
 from geopandas import GeoDataFrame, overlay
 
-from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import MissingReferenceError
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.split import explode_and_hash_id
 
 logger = logging.getLogger(__name__)
@@ -38,7 +41,15 @@ class GeneralizeShoreline(BaseAlgorithm):
     "Reference data key to use as the source of the generalized shoreline."
 
     valid_input_geometry_types: ClassVar = {"LineString"}
-    valid_reference_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "Polygon",
+                "MultiPolygon",
+            },
+        ),
+    }
 
     @override
     def _execute(
@@ -46,19 +57,7 @@ class GeneralizeShoreline(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        """Execute algorithm.
-
-        Raises:
-            MissingReferenceError: If reference data is not found.
-
-        Returns:
-            New shoreline extracted from generalized water areas.
-
-        """
-        if self.reference_key in reference_data:
-            water_areas_gdf = reference_data[self.reference_key]
-        else:
-            raise MissingReferenceError
+        water_areas_gdf = reference_data[self.reference_key]
 
         new_shoreline = water_areas_gdf.geometry.boundary.to_frame()
         new_shoreline = new_shoreline.explode()
