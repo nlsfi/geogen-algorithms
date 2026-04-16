@@ -61,7 +61,7 @@ class GeneralizePoints(BaseAlgorithm):
     an unchanged point."""
 
     valid_input_geometry_types: ClassVar = {"Point"}
-    required_projected_crs: ClassVar = False
+    requires_projected_crs: ClassVar = False
 
     def _execute(
         self,
