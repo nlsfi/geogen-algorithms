@@ -34,4 +34,5 @@ def test_generalize_building_areas_by_parcel(testdata_path: Path) -> None:
             "parcels": gpkg.to_input("property_borders"),
         },
         check_missing_reference=True,
+        dummy_data_mandatory_columns=["kohdeluokka"],
     ).run()

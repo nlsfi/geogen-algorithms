@@ -18,6 +18,7 @@ from geogenalg.core.exceptions import GeoCombineError
 from geogenalg.utility import dataframe_processing
 from geogenalg.utility.dataframe_processing import (
     ConcatParameters,
+    add_columns_to_gdf,
     combine_gdfs,
     combine_geoseries,
     copy_gdf_as_empty,
@@ -526,3 +527,49 @@ def test_copy_gdf_as_empty_none_index_name():
     )
 
     assert result.index.name == input_gdf.index.name
+
+
+def test_add_columns_to_gdf():
+    gdf = GeoDataFrame({"field": [1, 2]})
+
+    result_1 = add_columns_to_gdf(gdf, add_columns={"new_field": "string"})
+    assert list(result_1["field"]) == [1, 2]
+    assert result_1["new_field"].dtype == "string"
+
+    result_2 = add_columns_to_gdf(gdf, add_columns={"new_field": "object"})
+    assert list(result_1["field"]) == [1, 2]
+    assert result_2["new_field"].dtype == "object"
+
+    result_3 = add_columns_to_gdf(
+        gdf, add_columns={"new_field_1": "object", "new_field_2": "float64"}
+    )
+    assert list(result_1["field"]) == [1, 2]
+    assert result_3["new_field_1"].dtype == "object"
+    assert result_3["new_field_2"].dtype == "float64"
+
+    result_4 = add_columns_to_gdf(gdf, add_columns={None: "object"})
+    assert list(result_1["field"]) == [1, 2]
+    assert result_4.columns == ["field"]
+
+
+def test_copy_gdf_as_empty_add_columns():
+    gdf = GeoDataFrame({"field": [1, 2]})
+
+    result_1 = copy_gdf_as_empty(gdf, add_columns={"new_field": "string"})
+    assert result_1.empty
+    assert result_1["new_field"].dtype == "string"
+
+    result_2 = copy_gdf_as_empty(gdf, add_columns={"new_field": "object"})
+    assert result_2.empty
+    assert result_2["new_field"].dtype == "object"
+
+    result_3 = copy_gdf_as_empty(
+        gdf, add_columns={"new_field_1": "object", "new_field_2": "float64"}
+    )
+    assert result_3.empty
+    assert result_3["new_field_1"].dtype == "object"
+    assert result_3["new_field_2"].dtype == "float64"
+
+    result_4 = copy_gdf_as_empty(gdf, add_columns={None: "object"})
+    assert result_4.empty
+    assert result_4.columns == ["field"]

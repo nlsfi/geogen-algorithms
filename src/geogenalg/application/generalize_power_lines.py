@@ -12,14 +12,17 @@ from pygeoops import centerline
 from shapely.geometry import Polygon
 
 from geogenalg.analyze import get_polygons_for_parallel_lines
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.continuity import (
     connect_lines_to_polygon_centroids,
     flag_polygon_centerline_connections,
     process_lines_and_reconnect,
 )
-from geogenalg.core.exceptions import MissingReferenceError
 from geogenalg.core.geometry import (
     LineExtendFrom,
     assign_nearest_z,
@@ -67,7 +70,20 @@ class GeneralizePowerLines(BaseAlgorithm):
     """Reference key for substation dataset."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
-    valid_reference_geometry_types: ClassVar = {"LineString", "Polygon"}
+    reference_data_schema: ClassVar = {
+        "reference_key_fences": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "LineString",
+            },
+        ),
+        "reference_key_substations": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "Polygon",
+            },
+        ),
+    }
 
     @override
     def _execute(
@@ -75,12 +91,6 @@ class GeneralizePowerLines(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        if self.reference_key_fences not in reference_data:
-            raise MissingReferenceError
-
-        if self.reference_key_substations not in reference_data:
-            raise MissingReferenceError
-
         fences = reference_data[self.reference_key_fences]
         substations = reference_data[self.reference_key_substations]
 

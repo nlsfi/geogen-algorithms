@@ -37,4 +37,5 @@ def test_generalize_power_lines(
             "fences": gpkg.to_input("fences"),
         },
         check_missing_reference=True,
+        dummy_data_mandatory_columns=["kohdeluokka"],
     ).run()

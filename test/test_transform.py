@@ -12,6 +12,7 @@ from numpy import nan
 from shapely import LineString, MultiPolygon, Polygon, box, union_all
 
 from geogenalg.transform import thin_polygon_sections_to_lines
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf
 
 
 @pytest.mark.parametrize(
@@ -27,9 +28,12 @@ from geogenalg.transform import thin_polygon_sections_to_lines
                     box(0, 0, 100, 20),
                 ],
             ),
-            GeoDataFrame(
-                columns=["id", "attribute", "__old_ids"],
-                geometry=[],
+            add_columns_to_gdf(
+                GeoDataFrame(
+                    columns=["id", "attribute"],
+                    geometry=[],
+                ),
+                {"__old_ids": "object"},
             ),
             GeoDataFrame(
                 {
@@ -150,9 +154,6 @@ def test_thin_polygon_sections_to_lines(
     expected_polygons: GeoDataFrame,
     threshold: float,
 ):
-    if expected_lines.empty:
-        expected_lines["__old_ids"] = expected_lines["__old_ids"].astype("float64")
-
     input_gdf = input_gdf.set_index("id")
     modified_lines, modified_polygons = thin_polygon_sections_to_lines(
         input_gdf,

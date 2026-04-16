@@ -34,10 +34,12 @@ def test_generalize_conservation_areas(
             hole_threshold=2000,
             smoothing=False,
             group_by=frozenset(["layer"]),
+            reference_key="water_areas",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
-            "water": gpkg.to_input("water_areas"),
+            "water_areas": gpkg.to_input("water_areas"),
         },
         check_missing_reference=False,
+        dummy_data_mandatory_columns=["layer"],
     ).run()

@@ -34,4 +34,5 @@ def test_generalize_fences(testdata_path: Path) -> None:
         reference_uris={
             "masts": gpkg.to_input("masts"),
         },
+        dummy_data_mandatory_columns=["kohdeluokka"],
     ).run()

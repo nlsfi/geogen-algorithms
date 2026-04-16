@@ -9,7 +9,11 @@ from typing import ClassVar, override
 from geopandas import GeoDataFrame, GeoSeries
 from shapely import MultiPoint, Polygon, force_2d
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.continuity import get_segments_in_polygon_exteriors_but_not_in_lines
 from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
@@ -72,7 +76,14 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     non-shoreline vertices."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
-    valid_reference_geometry_types: ClassVar = {"LineString"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=False,
+            valid_geometry_types={
+                "LineString",
+            },
+        ),
+    }
 
     @staticmethod
     def _get_skip_coords(data: GeoDataFrame, shoreline: GeoDataFrame) -> MultiPoint:
@@ -80,9 +91,6 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
         if segments.empty:
             return MultiPoint()
-
-        if segments.shape[0] == 1:
-            return MultiPoint(segments.union_all())
 
         points = segments.extract_unique_points().union_all()
 

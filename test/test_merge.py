@@ -21,6 +21,7 @@ from geogenalg.merge import (
     dissolve_polygon_layers,
     merge_connecting_lines_by_attribute,
 )
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf
 
 
 @pytest.mark.parametrize(
@@ -410,6 +411,7 @@ def test_dissolve_and_inherit_attributes(
 def test_dissolve_and_inherit_attributes_handles_empty_gdf_correctly():
     input_gdf = GeoDataFrame(columns=["id", "group"], geometry=[])
     expected_gdf = GeoDataFrame(columns=["id", "group"], geometry=[])
+    expected_gdf = add_columns_to_gdf(expected_gdf, {"old_ids": "object"})
 
     result_gdf = dissolve_and_inherit_attributes(
         input_gdf,

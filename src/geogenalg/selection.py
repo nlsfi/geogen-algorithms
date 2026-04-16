@@ -91,8 +91,8 @@ def split_polygons_by_point_intersection(
         lambda poly: point_gdf.geometry.intersects(poly).any()
     )
 
-    polygons_with_point: GeoDataFrame = polygon_gdf[polygons_intersecting_point]
-    polygons_without_point: GeoDataFrame = polygon_gdf[~polygons_intersecting_point]
+    polygons_with_point: GeoDataFrame = polygon_gdf.loc[polygons_intersecting_point]
+    polygons_without_point: GeoDataFrame = polygon_gdf.loc[~polygons_intersecting_point]
 
     return polygons_with_point, polygons_without_point
 

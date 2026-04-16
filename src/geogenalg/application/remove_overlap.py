@@ -8,8 +8,11 @@ from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 
-from geogenalg.application import BaseAlgorithm, supports_identity
-from geogenalg.core.exceptions import MissingReferenceError
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.split import explode_and_hash_id
 
 
@@ -40,10 +43,17 @@ class RemoveOverlap(BaseAlgorithm):
         "Point",
         "MultiPoint",
         "LinearRing",
-        "GeometryCollection",
     }
 
-    valid_reference_geometry_types: ClassVar = {"Polygon", "MultiPolygon"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=True,
+            valid_geometry_types={
+                "Polygon",
+                "MultiPolygon",
+            },
+        )
+    }
     requires_projected_crs: ClassVar = False
 
     @override
@@ -52,9 +62,6 @@ class RemoveOverlap(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        if self.reference_key not in reference_data:
-            raise MissingReferenceError
-
         mask_data = reference_data[self.reference_key]
 
         # Overlay does not keep index here, so copy it to a separate column,

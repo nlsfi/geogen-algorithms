@@ -8,7 +8,11 @@ from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.continuity import add_contiguous_lines_information
 
 
@@ -33,7 +37,14 @@ class GeneralizeRoads(BaseAlgorithm):
     """Reference key for other line datasets which are part of the same network."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
-    valid_reference_geometry_types: ClassVar = {"LineString"}
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            required=False,
+            valid_geometry_types={
+                "LineString",
+            },
+        ),
+    }
 
     @override
     def _execute(

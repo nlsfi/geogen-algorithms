@@ -5,13 +5,18 @@
 #  SPDX-License-Identifier: MIT
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, TypeVar, final
 
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
 
-from geogenalg.core.exceptions import GeometryTypeError, InvalidCRSError
+from geogenalg.core.exceptions import (
+    GeometryTypeError,
+    InvalidCRSError,
+    MissingReferenceError,
+)
 from geogenalg.utility.hash import reset_with_random_hash_index
 from geogenalg.utility.validation import (
     ShapelyGeometryTypeString,
@@ -21,15 +26,22 @@ from geogenalg.utility.validation import (
 _SUPPORTS_IDENTITY_ATTR = "__supports_identity"
 
 
+@dataclass(frozen=True)
+class ReferenceDataInformation:
+    """Struct for defining information about reference data an algorithm accepts."""
+
+    valid_geometry_types: set[ShapelyGeometryTypeString]
+    required: bool
+
+
 class BaseAlgorithm(ABC):
     """Abstract base class for all algorithms."""
 
     valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
     """Set of accepted geometry types for input data. If there is a mismatch,
     GeometryTypeError will be raised."""
-    valid_reference_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
-    """Set of accepted geometry types for reference data. If there is a mismatch,
-    GeometryTypeError will be raised."""
+    reference_data_schema: ClassVar[dict[str, ReferenceDataInformation]] = {}
+    """Dictionary telling what kind of reference data algorithm accepts."""
     requires_projected_crs: ClassVar[bool] = True
     """Tells whether algorithm requires a projected coordinate reference
     system. If True, when data with non-projected CRS is passed to execute(),
@@ -134,6 +146,7 @@ class BaseAlgorithm(ABC):
                 subclass.
             InvalidCRSError: If input or reference data has missing, non-projected
                 or differing coordinate reference systems.
+            MissingReferenceError: If a required reference dataset is missing.
 
         """
         if not self.valid_input_geometry_types:
@@ -159,18 +172,28 @@ class BaseAlgorithm(ABC):
             msg = "Algorithm requires projected CRS and data does not have one."
             raise InvalidCRSError(msg)
 
-        for key, reference in reference_data.items():
+        for key_attribute, ref in self.reference_data_schema.items():
+            key = getattr(self, key_attribute)
+            reference = reference_data.get(key)
+
+            if reference is None and ref.required:
+                raise MissingReferenceError
+
+            if reference is None:
+                continue
+
             if not check_gdf_geometry_type(
                 reference,
-                self.valid_reference_geometry_types,
+                ref.valid_geometry_types,
             ):
                 types = (
-                    next(iter(self.valid_reference_geometry_types))
-                    if len(self.valid_reference_geometry_types) == 1
-                    else f"{', '.join(sorted(self.valid_reference_geometry_types))}"
+                    next(iter(ref.valid_geometry_types))
+                    if len(ref.valid_geometry_types) == 1
+                    else f"{', '.join(sorted(ref.valid_geometry_types))}"
                 )
                 msg = (
-                    "Reference data must contain only geometries of following types: "
+                    f'Reference data "{key}" must contain only '
+                    + "geometries of following types: "
                     + f"{types}."
                 )
                 raise GeometryTypeError(msg)
