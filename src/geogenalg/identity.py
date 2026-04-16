@@ -129,7 +129,7 @@ def hash_index_from_old_ids(
     gdf.index = Index(new_index)
     gdf.index.name = data.index.name
 
-    if drop_old_ids:
+    if drop_old_ids and old_ids_column in gdf:
         gdf = gdf.drop(old_ids_column, axis=1)
 
     return gdf
