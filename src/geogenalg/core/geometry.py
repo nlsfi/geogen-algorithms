@@ -1305,7 +1305,7 @@ def ramer_douglas_peucker_simplify_keep_coords(
 
 def insert_vertex(
     geom: LineString | LinearRing,
-    vertex: Point | tuple[float, float] | tuple[float, float, float],
+    vertex: Point | tuple[float, ...],
     index: int,
 ) -> LineString:
     """Insert vertex to a linear geometry at given index.
@@ -1326,25 +1326,29 @@ def insert_vertex(
     """
     coords = list(geom.coords)
 
-    if isinstance(vertex, Point):
-        if geom.has_z:
-            coords.insert(
-                index,
-                (
-                    vertex.x,
-                    vertex.y,
-                    vertex.z if vertex.has_z else 0.0,
-                ),
-            )
-        else:
-            coords.insert(
-                index,
-                (vertex.x, vertex.y),
-            )
+    def _interpolate_z() -> float:
+        if index <= 0:
+            return coords[0][2]
+
+        if index >= len(coords):
+            return coords[len(coords) - 1][2]
+
+        return (coords[index - 1][2] + coords[index][2]) / 2
+
+    vertex_as_tuple = vertex.coords[0] if isinstance(vertex, Point) else vertex
+
+    vertex_has_z = len(vertex_as_tuple) == 3  # noqa: PLR2004
+    if geom.has_z:
+        z = vertex_as_tuple[2] if vertex_has_z else _interpolate_z()
+
+        coords.insert(index, (vertex_as_tuple[0], vertex_as_tuple[1], z))
     else:
         coords.insert(
             index,
-            vertex,
+            (
+                vertex_as_tuple[0],
+                vertex_as_tuple[1],
+            ),
         )
 
     return LineString(coords)
@@ -1529,42 +1533,38 @@ def smooth_around_ring_closing_vertex(
         subdivs=spline_subdivisions,
     )
 
-    cut_vertexes_per_side_count = 1
-    smoothed_vertex_count = cut_vertexes_per_side_count * spline_subdivisions
-
-    line_cut = line.coords[
-        cut_vertexes_per_side_count : len(line.coords) - cut_vertexes_per_side_count
-    ]
-
-    if len(line_cut) < 2:  # noqa: PLR2004
-        return line
-
-    line_cut = LineString(line_cut)
-
     before_vertices = [
         _get_vertex_circular(smoothed_line.coords, i)
-        for i in range(-smoothed_vertex_count, 1)
+        for i in range(-spline_subdivisions, 1)
     ]
     after_vertices = [
         _get_vertex_circular(smoothed_line.coords, i)
-        for i in range(smoothed_vertex_count)
+        for i in range(spline_subdivisions)
     ]
     after_vertices.reverse()
 
+    modified_line = line
+
     for vertex in before_vertices:
         vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
-        line_cut = insert_vertex(
-            line_cut, vertex_with_z_handled, len(line_cut.coords) + 1
+        modified_line = insert_vertex(
+            modified_line,
+            vertex_with_z_handled,
+            len(modified_line.coords) - 1,
         )
 
     for vertex in after_vertices:
         vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
-        line_cut = insert_vertex(line_cut, vertex_with_z_handled, 0)
+        modified_line = insert_vertex(
+            modified_line,
+            vertex_with_z_handled,
+            1,
+        )
 
-    return remove_repeated_points(line_cut)
+    return remove_repeated_points(modified_line)
 
 
-def smooth_around_connection_point_of_two_lines(  # noqa: C901, PLR0912, PLR0914
+def smooth_around_connection_point_of_two_lines(  # noqa: C901
     line_1: LineString,
     line_2: LineString,
     point: Point,
@@ -1618,16 +1618,13 @@ def smooth_around_connection_point_of_two_lines(  # noqa: C901, PLR0912, PLR0914
         subdivs=spline_subdivisions,
     )
 
-    cut_vertexes_per_side_count = 1
-    smoothed_vertex_count = cut_vertexes_per_side_count * spline_subdivisions
-
     before_vertices = [
         _get_vertex_circular(smoothed_combined_line.coords, i)
-        for i in range(cut_index - smoothed_vertex_count, cut_index + 1)
+        for i in range(cut_index - spline_subdivisions, cut_index + 1)
     ]
     after_vertices = [
         _get_vertex_circular(smoothed_combined_line.coords, i)
-        for i in range(cut_index, cut_index + smoothed_vertex_count)
+        for i in range(cut_index, cut_index + spline_subdivisions)
     ]
     after_vertices.reverse()
 
@@ -1639,21 +1636,6 @@ def smooth_around_connection_point_of_two_lines(  # noqa: C901, PLR0912, PLR0914
         if not smooth_start and not smooth_end:
             continue
 
-        total_vertices = len(line.coords)
-
-        line_cut = line.coords[
-            cut_vertexes_per_side_count if smooth_start else 0 : total_vertices
-            - cut_vertexes_per_side_count
-            if smooth_end
-            else total_vertices
-        ]
-
-        if len(line_cut) < 2:  # noqa: PLR2004
-            warn("Could not cut line properly, not smoothing line.", stacklevel=2)
-            smoothed_lines.append(line)
-            continue
-        line_cut = LineString(line_cut)
-
         before_in_coords = vertex_before in line.coords
         after_in_coords = vertex_after in line.coords
         if before_in_coords and not after_in_coords:
@@ -1662,29 +1644,24 @@ def smooth_around_connection_point_of_two_lines(  # noqa: C901, PLR0912, PLR0914
             chosen_vertices = after_vertices
         else:
             warn(
-                "Could not determine where from to add vertices from, "
+                "Could not determine where from to add vertices, "
                 + "not smoothing line.",
                 stacklevel=2,
             )
             smoothed_lines.append(line)
             continue
 
-        if smooth_end:
-            for vertex in chosen_vertices:
-                vertex_with_z_handled = (
-                    vertex if not line.has_z else (vertex[0], vertex[1], 0)
-                )
-                line_cut = insert_vertex(
-                    line_cut, vertex_with_z_handled, len(line_cut.coords) + 1
-                )
+        modified_line = line
+        for vertex in chosen_vertices:
+            vertex_with_z_handled = (
+                vertex if not line.has_z else (vertex[0], vertex[1], 0)
+            )
+            modified_line = insert_vertex(
+                modified_line,
+                vertex_with_z_handled,
+                len(modified_line.coords) - 1 if smooth_end else 1,
+            )
 
-        if smooth_start:
-            for vertex in chosen_vertices:
-                vertex_with_z_handled = (
-                    vertex if not line.has_z else (vertex[0], vertex[1], 0)
-                )
-                line_cut = insert_vertex(line_cut, vertex_with_z_handled, 0)
-
-        smoothed_lines.append(remove_repeated_points(line_cut))
+        smoothed_lines.append(remove_repeated_points(modified_line))
 
     return tuple(smoothed_lines)

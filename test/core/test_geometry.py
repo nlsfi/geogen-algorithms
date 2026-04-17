@@ -2065,7 +2065,19 @@ def test_extend_line_by_raises():
             LineString([[0, 0, 1], [1, 0, 2]]),
             Point(0.5, 0),
             1,
-            LineString([[0, 0, 1], [0.5, 0, 0], [1, 0, 2]]),
+            LineString([[0, 0, 1], [0.5, 0, 1.5], [1, 0, 2]]),
+        ),
+        (
+            LineString([[0, 0, 1], [1, 0, 2]]),
+            Point(0.5, 0),
+            0,
+            LineString([[0.5, 0, 1], [0, 0, 1], [1, 0, 2]]),
+        ),
+        (
+            LineString([[0, 0, 1], [1, 0, 2]]),
+            Point(1, 1),
+            2,
+            LineString([[0, 0, 1], [1, 0, 2], [1, 1, 2]]),
         ),
     ],
     ids=[
@@ -2075,6 +2087,8 @@ def test_extend_line_by_raises():
         "vertex_has_z_line_does_not",
         "vertex_has_z_so_does_line",
         "line_has_z_vertex_does_not",
+        "line_has_z_vertex_does_not_start",
+        "line_has_z_vertex_does_not_end",
     ],
 )
 def test_insert_vertex(
