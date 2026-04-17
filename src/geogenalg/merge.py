@@ -6,7 +6,6 @@
 from typing import Literal
 
 from geopandas import GeoDataFrame
-from pandas import Series
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString
 
@@ -209,9 +208,7 @@ def dissolve_and_inherit_attributes(
             features, geometry=input_gdf.geometry.name, crs=input_gdf.crs
         )
     else:
-        empty = copy_gdf_as_empty(input_gdf)
-        empty[old_ids_column] = Series(dtype="object")
-        return empty
+        return copy_gdf_as_empty(input_gdf, add_columns={old_ids_column: "object"})
 
     output.index.name = input_gdf.index.name
 
