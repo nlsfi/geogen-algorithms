@@ -76,8 +76,13 @@ def add_columns_to_gdf(
         GeoDataFrame with added columns.
 
     """
+    columns = {key: value for key, value in add_columns.items() if key is not None}
+
+    if not columns:
+        return input_gdf
+
     gdf = input_gdf.copy()
-    for name, dtype in add_columns.items():
+    for name, dtype in columns.items():
         if name is None:
             continue
 
