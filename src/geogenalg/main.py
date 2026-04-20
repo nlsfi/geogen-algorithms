@@ -13,16 +13,6 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
-from geogenalg.application.dissolve_polygons import DissolvePolygons
-from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
-from geogenalg.application.generalize_building_areas_by_geometry import (
-    GeneralizeBuildingAreasByGeometry,
-)
-from geogenalg.application.generalize_polygons_to_points import (
-    GeneralizePolygonsToPoints,
-)
-from geogenalg.application.generalize_power_lines import GeneralizePowerLines
-
 try:
     import typer
 except ImportError:
@@ -36,14 +26,17 @@ from geopandas import GeoDataFrame, read_file
 from pandas import Series
 
 from geogenalg.application import BaseAlgorithm
-from geogenalg.application.generalize_building_areas_by_parcel import (
-    GeneralizeBuildingAreasByParcel,
-)
+from geogenalg.application.dissolve_polygons import DissolvePolygons
+from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.application.generalize_cliffs import GeneralizeCliffs
 from geogenalg.application.generalize_fences import GeneralizeFences
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.application.generalize_points import GeneralizePoints
+from geogenalg.application.generalize_polygons_to_points import (
+    GeneralizePolygonsToPoints,
+)
+from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.application.generalize_shoreline import GeneralizeShoreline
@@ -430,8 +423,6 @@ def build_app() -> None:  # noqa: PLR0914
         "buildings": GeneralizeBuildings,
         "shared_paths": GeneralizeSharedPaths,
         "power_lines": GeneralizePowerLines,
-        "building_areas_by_parcel": GeneralizeBuildingAreasByParcel,
-        "building_areas_by_geometry": GeneralizeBuildingAreasByGeometry,
         "building_areas": GeneralizeBuildingAreas,
         "dissolve_polygons": DissolvePolygons,
     }

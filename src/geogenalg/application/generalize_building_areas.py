@@ -7,22 +7,20 @@
 from dataclasses import dataclass
 from typing import ClassVar, override
 
+from cartagen.enrichment.urban.urban_areas import boffet_areas
 from geopandas.geodataframe import GeoDataFrame
+from geopandas.geoseries import GeoSeries
 
+from geogenalg.analyze import calculate_coverage
 from geogenalg.application import (
     BaseAlgorithm,
     ReferenceDataInformation,
     supports_identity,
 )
-from geogenalg.application.generalize_building_areas_by_geometry import (
-    GeneralizeBuildingAreasByGeometry,
-)
-from geogenalg.application.generalize_building_areas_by_parcel import (
-    GeneralizeBuildingAreasByParcel,
-)
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
+from geogenalg.merge import buffer_and_merge_polygons
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
@@ -31,48 +29,42 @@ from geogenalg.utility.dataframe_processing import combine_gdfs
 class GeneralizeBuildingAreas(BaseAlgorithm):
     """Generalize polygons representing buildings.
 
-    This algorithm utilizes two other algorithms,
-    GeneralizeBuildingAreasByGeometry and GeneralizeBuildingAreasByParcel. It
-    runs them both, combines the results and performs further post-processing.
+    Input building data can be filtered out as follows
+
+    Optionally parcel data can be passed as reference. Areas which are covered
+    by enough parcels are turned to building areas.
 
     Output contains generalized building-area polygons.
 
     The algorithm does the following steps:
-    - Runs the parcel-based building areas algorithm
-    - Runs the geometry-based building areas algorithm
+    - Creates building areas from building geometries (boffet areas).
+    - If passed, creates building areas from parcels with enough building coverage.
     - Combines the results
     - Removes sections inside buffered road reference data (if provided)
     - Post-processes building areas using the GeneralizeLandcover algorithm
 
-
     """
 
-    # parameters for GeneralizeBuildingAreasByParcel
-    parcel_building_size_threshold: float = 4000.0
-    """For parcel algorithm: to determine large (non-residential) buildings."""
     parcel_coverage_threshold: float = 5
-    """For parcel algorithm: to determine parcels with "high" building density."""
+    """To determine parcels with "high" building density."""
     parcel_buffer_distance: float = 20
-    """For parcel algorithm: buffer distance used to merge parcels."""
-    parcel_building_type_column: str = "building_function_id"
-    """For parcel algorithm: column containing attributes describing the
-    intended use of a building."""
-    parcel_building_type_to_select: int = 1
-    """For parcel algorithm: used to select type of building, residential for
-    example."""
-
-    # parameters for GeneralizeBuildingAreasByGeometry
-    geometry_buildings_simplify_tolerance: float = 10.0
-    """For geometry algorithm: Tolerance for building simplification
-    (Douglas-Peucker)."""
-    geometry_boffet_area_buffer: float = 10.0
-    """For geometry algorithm: The buffer size used to merge buildings that are
-    close from each other."""
-    geometry_boffet_area_erosion: float = 10.0
-    """For geometry algorithm: The erosion size to avoid the building area to
-    expand too far from the buildings located on the edge."""
-
-    # parameters for filtering building areas
+    """Buffer distance used to merge parcels."""
+    building_size_filter_threshold: float = 4000.0
+    """Buildings which a) belong to a filtered class and b) are larger than
+    this threshold are filtered out."""
+    building_filter_column: str = "building_function_id"
+    """Name of the column which contains attributes used for filtering."""
+    classes_for_filtering: frozenset[int | str] = frozenset()
+    """Buildings which a) have one of these values and b) are larger than the
+    size threshold are filtered out."""
+    buildings_simplify_tolerance: float = 10.0
+    """Tolerance for building simplification (Douglas-Peucker)."""
+    boffet_area_buffer: float = 10.0
+    """The buffer size used to merge buildings that are close from each
+    other."""
+    boffet_area_erosion: float = 10.0
+    """The erosion size to avoid the building area to expand too far from the
+    buildings located on the edge."""
     near_area_distance: float = 50.0
     """Distance for building areas to be considered as near each other, affecting
     threshold used to filter small areas."""
@@ -80,7 +72,6 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """Minimum size for newly generated building areas far from other areas."""
     threshold_building_area_near: float = 4000.0
     """Minimum size for newly generated building areas near other areas."""
-
     roads_buffer_distance: float = 10.0
     """How large a section will be removed close to roads from building areas."""
 
@@ -102,7 +93,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     valid_input_geometry_types: ClassVar = {"Polygon"}
     reference_data_schema: ClassVar = {
         "reference_key_parcels": ReferenceDataInformation(
-            required=True,
+            required=False,
             valid_geometry_types={
                 "Polygon",
             },
@@ -127,37 +118,45 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             else GeoDataFrame(geometry=[], crs=data.crs)
         )
 
-        parcels_result = GeneralizeBuildingAreasByParcel(
-            building_area_threshold=self.parcel_building_size_threshold,
-            coverage_threshold=self.parcel_coverage_threshold,
-            buffer_distance=self.parcel_buffer_distance,
-            building_type_column=self.parcel_building_type_column,
-            building_type_to_select=self.parcel_building_type_to_select,
-            reference_key=self.reference_key_parcels,
-        ).execute(
-            data,
-            reference_data={
-                self.reference_key_parcels: reference_data[self.reference_key_parcels],
-            },
+        copy = data.copy()
+        gdf = copy.loc[
+            ~(
+                (copy[self.building_filter_column].isin(self.classes_for_filtering))
+                & (copy.geometry.area > self.building_size_filter_threshold)
+            )
+        ]
+
+        gdf.geometry = gdf.simplify(self.buildings_simplify_tolerance)
+        gdf = GeoDataFrame(
+            geometry=GeoSeries(
+                boffet_areas(
+                    gdf.geometry.to_list(),
+                    self.boffet_area_buffer,
+                    self.boffet_area_erosion,
+                ),
+            ),
+            crs=data.crs,
         )
 
-        geometry_result = GeneralizeBuildingAreasByGeometry(
-            buildings_simplify_tolerance=self.geometry_buildings_simplify_tolerance,
-            boffet_area_erosion=self.geometry_boffet_area_erosion,
-            boffet_area_buffer=self.geometry_boffet_area_buffer,
-        ).execute(
-            data,
-            reference_data={}
-            if reference_data.get(self.reference_key_roads) is None
-            else {self.reference_key_roads: reference_data[self.reference_key_roads]},
-        )
-
-        gdf = combine_gdfs(
-            [
-                parcels_result,
-                geometry_result,
+        if self.reference_key_parcels in reference_data:
+            parcels_gdf = calculate_coverage(
+                copy, reference_data[self.reference_key_parcels], "coverage"
+            )
+            parcels_gdf = parcels_gdf.loc[
+                parcels_gdf["coverage"] > self.parcel_coverage_threshold
             ]
-        )
+
+            parcels_gdf = buffer_and_merge_polygons(
+                parcels_gdf,
+                self.parcel_buffer_distance,
+            ).explode(as_index=False)
+
+            gdf = combine_gdfs(
+                [
+                    parcels_gdf,
+                    gdf,
+                ]
+            )
 
         gdf = gdf.dissolve().explode(as_index=False).reset_index(drop=True)
 
