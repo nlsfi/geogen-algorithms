@@ -20,6 +20,7 @@ from geogenalg.continuity import (
     check_reference_line_connections,
     connect_lines_to_polygon_centroids,
     connect_nearby_endpoints,
+    count_connections,
     detect_dead_ends,
     find_all_endpoints,
     flag_connections,
@@ -1799,4 +1800,137 @@ def test_smooth_linestring_connections(
         expected_gdf,
         check_like=True,
         check_less_precise=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__start_connections": [
+                        1,
+                        1,
+                    ],
+                    "__end_connections": [
+                        0,
+                        0,
+                    ],
+                },
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                    LineString([(5, 1), (10, 1)]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__start_connections": [
+                        2,
+                        2,
+                        2,
+                    ],
+                    "__end_connections": [
+                        0,
+                        0,
+                        0,
+                    ],
+                },
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                    LineString([(5, 1), (10, 1)]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                    LineString([(5, 1), (10, 1)]),
+                    LineString([(-5, 1), (5, 1)]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__start_connections": [
+                        3,
+                        3,
+                        3,
+                        0,
+                    ],
+                    "__end_connections": [
+                        0,
+                        0,
+                        0,
+                        3,
+                    ],
+                },
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                    LineString([(5, 1), (10, 1)]),
+                    LineString([(-5, 1), (5, 1)]),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 2), (5, 10)]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__start_connections": [
+                        0,
+                        0,
+                    ],
+                    "__end_connections": [
+                        0,
+                        0,
+                    ],
+                },
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 2), (5, 10)]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "one_connection",
+        "two_connections",
+        "mixed_start_and_end",
+        "no_connections",
+    ],
+)
+def test_count_connections(
+    input_gdf: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        count_connections(input_gdf),
+        expected_gdf,
+        check_like=True,
     )

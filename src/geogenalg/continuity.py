@@ -445,6 +445,9 @@ def flag_connections(
     """
     topological_points = get_topological_points(input_gdf.geometry)
 
+    # TODO: refactor to use count_connections()? (should be more efficient)
+    # or do a similar implementation?
+
     gdf = input_gdf.copy()
     gdf[start_connected_column] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[0]))
@@ -678,45 +681,48 @@ def process_lines_and_reconnect(
     """
     gdf = cast("GeoDataFrame", data.copy())
     boundaries = gdf.boundary.union_all()
-    gdf = flag_connections(
+    gdf = count_connections(
         gdf,
-        start_connected_column="__start_connected_before",
-        end_connected_column="__end_connected_before",
+        start_connections_column="__start_connections_before",
+        end_connections_column="__end_connections_before",
     )
 
     gdf = process_function(gdf)
 
     if gdf.empty:
-        return gdf.drop(["__start_connected_before", "__end_connected_before"], axis=1)
+        return gdf.drop(
+            ["__start_connections_before", "__end_connections_before"],
+            axis=1,
+        )
 
-    gdf = flag_connections(
+    gdf = count_connections(
         gdf,
-        start_connected_column="__start_connected_after",
-        end_connected_column="__end_connected_after",
+        start_connections_column="__start_connections_after",
+        end_connections_column="__end_connections_after",
     )
 
-    gdf["__start_was_cut"] = gdf.geometry.apply(
+    gdf["__start_point"] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[0]))
     )
-    gdf["__end_was_cut"] = gdf.geometry.apply(
+    gdf["__end_point"] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[-1]))
     )
     data_union = data.union_all().buffer(0.1)
-    gdf["__start_was_cut"] = gdf["__start_was_cut"].intersects(data_union) & gdf[
-        "__start_was_cut"
+    gdf["__start_was_cut"] = gdf["__start_point"].intersects(data_union) & gdf[
+        "__start_point"
     ].disjoint(boundaries)
-    gdf["__end_was_cut"] = gdf["__end_was_cut"].intersects(data_union) & gdf[
-        "__end_was_cut"
+    gdf["__end_was_cut"] = gdf["__end_point"].intersects(data_union) & gdf[
+        "__end_point"
     ].disjoint(boundaries)
 
     # Effectively this checks which connections have been broken
     # in the process function.
     gdf["__extend_start"] = (
-        gdf["__start_connected_before"] != gdf["__start_connected_after"]
+        gdf["__start_connections_before"] > gdf["__start_connections_after"]
     ) | gdf["__start_was_cut"]
 
     gdf["__extend_end"] = (
-        gdf["__end_connected_before"] != gdf["__end_connected_after"]
+        gdf["__end_connections_before"] > gdf["__end_connections_after"]
     ) | gdf["__end_was_cut"]
 
     connect_to = (
@@ -725,30 +731,70 @@ def process_lines_and_reconnect(
         else reconnect_to.union_all()
     )
 
+    already_extended: set[Point] = set()
+
+    def extend_conditionally(
+        start_point: Point,
+        end_point: Point,
+        line: LineString,
+        *,
+        extend_start: bool,
+        extend_end: bool,
+    ) -> LineString:
+        extend_start = extend_start and start_point not in already_extended
+        extend_end = extend_end and end_point not in already_extended
+
+        if not extend_start and not extend_end:
+            return line
+
+        if extend_start:
+            already_extended.add(start_point)
+
+        if extend_end:
+            already_extended.add(end_point)
+
+        return extend_line_to_nearest(
+            line,
+            connect_to,
+            LineExtendFrom.from_bools(
+                extend_start=extend_start,
+                extend_end=extend_end,
+            ),
+            length_tolerance,
+        )
+
     if not gdf.empty:
-        gdf.geometry = gdf[["__extend_start", "__extend_end", gdf.geometry.name]].apply(
-            lambda columns: extend_line_to_nearest(
+        gdf.geometry = gdf[
+            [
+                "__start_point",
+                "__end_point",
+                "__extend_start",
+                "__extend_end",
+                gdf.geometry.name,
+            ]
+        ].apply(
+            lambda columns: extend_conditionally(
+                columns["__start_point"],
+                columns["__end_point"],
                 columns[gdf.geometry.name],
-                connect_to,
-                LineExtendFrom.from_bools(
-                    extend_start=columns["__extend_start"],
-                    extend_end=columns["__extend_end"],
-                ),
-                length_tolerance,
+                extend_start=columns["__extend_start"],
+                extend_end=columns["__extend_end"],
             ),
             axis=1,
         )
 
     return gdf.drop(
         [
-            "__start_connected_before",
-            "__end_connected_before",
-            "__start_connected_after",
-            "__end_connected_after",
+            "__start_connections_before",
+            "__end_connections_before",
+            "__start_connections_after",
+            "__end_connections_after",
             "__extend_start",
             "__extend_end",
             "__start_was_cut",
             "__end_was_cut",
+            "__start_point",
+            "__end_point",
         ],
         axis=1,
     )
@@ -964,5 +1010,50 @@ def smooth_linestring_connections(
             geom, spline_subdivisions=spline_subdivisions
         )
     )
+
+    return gdf
+
+
+def count_connections(
+    input_gdf: GeoDataFrame,
+    *,
+    start_connections_column: str = "__start_connections",
+    end_connections_column: str = "__end_connections",
+) -> GeoDataFrame:
+    """Flag how many other lines each line is connected to.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with LineString geometries to check.
+        start_connections_column: Name of Series which will be added to output,
+            tells whether how many other features first vertex of an input geometry
+            is connected to.
+        end_connections_column: Name of Series which will be added to output,
+            tells whether how many other features last vertex of an input geometry
+            is connected to.
+
+    Returns:
+    -------
+        GeoDataFrame with Series added, telling how many connections each line end is
+        connected to.
+
+    """
+    start = input_gdf.geometry.apply(lambda geom: Point(geom.coords[0])).to_frame()
+    end = input_gdf.geometry.apply(lambda geom: Point(geom.coords[-1])).to_frame()
+
+    start_count = cast("GeoDataFrame", start.sjoin(input_gdf))
+    end_count = cast("GeoDataFrame", end.sjoin(input_gdf))
+
+    index = "index_"
+
+    start_count[index] = start_count.index
+    end_count[index] = end_count.index
+
+    start_count = start_count.groupby(index).size().to_frame()
+    end_count = end_count.groupby(index).size().to_frame()
+
+    gdf = input_gdf.copy()
+    gdf[start_connections_column] = start_count[0] - 1
+    gdf[end_connections_column] = end_count[0] - 1
 
     return gdf
