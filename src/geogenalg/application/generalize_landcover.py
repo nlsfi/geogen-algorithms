@@ -12,7 +12,7 @@ from shapelysmooth import chaikin_smooth
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.geometry import assign_nearest_z
-from geogenalg.identity import hash_index_from_old_ids
+from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
 from geogenalg.selection import remove_small_holes, remove_small_polygons
 
@@ -114,6 +114,8 @@ class GeneralizeLandcover(BaseAlgorithm):
 
         # Remove holes smaller than the hole_threshold and return
         result_gdf = remove_small_holes(result_gdf, self.hole_threshold)
+
+        result_gdf = hash_duplicate_indexes(result_gdf, "landcover")
 
         # Assign nearst z values from source gdf
         return assign_nearest_z(data, result_gdf)
