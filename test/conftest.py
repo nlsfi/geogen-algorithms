@@ -147,13 +147,23 @@ class IntegrationTest:
             raise
 
     def run(self) -> None:
-        """Run integration test."""
+        """Run integration test.
+
+        Raises
+        ------
+            AssertionError: If a check fails.
+
+        """
         algorithm_before = deepcopy(self.algorithm)
 
         self._check_algorithm_passes_with_dummy_data()
         test_gdfs = self.get_test_gdfs()
 
         assert self.algorithm == algorithm_before
+
+        if any(test_gdfs.result.index.duplicated()):
+            msg = "Duplicate indices found in result GeoDataFrame."
+            raise AssertionError(msg)
 
         # Run this first so if report saving is on you can see the result (provided
         # no errors happen during algorithm execution).
