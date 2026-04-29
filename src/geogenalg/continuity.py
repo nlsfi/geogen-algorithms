@@ -1026,10 +1026,10 @@ def count_connections(
     ----
         input_gdf: GeoDataFrame with LineString geometries to check.
         start_connections_column: Name of Series which will be added to output,
-            tells whether how many other features first vertex of an input geometry
+            tells how many other features the first vertex of an input geometry
             is connected to.
         end_connections_column: Name of Series which will be added to output,
-            tells whether how many other features last vertex of an input geometry
+            tells how many other features the last vertex of an input geometry
             is connected to.
 
     Returns:
