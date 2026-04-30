@@ -9,6 +9,7 @@ from hashlib import sha256
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
+from shapely.geometry.base import BaseMultipartGeometry
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -132,7 +133,11 @@ class GeneralizeFences(BaseAlgorithm):
         result_gdf = result_gdf.drop(index=to_remove_idx)
 
         # Convert MultiPolygon result back into a proper GeoDataFrame
-        polygons = list(faces_gdf.geoms)
+        if isinstance(faces_gdf, BaseMultipartGeometry):
+            polygons = list(faces_gdf.geoms)
+        else:
+            polygons = [faces_gdf]
+
         faces_gdf = GeoDataFrame(geometry=polygons, crs=data.crs)
 
         # Remove polygons whose area exceeds the closing_fence_area_with_mast_threshold
