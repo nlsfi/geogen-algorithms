@@ -45,7 +45,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
     """
 
-    parcel_coverage_threshold: float = 5
+    parcel_coverage_threshold: float = 7.5
     """To determine parcels with "high" building density."""
     parcel_buffer_distance: float = 20
     """Buffer distance used to merge parcels."""
@@ -119,6 +119,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         )
 
         copy = data.copy()
+
         gdf = copy.loc[
             ~(
                 (copy[self.building_filter_column].isin(self.classes_for_filtering))
@@ -186,15 +187,17 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         gdf = gdf.dissolve().explode(as_index=False).reset_index(drop=True)
 
         # Calculate distance to nearest building area
-        gdf = gdf.sjoin_nearest(
+        distances = gdf.sjoin_nearest(
             gdf.loc[gdf.geometry.area > self.threshold_building_area_far],
-            distance_col="is_near",
+            distance_col="distance_to_nearest",
             exclusive=True,
-        ).drop("index_right", axis=1)
+        )["distance_to_nearest"]
+
+        gdf = gdf.assign(distance_to_nearest=distances)
         gdf = gdf.drop_duplicates()
         # Drop small building areas with different threshold for areas which
         # are close to other areas and areas which are far from other areas.
-        is_near = gdf["is_near"] <= self.near_area_distance
+        is_near = gdf["distance_to_nearest"] <= self.near_area_distance
         is_far = ~is_near
         area = gdf.geometry.area
         gdf = gdf.loc[
@@ -202,7 +205,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             | (is_far & (area > self.threshold_building_area_far))
         ]
 
-        gdf = gdf.drop("is_near", axis=1)
+        gdf = gdf.drop("distance_to_nearest", axis=1)
 
         gdf = assign_nearest_z(data, gdf)
         return hash_index_from_geometry(gdf, "buildingareas")
