@@ -7,6 +7,7 @@
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
+from pydantic import Field
 
 from geogenalg.analyze import calculate_edge_adjacency
 from geogenalg.application import (
@@ -42,19 +43,19 @@ class GeneralizeConservationAreas(BaseAlgorithm):
         4. Merge the two groups back together and dissolve within the feature class.
     """
 
-    positive_buffer_coastal_areas: float = 25.0
+    positive_buffer_coastal_areas: float = Field(25.0, ge=0)
     """Positive buffer to close narrow gaps in coastal areas."""
-    negative_buffer_coastal_areas: float = -5.0
+    negative_buffer_coastal_areas: float = Field(-5.0, le=0)
     """Negative buffer to remove narrow parts in coastal areas."""
-    positive_buffer_inland_areas: float = 5.0
+    positive_buffer_inland_areas: float = Field(5.0, ge=0)
     """Positive buffer to close narrow gaps in inland areas."""
-    negative_buffer_inland_areas: float = -5.0
+    negative_buffer_inland_areas: float = Field(-5.0, le=0)
     """Negative buffer to remove narrow parts in inland areas."""
-    simplification_tolerance: float = 3.0
+    simplification_tolerance: float = Field(3.0, ge=0)
     """Tolerance used for geometry simplification."""
-    area_threshold: float = 1000.0
+    area_threshold: float = Field(1000.0, ge=0)
     """Minimum polygon area to retain."""
-    hole_threshold: float = 2000.0
+    hole_threshold: float = Field(2000.0, ge=0)
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""

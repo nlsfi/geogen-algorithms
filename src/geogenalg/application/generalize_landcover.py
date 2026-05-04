@@ -40,7 +40,7 @@ class GeneralizeLandcover(BaseAlgorithm):
 
     positive_buffer: float = Field(10.0, ge=0)
     """Buffer to close narrow gaps."""
-    negative_buffer: float = Field(10.0, ge=0)
+    negative_buffer: float = Field(-10.0, le=0)
     """Negative buffer to remove narrow parts."""
     simplification_tolerance: float = Field(5.0, ge=0)
     """Tolerance used for geometry simplification."""

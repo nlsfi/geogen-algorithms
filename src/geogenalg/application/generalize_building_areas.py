@@ -77,7 +77,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     # parameters for GeneralizeLandCover
     positive_buffer: float = Field(10.0, ge=0)
     """Buffer to close narrow gaps."""
-    negative_buffer: float = Field(10.0, ge=0)
+    negative_buffer: float = Field(-10.0, lt=0)
     """Negative buffer to remove narrow parts."""
     simplification_tolerance: float = Field(4.0, ge=0)
     """Tolerance for simplifying building areas."""

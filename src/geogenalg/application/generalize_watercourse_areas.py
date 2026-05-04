@@ -38,7 +38,7 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     precise checking."""
 
     # Inherited from GeneralizeWaterAreas, override default
-    thin_section_exaggerate_by: float = Field(0.0, gt=0)
+    thin_section_exaggerate_by: float = Field(0.0, ge=0)
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
 
