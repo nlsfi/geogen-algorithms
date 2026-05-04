@@ -7,6 +7,7 @@
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
+from pydantic import Field
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -33,12 +34,12 @@ class GeneralizeSharedPaths(BaseAlgorithm):
     `reference_key` (default "roads").
     """
 
-    detection_distance: float = 25.0
+    detection_distance: float = Field(25.0, gt=0)
     """Distance within which the shared paths (or generally network of linestrings of
     lower priority) along roads (or generally network of linestrings of higher priority)
     are removed.
     """
-    minimum_percentage: float = 90.0
+    minimum_percentage: float = Field(90.0, ge=0.0, lt=100.0)
     """If the percentage of a lower priority line's total length within the
     detection distance of higher priority lines is below this it will be removed."""
     reference_key: str = "roads"

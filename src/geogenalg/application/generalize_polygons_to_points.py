@@ -6,6 +6,7 @@
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
+from pydantic import Field
 from shapely import Point
 from shapely.geometry import Polygon
 
@@ -24,7 +25,7 @@ class GeneralizePolygonsToPoints(BaseAlgorithm):
     Output contains both unchanged polygon and changed point features.
     """
 
-    polygon_min_area: float = 4000.0
+    polygon_min_area: float = Field(4000.0, gt=0)
     """Polygons with an area smaller than this will be turned into a point."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}

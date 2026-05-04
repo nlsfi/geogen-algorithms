@@ -6,6 +6,7 @@
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
+from pydantic import Field
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -30,9 +31,9 @@ class GeneralizeCliffs(BaseAlgorithm):
     - Removes cliff line features that are too short
     """
 
-    buffer_size: float = 20.0
+    buffer_size: float = Field(20.0, gt=0)
     """Size for buffering roads and removing cliff segments too close."""
-    length_threshold: float = 50.0
+    length_threshold: float = Field(50.0, gt=0)
     """Minimum length for cliff feature to be preserved."""
     reference_key: str = "roads"
     """Reference data key for roads data."""

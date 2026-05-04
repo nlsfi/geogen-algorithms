@@ -6,6 +6,7 @@
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
+from pydantic import Field
 
 from geogenalg.application import supports_identity
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
@@ -23,16 +24,16 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     thin sections of remaining areas to linestrings.
     """
 
-    line_transform_width: float = 30.0
+    line_transform_width: float = Field(30.0, gt=0)
     """Polygon sections under this width will be considered for transforming to
     a line."""
-    line_min_length: float = 200.0
+    line_min_length: float = Field(200.0, gt=0)
     """Minimum length for new line features."""
-    min_new_section_length: float = 300.0
+    min_new_section_length: float = Field(300.0, gt=0)
     """After initial conversion of thin sections to lines, this determines the
     minimum length of remaining sections. If under this, it will be converted
     to a line as well."""
-    width_check_distance: float = 10.0
+    width_check_distance: float = Field(10.0, gt=0)
     """Controls the distance of width checks. Smaller number means more
     precise checking."""
 

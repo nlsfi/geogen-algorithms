@@ -11,6 +11,7 @@ from typing import Any, ClassVar
 
 from geopandas import GeoDataFrame
 from pandas import Series
+from pydantic import Field
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.cluster import get_cluster_centroids
@@ -42,11 +43,11 @@ class GeneralizePoints(BaseAlgorithm):
 
     displace: bool = False
     """Whether points should be displaced in addition to clustering."""
-    displace_threshold: float = 70.0
+    displace_threshold: float = Field(70.0, gt=0)
     """Minimum allowed distance between points after displacement."""
-    displace_points_iterations: int = 10
+    displace_points_iterations: int = Field(10, gt=0)
     """The number of times to repeat displacement loop."""
-    cluster_distance: float = 20.0
+    cluster_distance: float = Field(20.0, gt=0)
     """Points within this distance of each other will be clustered."""
     aggregation_functions: Mapping[str, Callable[[Series], Any] | str] | None = None
     """Dictionary containing keys corresponding to a column in a GeoDataFrame
