@@ -62,6 +62,7 @@ multipolygon
 nodata
 peucker
 polygonize
+pydantic
 pygeoops
 ramer
 rdp

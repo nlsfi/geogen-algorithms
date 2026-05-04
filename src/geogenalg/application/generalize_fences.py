@@ -4,7 +4,6 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass
 from hashlib import sha256
 from typing import ClassVar, override
 
@@ -29,7 +28,6 @@ from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeFences(BaseAlgorithm):
     """Generalize lines representing fences.
 

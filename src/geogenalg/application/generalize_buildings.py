@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
 from typing import ClassVar
 
 from cartagen.algorithms import buildings
@@ -43,7 +42,6 @@ BUFFER_SIZE_FOR_NARROW_GAPS = 3.5
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeBuildings(BaseAlgorithm):
     """Generalizes buildings.
 

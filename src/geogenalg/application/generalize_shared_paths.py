@@ -4,7 +4,6 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
@@ -24,7 +23,6 @@ from geogenalg.core.geometry import (
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeSharedPaths(BaseAlgorithm):
     """Removes lower priority lines which are parallel to higher priority lines.
 

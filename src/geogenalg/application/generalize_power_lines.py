@@ -4,7 +4,6 @@
 #
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
-from dataclasses import dataclass
 from typing import ClassVar, cast, override
 
 from geopandas import GeoDataFrame
@@ -39,7 +38,6 @@ from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizePowerLines(BaseAlgorithm):
     """Generalize lines representing power lines.
 

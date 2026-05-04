@@ -4,7 +4,6 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass
 from typing import ClassVar, Literal
 
 from geopandas import GeoDataFrame
@@ -18,7 +17,6 @@ from geogenalg.selection import remove_small_holes, remove_small_polygons
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeLandcover(BaseAlgorithm):
     """Generalize polygon data representing a land cover class.
 

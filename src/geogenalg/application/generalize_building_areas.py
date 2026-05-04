@@ -4,7 +4,6 @@
 #
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
-from dataclasses import dataclass
 from typing import ClassVar, override
 
 from cartagen.enrichment.urban.urban_areas import boffet_areas
@@ -25,7 +24,6 @@ from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeBuildingAreas(BaseAlgorithm):
     """Generalize polygons representing buildings.
 

@@ -5,7 +5,6 @@
 #  SPDX-License-Identifier: MIT
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from hashlib import sha256
 from itertools import chain
 from typing import Any, ClassVar
@@ -20,7 +19,6 @@ from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizePoints(BaseAlgorithm):
     """Generalizes point features by clustering and (optionally) displacing them.
 

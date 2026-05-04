@@ -37,9 +37,6 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
         input_uri=gpkg.to_input("buildings"),
         control_uri=gpkg.to_input("control_50k"),
         algorithm=GeneralizeBuildings(
-            area_threshold_for_all_buildings=5,
-            area_threshold_for_low_priority_buildings=100,
-            side_threshold=30,
             point_size=15,
             minimum_distance_to_isolated_building=200,
             hole_threshold=75,

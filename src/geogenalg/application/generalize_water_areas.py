@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame, GeoSeries
@@ -30,7 +29,6 @@ from geogenalg.exaggeration import (
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeWaterAreas(BaseAlgorithm):
     """Generalizes polygonal water areas.
 

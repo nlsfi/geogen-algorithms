@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
 from typing import ClassVar, Literal, override
 
 from geopandas.geodataframe import GeoDataFrame
@@ -14,7 +13,6 @@ from geogenalg.merge import dissolve_and_inherit_attributes
 
 
 @supports_identity
-@dataclass(frozen=True)
 class DissolvePolygons(BaseAlgorithm):
     """Dissolve any overlapping polygons.
 

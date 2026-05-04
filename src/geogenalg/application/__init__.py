@@ -11,6 +11,7 @@ from typing import ClassVar, TypeVar, final
 
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
+from pydantic import BaseModel, ConfigDict
 
 from geogenalg.core.exceptions import (
     GeometryTypeError,
@@ -34,7 +35,7 @@ class ReferenceDataInformation:
     required: bool
 
 
-class BaseAlgorithm(ABC):
+class BaseAlgorithm(ABC, BaseModel):
     """Abstract base class for all algorithms."""
 
     valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
@@ -46,6 +47,10 @@ class BaseAlgorithm(ABC):
     """Tells whether algorithm requires a projected coordinate reference
     system. If True, when data with non-projected CRS is passed to execute(),
     InvalidCRSError is raised."""
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
 
     @final
     def execute(
