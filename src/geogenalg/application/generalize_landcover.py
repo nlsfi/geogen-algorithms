@@ -38,15 +38,15 @@ class GeneralizeLandcover(BaseAlgorithm):
     - Removes holes with area under given `hole_threshold`
     """
 
-    positive_buffer: float = Field(10.0, gt=0)
+    positive_buffer: float = Field(10.0, ge=0)
     """Buffer to close narrow gaps."""
-    negative_buffer: float = Field(-10.0, lt=0)
+    negative_buffer: float = Field(10.0, ge=0)
     """Negative buffer to remove narrow parts."""
-    simplification_tolerance: float = Field(5.0, gt=0)
+    simplification_tolerance: float = Field(5.0, ge=0)
     """Tolerance used for geometry simplification."""
-    area_threshold: float = Field(2500.0, gt=0)
+    area_threshold: float = Field(2500.0, ge=0)
     """Minimum polygon area to retain."""
-    hole_threshold: float = Field(2500.0, gt=0)
+    hole_threshold: float = Field(2500.0, ge=0)
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""
