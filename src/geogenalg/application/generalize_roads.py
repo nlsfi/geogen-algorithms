@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
@@ -17,7 +16,6 @@ from geogenalg.continuity import add_contiguous_lines_information
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeRoads(BaseAlgorithm):
     """Removes short unconnected linestrings from the network.
 

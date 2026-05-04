@@ -4,7 +4,6 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
@@ -26,7 +25,6 @@ WATER_RATIO_COLUMN = "water_ratio"
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeConservationAreas(BaseAlgorithm):
     """Generalize polygon data representing conservation or wilderness areas.
 

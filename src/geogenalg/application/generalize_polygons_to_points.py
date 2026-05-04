@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
@@ -15,7 +14,6 @@ from geogenalg.core.geometry import mean_z
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizePolygonsToPoints(BaseAlgorithm):
     """Reduces polygons below an area threshold to a point on surface.
 

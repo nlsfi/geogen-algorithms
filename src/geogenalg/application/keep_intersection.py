@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
@@ -17,7 +16,6 @@ from geogenalg.split import explode_and_hash_id
 
 
 @supports_identity
-@dataclass(frozen=True)
 class KeepIntersection(BaseAlgorithm):
     """Keep intersecting sections from input data.
 

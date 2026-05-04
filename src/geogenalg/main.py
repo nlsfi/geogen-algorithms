@@ -7,7 +7,7 @@ import os
 from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from inspect import Parameter, cleandoc, getfullargspec, getmro, getsource, signature
+from inspect import Parameter, cleandoc, getmro, getsource, signature
 from itertools import pairwise
 from textwrap import dedent
 from types import FunctionType
@@ -398,14 +398,10 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
 app = typer.Typer()
 
 
-def build_app() -> None:  # noqa: PLR0914
+def build_app() -> None:
     """Add commands to typer app from algorithms.
 
     Exists as a separate function mainly to enable running CLI test.
-
-    Raises
-    ------
-        ValueError: If reading algorithm attributes fails.
 
     """
     commands_and_algs = {
@@ -495,33 +491,17 @@ def build_app() -> None:  # noqa: PLR0914
             ),
         }
 
-        argspec = getfullargspec(alg)
-
-        fields = argspec.args
-
-        if len(fields) < 1 and fields[0] != "self":
-            msg = "improper arguments found in class"
-            raise ValueError(msg)
-
-        if argspec.defaults is None:
-            msg = "no default values found"
-            raise ValueError(msg)
-
-        fields = fields[1:]
-
         docstrings = get_basealgorithm_attribute_docstrings(alg)
 
-        for i, field in enumerate(fields):
-            type_annotation = argspec.annotations.get(field)
+        for field_name, field_info in alg.model_fields.items():
+            type_annotation = field_info.annotation
 
             if type_annotation in ignored_types_for_cli:
                 continue
 
-            docstring = docstrings[field]
+            docstring = docstrings[field_name]
 
-            default = argspec.defaults[i]
-
-            field_name = field
+            default = field_info.default
 
             if type_annotation in transformed_types_for_cli:
                 transform_information = transformed_types_for_cli[type_annotation]

@@ -4,7 +4,6 @@
 #
 #  SPDX-License-Identifier: MIT
 import logging
-from dataclasses import dataclass
 from itertools import combinations
 from typing import ClassVar, override
 
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeShoreline(BaseAlgorithm):
     """Extracts new shorelines from generalized water areas.
 

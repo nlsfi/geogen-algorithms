@@ -3,7 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
 from typing import ClassVar
 
 from geopandas import GeoDataFrame
@@ -17,7 +16,6 @@ from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
-@dataclass(frozen=True)
 class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     """Generalize polygonal watercourse areas.
 
