@@ -15,6 +15,10 @@ from typing import Annotated, Any, cast
 
 from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
 
+from geogenalg.application.generalize_conservation_areas import (
+    GeneralizeConservationAreas,
+)
+
 try:
     import typer
 except ImportError:
@@ -448,6 +452,7 @@ def build_app() -> None:
         "power_lines": GeneralizePowerLines,
         "building_areas": GeneralizeBuildingAreas,
         "dissolve_polygons": DissolvePolygons,
+        "conservation_areas": GeneralizeConservationAreas,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -530,7 +535,7 @@ def build_app() -> None:
 
             default = field_info.default
 
-            if isinstance(default, int | float):
+            if isinstance(default, int | float) and field_info.metadata:
                 docstring += " Must be "
                 limits = " and ".join(
                     basemetadata_to_string(metadata)
