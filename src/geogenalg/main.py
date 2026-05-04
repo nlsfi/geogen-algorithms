@@ -538,9 +538,7 @@ def build_app() -> None:
             if isinstance(default, int | float) and field_info.metadata:
                 docstring += " Must be "
                 limits = " and ".join(
-                    basemetadata_to_string(metadata)
-                    for metadata in field_info.metadata
-                    if type(metadata) in {Gt, Ge, Lt, Le}
+                    basemetadata_to_string(metadata) for metadata in field_info.metadata
                 )
                 docstring += limits + "."
 
