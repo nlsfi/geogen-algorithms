@@ -7,6 +7,7 @@
 from typing import ClassVar, cast, override
 
 from geopandas import GeoDataFrame
+from pydantic import Field
 from pygeoops import centerline
 from shapely.geometry import Polygon
 
@@ -49,7 +50,7 @@ class GeneralizePowerLines(BaseAlgorithm):
     - Simplifies lines
     """
 
-    distance_threshold_for_parallel_lines: float = 50.0
+    distance_threshold_for_parallel_lines: float = Field(50.0, gt=0)
     """Minimum distance for lines to be considered to be parallel."""
     classes_for_merge_parallel_lines: frozenset[int | str] = frozenset()
     """Attribute values to distinguish which types of parallel lines will be merged."""
@@ -58,9 +59,9 @@ class GeneralizePowerLines(BaseAlgorithm):
     lower priority lines run in parallel."""
     class_column: str = "function"
     """Column in which attribute values to distinguish power line types reside."""
-    length_threshold: float = 100.0
+    length_threshold: float = Field(100.0, gt=0)
     """Minimum length of a power line."""
-    simplification_tolerance: float = 0.0
+    simplification_tolerance: float = Field(0.0, ge=0.0)
     """Tolerance used for geometry simplification."""
     reference_key_fences: str = "fences"
     """Reference key for generalized fence dataset."""

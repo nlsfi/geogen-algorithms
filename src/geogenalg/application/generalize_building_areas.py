@@ -9,6 +9,7 @@ from typing import ClassVar, override
 from cartagen.enrichment.urban.urban_areas import boffet_areas
 from geopandas.geodataframe import GeoDataFrame
 from geopandas.geoseries import GeoSeries
+from pydantic import Field
 
 from geogenalg.analyze import calculate_coverage
 from geogenalg.application import (
@@ -43,11 +44,11 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
     """
 
-    parcel_coverage_threshold: float = 7.5
+    parcel_coverage_threshold: float = Field(7.5, ge=0)
     """To determine parcels with "high" building density."""
-    parcel_buffer_distance: float = 20
+    parcel_buffer_distance: float = Field(20, gt=0)
     """Buffer distance used to merge parcels."""
-    building_size_filter_threshold: float = 4000.0
+    building_size_filter_threshold: float = Field(4000.0, gt=0)
     """Buildings which a) belong to a filtered class and b) are larger than
     this threshold are filtered out."""
     building_filter_column: str = "building_function_id"
@@ -55,22 +56,22 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     classes_for_filtering: frozenset[int | str] = frozenset()
     """Buildings which a) have one of these values and b) are larger than the
     size threshold are filtered out."""
-    buildings_simplify_tolerance: float = 10.0
+    buildings_simplify_tolerance: float = Field(10.0, ge=0)
     """Tolerance for building simplification (Douglas-Peucker)."""
-    boffet_area_buffer: float = 10.0
+    boffet_area_buffer: float = Field(10.0, gt=0)
     """The buffer size used to merge buildings that are close from each
     other."""
-    boffet_area_erosion: float = 10.0
+    boffet_area_erosion: float = Field(10.0, gt=0)
     """The erosion size to avoid the building area to expand too far from the
     buildings located on the edge."""
-    near_area_distance: float = 50.0
+    near_area_distance: float = Field(50.0, gt=0)
     """Distance for building areas to be considered as near each other, affecting
     threshold used to filter small areas."""
-    threshold_building_area_far: float = 20000.0
+    threshold_building_area_far: float = Field(20000.0, gt=0)
     """Minimum size for newly generated building areas far from other areas."""
-    threshold_building_area_near: float = 4000.0
+    threshold_building_area_near: float = Field(4000.0, gt=0)
     """Minimum size for newly generated building areas near other areas."""
-    roads_buffer_distance: float = 10.0
+    roads_buffer_distance: float = Field(10.0, gt=0)
     """How large a section will be removed close to roads from building areas."""
 
     # parameters for GeneralizeLandCover

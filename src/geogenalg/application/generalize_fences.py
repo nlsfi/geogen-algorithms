@@ -8,6 +8,7 @@ from hashlib import sha256
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
+from pydantic import Field
 from shapely.geometry.base import BaseMultipartGeometry
 
 from geogenalg.application import (
@@ -45,17 +46,17 @@ class GeneralizeFences(BaseAlgorithm):
     - Simplifies all lines
     """
 
-    closing_fence_area_threshold: float = 2000.0
+    closing_fence_area_threshold: float = Field(2000.0, gt=0)
     """Minimum area for a fence-enclosed region."""
-    closing_fence_area_with_mast_threshold: float = 8000.0
+    closing_fence_area_with_mast_threshold: float = Field(8000.0, gt=0)
     """Minimum area for a fence-enclosed region containing a mast."""
-    fence_length_threshold: float = 80.0
+    fence_length_threshold: float = Field(80.0, gt=0)
     """Minimum length for a fence line."""
-    fence_length_threshold_in_closed_area: float = 300.0
+    fence_length_threshold_in_closed_area: float = Field(300.0, gt=0)
     """Minimum length for a fence line within a closed area."""
-    simplification_tolerance: float = 4.0
+    simplification_tolerance: float = Field(4.0, gt=0)
     """Tolerance used for geometry simplification."""
-    gap_threshold: float = 25.0
+    gap_threshold: float = Field(25.0, gt=0)
     """Maximum gap between two fence lines to be connected with a helper line."""
     attribute_for_line_merge: str = "kohdeluokka"
     """Name of the attribute to determine which line features can be merged."""

@@ -8,6 +8,7 @@ from typing import ClassVar
 from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
 from pandas import Series
+from pydantic import Field
 from shapely import box
 from shapely.geometry import Polygon
 
@@ -59,18 +60,18 @@ class GeneralizeBuildings(BaseAlgorithm):
     - Small holes in polygon buildings are removed
     """
 
-    area_threshold_for_all_buildings: float = 5
+    area_threshold_for_all_buildings: float = Field(5, gt=0)
     """Minimum area threshold applied to all buildings."""
-    area_threshold_for_low_priority_buildings: float = 100
+    area_threshold_for_low_priority_buildings: float = Field(100, gt=0)
     """Minimum area threshold for low-priority building classes."""
-    side_threshold: float = 30
+    side_threshold: float = Field(30, gt=0)
     """Longest side length used to distinguish small vs. large buildings."""
-    point_size: float = 15
+    point_size: float = Field(15, gt=0)
     """Side length of the square used to represent point buildings."""
-    minimum_distance_to_isolated_building: float = 200
+    minimum_distance_to_isolated_building: float = Field(200, gt=0)
     """Minimum distance to the nearest neighbor to retain an isolated
     building."""
-    hole_threshold: float = 75
+    hole_threshold: float = Field(75, gt=0)
     """Minimum area for holes to retain inside polygon buildings."""
     classes_for_low_priority_buildings: frozenset[int | str] = frozenset()
     """Building classes treated as low-priority."""

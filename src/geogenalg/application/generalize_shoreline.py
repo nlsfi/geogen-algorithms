@@ -8,6 +8,7 @@ from itertools import combinations
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame, overlay
+from pydantic import Field
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -30,7 +31,7 @@ class GeneralizeShoreline(BaseAlgorithm):
     data.
     """
 
-    buffer_distance: float = 7.5
+    buffer_distance: float = Field(7.5, gt=0)
     """Buffer distance used to identify shoreline features. A suitable value is
     well above the maximum distance which the generalize water areas algorithm
     is expected shift geometries. This is likely at least the buffer distance

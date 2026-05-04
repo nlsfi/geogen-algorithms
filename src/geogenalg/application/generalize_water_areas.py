@@ -6,6 +6,7 @@
 from typing import ClassVar, override
 
 from geopandas import GeoDataFrame, GeoSeries
+from pydantic import Field
 from shapely import MultiPoint, Polygon, force_2d
 
 from geogenalg.application import (
@@ -46,27 +47,27 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     features, so that territorial water borders are not modified.
     """
 
-    min_area: float = 4000.0
+    min_area: float = Field(4000.0, gt=0)
     """Features under this area will be removed."""
-    area_simplification_tolerance: float = 10.0
+    area_simplification_tolerance: float = Field(10.0, gt=0)
     """Simplification tolerance used for water areas."""
-    thin_section_width: float = 20.0
+    thin_section_width: float = Field(20.0, gt=0)
     """Sections under this width will be exaggerated."""
-    thin_section_min_size: float = 200.0
+    thin_section_min_size: float = Field(200.0, gt=0)
     """Don't exaggerate thin sections under this size."""
-    thin_section_exaggerate_by: float = 3.0
+    thin_section_exaggerate_by: float = Field(3.0, gt=0)
     """By how many CRS units thin sections will be exaggerated."""
-    island_min_area: float = 100.0
+    island_min_area: float = Field(100.0, gt=0)
     """Islands under this area will be removed."""
-    island_min_width: float = 185.0
+    island_min_width: float = Field(185.0, gt=0)
     """Islands under this width will be considered for exaggeration."""
-    island_min_elongation: float = 0.25
+    island_min_elongation: float = Field(0.25, ge=0.0, le=1.0)
     """Islands under this elongation will be considered for exaggeration."""
-    island_exaggerate_by: float = 3.0
+    island_exaggerate_by: float = Field(3.0, gt=0)
     """By how many CRS units thin islands will be exaggerated."""
-    island_simplification_tolerance: float = 10.0
+    island_simplification_tolerance: float = Field(10.0, gt=0)
     """Simplification tolerance used for islands."""
-    smoothing_passes: int = 3
+    smoothing_passes: int = Field(3, ge=0)
     """How many smoothing passes will be performed. Each smoothing passes
     (nearly) doubles the vertex count."""
     reference_key: str = "shoreline"
@@ -104,10 +105,6 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        if not 0.0 <= self.island_min_elongation <= 1.0:
-            msg = "Minimum island elongation must be between 0.0 and 1.0."
-            raise ValueError(msg)
-
         if self.reference_key in reference_data:
             shoreline_gdf = reference_data[self.reference_key]
             # Extract out any points which are found in the input (Polygon)

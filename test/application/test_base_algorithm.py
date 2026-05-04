@@ -10,6 +10,7 @@ import pytest
 from geopandas import GeoDataFrame
 from pandas import Index
 from pandas.testing import assert_index_equal
+from pydantic import Field, ValidationError
 from shapely import (
     GeometryCollection,
     LinearRing,
@@ -302,3 +303,39 @@ def test_no_projected_crs_required():
     # Just check that no error is raised, no explicit asserts required
 
     MockAlg().execute(GeoDataFrame(geometry=[], crs="EPSG:4326"))
+
+
+def test_subalgorithm_is_frozen():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        parameter: int = 0
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(ValidationError, match=r"1 validation error for MockAlg"):
+        MockAlg().parameter = 5
+
+
+def test_limit_int_value():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+        parameter: int = Field(1, ge=-100, le=100)
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    assert MockAlg().parameter == 1
+
+    # Check no validation error happens
+    MockAlg(parameter=0)
+    MockAlg(parameter=100)
+    MockAlg(parameter=-100)
+
+    with pytest.raises(ValidationError, match=r"1 validation error for MockAlg"):
+        MockAlg(parameter=-1000)
+    with pytest.raises(ValidationError, match=r"1 validation error for MockAlg"):
+        MockAlg(parameter=1000)
