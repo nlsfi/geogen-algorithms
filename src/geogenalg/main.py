@@ -13,6 +13,8 @@ from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, cast
 
+from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
+
 try:
     import typer
 except ImportError:
@@ -291,6 +293,31 @@ def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str
     return output
 
 
+def basemetadata_to_string(data: BaseMetadata) -> str:
+    """Get displayable string out of pydantic metadata object.
+
+    Returns
+    -------
+        Displayable string.
+
+    Raises
+    ------
+        NotImplementedError: if function is not implemented for given object type.
+
+    """
+    if isinstance(data, Ge):
+        return f"greater than or equal to {data.ge}"
+    if isinstance(data, Gt):
+        return f"greater than {data.gt}"
+    if isinstance(data, Le):
+        return f"less than or equal to {data.le}"
+    if isinstance(data, Lt):
+        return f"less than {data.lt}"
+
+    msg = f"Function not implemented for {type(data)}"
+    raise NotImplementedError(msg)
+
+
 MultipleGeoPackagesArgument = Annotated[
     GeoPackageURI,
     typer.Argument(
@@ -502,6 +529,15 @@ def build_app() -> None:
             docstring = docstrings[field_name]
 
             default = field_info.default
+
+            if isinstance(default, int | float):
+                docstring += " Must be "
+                limits = " and ".join(
+                    basemetadata_to_string(metadata)
+                    for metadata in field_info.metadata
+                    if type(metadata) in {Gt, Ge, Lt, Le}
+                )
+                docstring += limits + "."
 
             if type_annotation in transformed_types_for_cli:
                 transform_information = transformed_types_for_cli[type_annotation]
