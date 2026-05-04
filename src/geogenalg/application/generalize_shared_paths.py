@@ -39,7 +39,7 @@ class GeneralizeSharedPaths(BaseAlgorithm):
     lower priority) along roads (or generally network of linestrings of higher priority)
     are removed.
     """
-    minimum_percentage: float = Field(90.0, ge=0.0, lt=100.0)
+    minimum_percentage: float = Field(90.0, ge=0.0, le=100.0)
     """If the percentage of a lower priority line's total length within the
     detection distance of higher priority lines is below this it will be removed."""
     reference_key: str = "roads"

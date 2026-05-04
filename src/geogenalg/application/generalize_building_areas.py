@@ -75,13 +75,13 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """How large a section will be removed close to roads from building areas."""
 
     # parameters for GeneralizeLandCover
-    positive_buffer: float = 10
+    positive_buffer: float = Field(10.0, ge=0)
     """Buffer to close narrow gaps."""
-    negative_buffer: float = -10.0
+    negative_buffer: float = Field(10.0, ge=0)
     """Negative buffer to remove narrow parts."""
-    simplification_tolerance: float = 4.0
+    simplification_tolerance: float = Field(4.0, ge=0)
     """Tolerance for simplifying building areas."""
-    hole_threshold: float = 7500
+    hole_threshold: float = Field(7500, gt=0)
     """Area threshold for removing holes from building areas."""
 
     reference_key_parcels: str = "parcels"
