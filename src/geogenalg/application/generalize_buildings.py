@@ -221,6 +221,12 @@ class GeneralizeBuildings(BaseAlgorithm):
             )
         ]
 
+        always_kept_buildings_gdf = point_buildings_gdf.loc[
+            point_buildings_gdf[self.building_class_column].isin(
+                self.classes_for_always_kept_buildings,
+            )
+        ]
+
         # Reduce density separately for each group
         low_priority_buildings_gdf = reduce_nearby_points_by_selecting(
             low_priority_buildings_gdf,
@@ -236,8 +242,19 @@ class GeneralizeBuildings(BaseAlgorithm):
             self.original_area_column,
         )
 
+        always_kept_buildings_gdf = reduce_nearby_points_by_selecting(
+            always_kept_buildings_gdf,
+            always_kept_buildings_gdf,
+            self.point_size * 1.66,
+            self.original_area_column,
+        )
+
         return combine_gdfs(
-            [low_priority_buildings_gdf, other_buildings_gdf],
+            [
+                low_priority_buildings_gdf,
+                other_buildings_gdf,
+                always_kept_buildings_gdf,
+            ],
         )
 
     def _generalize_polygon_buildings(
