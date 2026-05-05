@@ -986,7 +986,7 @@ def smooth_linestring_connections(
         return copy_gdf_as_empty(input_gdf)
 
     gdf = input_gdf.copy()
-    old_index = gdf.index.copy()
+    old_index = gdf.index
 
     # Reset index in case there's duplicate indices so we for sure have an
     # unique index for assigning smoothed geometry
