@@ -1779,11 +1779,67 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
                 ],
             ),
         ),
+        (
+            GeoDataFrame(
+                {"attribute": ["1", "2"]},
+                index=[1, 1],
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [1.25, 0.25],
+                            [1.75, 1],
+                            [2.5, 2],
+                            [4, 3],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [4, 3],
+                            [5, 2],
+                            [6, 4.25],
+                            [5.5, 4.75],
+                            [5, 6],
+                        ]
+                    ),
+                ],
+            ),
+            3,
+            GeoDataFrame(
+                {"attribute": ["1", "2"]},
+                index=[1, 1],
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [1.25, 0.25],
+                            [1.75, 1],
+                            [2.5, 2],
+                            [2.9661258867648237, 2.433208736292763],
+                            [3.5049204064058337, 2.842054416166005],
+                            [4, 3],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [4, 3],
+                            [4.363927764355153, 2.711489274491867],
+                            [4.693562719333668, 2.2261563204196673],
+                            [5, 2],
+                            [6, 4.25],
+                            [5.5, 4.75],
+                            [5, 6],
+                        ]
+                    ),
+                ],
+            ),
+        ),
     ],
     ids=[
         "empty",
         "non_ring",
         "ring",
+        "duplicate_index",
     ],
 )
 def test_smooth_linestring_connections(

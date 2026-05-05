@@ -986,6 +986,11 @@ def smooth_linestring_connections(
         return copy_gdf_as_empty(input_gdf)
 
     gdf = input_gdf.copy()
+    old_index = gdf.index.copy()
+
+    # Reset index in case there's duplicate indices so we for sure have an
+    # unique index for assigning smoothed geometry
+    gdf = gdf.reset_index(drop=True)
 
     points = get_topological_points(input_gdf.geometry, force_2d=False)
 
@@ -1010,6 +1015,8 @@ def smooth_linestring_connections(
             geom, spline_subdivisions=spline_subdivisions
         )
     )
+
+    gdf.index = old_index
 
     return gdf
 
