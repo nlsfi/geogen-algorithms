@@ -40,6 +40,7 @@ SIMPLIFY_EDGE_THRESHOLD_AFTER_NARROW_GAPS = 8
 NARROW_GAPS_THRESHOLD = 12
 BUFFER_SIZE_FOR_NARROW_PARTS = 3
 BUFFER_SIZE_FOR_NARROW_GAPS = 3.5
+POINT_SIZE_REDUCTION_MULTIPLIER = 1.66
 
 
 @supports_identity
@@ -238,14 +239,14 @@ class GeneralizeBuildings(BaseAlgorithm):
         other_buildings_gdf = reduce_nearby_points_by_selecting(
             other_buildings_gdf,
             all_buildings_gdf,
-            self.point_size * 1.66,
+            self.point_size * POINT_SIZE_REDUCTION_MULTIPLIER,
             self.original_area_column,
         )
 
         always_kept_buildings_gdf = reduce_nearby_points_by_selecting(
             always_kept_buildings_gdf,
             always_kept_buildings_gdf,
-            self.point_size * 1.66,
+            self.point_size * POINT_SIZE_REDUCTION_MULTIPLIER,
             self.original_area_column,
         )
 
