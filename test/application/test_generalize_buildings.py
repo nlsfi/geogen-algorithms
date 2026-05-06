@@ -14,7 +14,7 @@ from geopandas import GeoDataFrame
 from numpy import nan
 from pandas import isna
 from pandas.testing import assert_frame_equal
-from shapely import LineString, Point, Polygon
+from shapely import LineString, Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
@@ -22,6 +22,7 @@ from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.testing import (
     GeoPackagePath,
 )
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -401,3 +402,118 @@ def test_simplify_buildings_raises_on_invalid_geometry():
         ),
     ):
         GeneralizeBuildings._simplify_buildings(invalid_gdf, 5.0)
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "classes_for_low_priority_buildings",
+        "classes_for_always_kept_buildings",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame({"class": []}, geometry=[]),
+            frozenset(),
+            frozenset(),
+            GeoDataFrame({"class": []}, geometry=[]),
+        ),
+        (
+            GeoDataFrame(
+                {"class": [1, 2], "original_area": [4, 5]},
+                geometry=[
+                    Point(0, 0),
+                    box(5, 5, 6, 6),
+                ],
+            ),
+            frozenset(),
+            frozenset([1]),
+            GeoDataFrame(
+                {"class": [1], "original_area": [4]},
+                geometry=[
+                    Point(0, 0),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"class": [1, 1, 2], "original_area": [5, 4, 5]},
+                geometry=[
+                    Point(0, 0),
+                    Point(0, 0.5),
+                    box(5, 5, 6, 6),
+                ],
+            ),
+            frozenset(),
+            frozenset([1]),
+            GeoDataFrame(
+                {"class": [1], "original_area": [5]},
+                geometry=[
+                    Point(0, 0),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"class": [5, 5], "original_area": [3.1, 4.1]},
+                geometry=[
+                    Point(0, 0),
+                    box(0.5, 0.5, 1.5, 1.5),
+                ],
+            ),
+            frozenset(),
+            frozenset(),
+            add_columns_to_gdf(
+                GeoDataFrame(
+                    geometry=[],
+                ),
+                {"class": "int64", "original_area": "float64"},
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"class": [4, 5], "original_area": [3.1, 4.1]},
+                geometry=[
+                    Point(0, 0),
+                    box(0.5, 0.5, 1.5, 1.5),
+                ],
+            ),
+            frozenset([4]),
+            frozenset(),
+            add_columns_to_gdf(
+                GeoDataFrame(
+                    geometry=[],
+                ),
+                {"class": "int64", "original_area": "float64"},
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "always_keep",
+        "always_keep_reduces",
+        "other_buildings",
+        "low_priority",
+    ],
+)
+def test_generalize_point_buildings(
+    input_gdf: GeoDataFrame,
+    classes_for_low_priority_buildings: frozenset[int | str],
+    classes_for_always_kept_buildings: frozenset[int | str],
+    expected_gdf: GeoDataFrame,
+):
+    centroids = input_gdf.loc[input_gdf.geometry.geom_type == "Polygon"].copy()
+    points = input_gdf.loc[input_gdf.geometry.geom_type == "Point"].copy()
+
+    centroids.geometry = centroids.geometry.centroid
+
+    result_gdf = GeneralizeBuildings(
+        classes_for_low_priority_buildings=classes_for_low_priority_buildings,
+        classes_for_always_kept_buildings=classes_for_always_kept_buildings,
+        building_class_column="class",
+    )._generalize_point_buildings(
+        points,
+        centroids,
+    )
+
+    assert_frame_equal(result_gdf, expected_gdf, check_like=True)
