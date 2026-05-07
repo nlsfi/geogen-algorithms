@@ -52,6 +52,7 @@ gpd
 hypot
 idx
 inplace
+isclose
 landcover
 linalg
 linemerge
