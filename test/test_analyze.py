@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from pandas.testing import assert_frame_equal
+from shapely import box
 from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg.analyze import (
@@ -19,8 +20,10 @@ from geogenalg.analyze import (
     classify_polygons_by_size_of_minimum_bounding_rectangle,
     flag_parallel_lines,
     get_polygons_for_parallel_lines,
+    group_geometries_by_intersections_recursively,
 )
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf
 
 
 def test_calculate_coverage():
@@ -725,3 +728,127 @@ def test_calculate_edge_adjacency_non_polygon_raises():
 
     with pytest.raises(GeometryTypeError, match="Polygon or MultiPolygon"):
         calculate_edge_adjacency(input_gdf, reference_gdf, buffer_size=1.0)
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "expected",
+    ),
+    [
+        (
+            GeoDataFrame(geometry=[]),
+            add_columns_to_gdf(
+                GeoDataFrame(geometry=[]),
+                {"__geometry_group": "int64"},
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(5, 5, 6, 6),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__geometry_group": [
+                        1,
+                        2,
+                    ],
+                },
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(5, 5, 6, 6),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(0.25, 0.25, 0.75, 0.75),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__geometry_group": [
+                        1,
+                        1,
+                    ],
+                },
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(0.25, 0.25, 0.75, 0.75),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(0.25, 0.25, 0.75, 0.75),
+                    box(5, 5, 6, 6),
+                    box(10, 10, 11, 11),
+                    box(11, 10, 12, 11),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__geometry_group": [
+                        1,
+                        1,
+                        2,
+                        3,
+                        3,
+                    ],
+                },
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(0.25, 0.25, 0.75, 0.75),
+                    box(5, 5, 6, 6),
+                    box(10, 10, 11, 11),
+                    box(11, 10, 12, 11),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "__geometry_group": [
+                        1,
+                        1,
+                    ],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [2, 0]]),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "disjoint_features",
+        "grouping_works",
+        "mixed",
+        "lines",
+    ],
+)
+def test_group_by_geometry_recursively(
+    input_gdf: GeoDataFrame,
+    expected: GeoDataFrame,
+):
+    result = group_geometries_by_intersections_recursively(input_gdf)
+
+    assert_frame_equal(
+        result,
+        expected,
+        check_like=True,
+    )
