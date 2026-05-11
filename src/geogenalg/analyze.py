@@ -511,7 +511,7 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
     Args:
     ----
         input_gdf: GeoDataFrame with geometries to group.
-        geometry_group_column: Name to save group of each feature.
+        geometry_group_column: Name of column to save the group index of each feature.
 
     Returns:
     -------
