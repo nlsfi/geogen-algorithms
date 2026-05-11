@@ -519,6 +519,7 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
 
     """
     gdf = input_gdf.copy()
+    gdf[geometry_group_column] = range(gdf.shape[0])
 
     geometry_group_sets = []
     processed = set()
@@ -530,7 +531,6 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
     )
 
     if joined_group.empty:
-        gdf[geometry_group_column] = gdf.index
         return gdf
 
     def group_by_geometry(
@@ -576,8 +576,6 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
     for i, geometry_group in enumerate(geometry_group_sets, start=1):
         for idx in geometry_group:
             if idx in gdf.index:
-                gdf.at[idx, geometry_group_column] = i  # noqa: PD008
-
-    gdf[geometry_group_column] = gdf[geometry_group_column].astype("int64")
+                gdf.loc[idx, geometry_group_column] = i
 
     return gdf

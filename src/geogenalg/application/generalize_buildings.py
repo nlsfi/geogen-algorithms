@@ -27,6 +27,7 @@ from geogenalg.selection import (
     remove_small_holes,
     remove_small_polygons,
 )
+from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.dataframe_processing import combine_gdfs
 from geogenalg.utility.fix_geometries import (
     drop_empty_geometries,
@@ -308,6 +309,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         # Dissolve the expanded narrow parts and already large enough parts
         result_gdf = combine_gdfs([simplified_gdf, narrow_parts_gdf])
         result_gdf["__temp_id"] = result_gdf.index
+        result_gdf = explode_and_hash_id(result_gdf, "buildings")
         result_gdf = dissolve_and_inherit_attributes(
             result_gdf,
             "__temp_id",
@@ -360,6 +362,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         # Dissolve buildings with the same building class
+        result_gdf = explode_and_hash_id(result_gdf, "buildings")
         result_gdf = dissolve_and_inherit_attributes(
             result_gdf,
             self.building_class_column,
@@ -397,6 +400,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         # TODO: refactor into a generic function outside this class
 
         input_gdf.geometry = input_gdf.buffer(0.1, cap_style="flat", join_style="mitre")
+        input_gdf = explode_and_hash_id(input_gdf, "buildings")
         input_gdf = dissolve_and_inherit_attributes(
             input_gdf,
             self.building_class_column,

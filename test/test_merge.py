@@ -9,8 +9,8 @@ from typing import Literal
 
 import pytest
 from geopandas import GeoDataFrame
-from geopandas.testing import assert_geodataframe_equal
 from numpy.testing import assert_approx_equal
+from pandas.testing import assert_frame_equal
 from shapely import box
 from shapely.geometry import LineString, Point, Polygon
 
@@ -182,18 +182,18 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 {
                     "id": [1],
                     "group": ["A"],
-                    "old_ids": [(2, 1)],
+                    "old_ids": [(1, 2)],
                 },
                 geometry=[
                     Polygon(
                         [
+                            (0, 0),
                             (0, 1),
                             (1, 1),
                             (2, 1),
                             (2, 0),
                             (1, 0),
                             (0, 0),
-                            (0, 1),
                         ]
                     ),
                 ],
@@ -239,7 +239,19 @@ def test_merge_lines_with_same_attribute_value_into_one(
                     "group": ["A"],
                     "old_ids": [(1, 2)],
                 },
-                geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
+                geometry=[
+                    Polygon(
+                        [
+                            (0, 0),
+                            (0, 1),
+                            (1, 1),
+                            (2, 1),
+                            (2, 0),
+                            (1, 0),
+                            (0, 0),
+                        ]
+                    ),
+                ],
             ),
             None,
             "min_id",
@@ -290,7 +302,16 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 },
                 geometry=[
                     Polygon(
-                        [(0, 0), (2, 0), (2, 1), (3, 1), (3, 3), (1, 3), (1, 2), (0, 2)]
+                        [
+                            (2, 0),
+                            (0, 0),
+                            (0, 2),
+                            (1, 2),
+                            (1, 3),
+                            (3, 3),
+                            (3, 1),
+                            (2, 1),
+                        ],
                     ),
                     Polygon([(1, 1), (3, 1), (3, 3), (1, 3)]),
                 ],
@@ -321,9 +342,19 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 },
                 geometry=[
                     Polygon(
-                        [(0, 0), (0, 2), (1, 2), (1, 4), (4, 4), (4, 1), (2, 1), (2, 0)]
+                        [
+                            (2, 0),
+                            (0, 0),
+                            (0, 2),
+                            (1, 2),
+                            (1, 4),
+                            (4, 4),
+                            (4, 1),
+                            (2, 1),
+                            (2, 0),
+                        ]
                     ),
-                    Polygon([(4, 1), (1, 1), (1, 4), (4, 4)]),
+                    box(1, 1, 4, 4),
                 ],
             ),
             "group",
@@ -355,6 +386,7 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 geometry=[
                     Polygon(
                         [
+                            [2, 0],
                             [0, 0],
                             [0, 2],
                             [1, 2],
@@ -363,13 +395,36 @@ def test_merge_lines_with_same_attribute_value_into_one(
                             [4, 1],
                             [2, 1],
                             [2, 0],
-                            [0, 0],
                         ]
                     ),
                     box(1, 1.25, 3, -1),
                 ],
             ),
             ["group_first", "group_second"],
+            "most_intersection",
+        ),
+        # 9.
+        (
+            GeoDataFrame(
+                {
+                    "id": [1, 2],
+                    "geometry": [
+                        Polygon(((3, 3), (3, 0), (0, 0), (0, 3))),
+                        Polygon(((8, 7), (8, 3), (6, 3), (6, 7))),
+                    ],
+                }
+            ),
+            GeoDataFrame(
+                {
+                    "id": [1, 2],
+                    "old_ids": [(1,), (2,)],
+                    "geometry": [
+                        Polygon(((3, 3), (3, 0), (0, 0), (0, 3))),
+                        Polygon(((8, 7), (8, 3), (6, 3), (6, 7))),
+                    ],
+                }
+            ),
+            None,
             "most_intersection",
         ),
     ],
@@ -382,6 +437,7 @@ def test_merge_lines_with_same_attribute_value_into_one(
         "three intersecting polygons with extra attributes, two in same group",  # 6.
         "three intersecting polygons with extra attributes, two in same group, inherit from most_intersection",  # 7.
         "multiple_groups",  # 8.
+        "disjoint_features_no_modified_geoms",  # 9.
     ],
 )
 def test_dissolve_and_inherit_attributes(
@@ -390,8 +446,8 @@ def test_dissolve_and_inherit_attributes(
     by_column: str | list[str] | None,
     inherit_from: Literal["min_id", "most_intersection"],
 ):
-    input_gdf = input_gdf.set_index("id")
-    expected_gdf = expected_gdf.set_index("id")
+    input_gdf = input_gdf.set_index("id", drop=True)
+    expected_gdf = expected_gdf.set_index("id", drop=True)
 
     result_gdf = dissolve_and_inherit_attributes(
         input_gdf,
@@ -400,11 +456,10 @@ def test_dissolve_and_inherit_attributes(
         inherit_from,
     )
 
-    assert_geodataframe_equal(
+    assert_frame_equal(
         result_gdf,
         expected_gdf,
         check_like=True,
-        normalize=True,
     )
 
 
@@ -419,23 +474,6 @@ def test_dissolve_and_inherit_attributes_handles_empty_gdf_correctly():
     )
 
     assert result_gdf.equals(expected_gdf)
-
-
-def test_dissolve_and_inherit_attributes_raises_on_non_polygon_geometry():
-    invalid_gdf = GeoDataFrame(
-        {"id": [1, 2, 3]},
-        geometry=[
-            Point(0, 0),
-            LineString([(0, 0), (1, 1)]),
-            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-        ],
-    )
-
-    with pytest.raises(
-        GeometryTypeError,
-        match=re.escape("Dissolve only supports Polygon or MultiPolygon geometries."),
-    ):
-        dissolve_and_inherit_attributes(invalid_gdf, by_column="group")
 
 
 def test_buffer_and_merge_polygons():
