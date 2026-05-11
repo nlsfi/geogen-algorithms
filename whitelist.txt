@@ -50,6 +50,7 @@ getmro
 getsource
 gettempdir
 gpd
+hashable
 hypot
 idx
 inplace

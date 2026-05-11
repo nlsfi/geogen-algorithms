@@ -3,6 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+from collections.abc import Hashable
 from typing import Literal
 
 import numpy as np
@@ -491,3 +492,92 @@ def calculate_edge_adjacency(
     result_gdf[result_column] = [feature_ratio(geom) for geom in result_gdf.geometry]
 
     return result_gdf
+
+
+def group_geometries_by_intersections_recursively(  # noqa: C901
+    input_gdf: GeoDataFrame,
+    geometry_group_column: str = "__geometry_group",
+) -> GeoDataFrame:
+    """Recursively determine which geometries intersect.
+
+    In practice this means that if we consider the polygons:
+
+    A - intersects with just B
+    B - intersects with A and C
+    C - intersects just with B
+
+    All of these will be in the same group.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with geometries to group.
+        geometry_group_column: Name to save group of each feature.
+
+    Returns:
+    -------
+        GeoDataFrame with group column added.
+
+    """
+    gdf = input_gdf.copy()
+
+    geometry_group_sets = []
+    processed = set()
+
+    joined_group = input_gdf.sjoin(
+        input_gdf,
+        how="inner",
+        predicate="intersects",
+    )
+
+    if joined_group.empty:
+        gdf[geometry_group_column] = gdf.index
+        return gdf
+
+    def group_by_geometry(
+        index: Hashable,
+        rows: GeoDataFrame,
+        geometry_group: set[Hashable],
+    ) -> None:
+        if index in processed:
+            return
+
+        intersects = rows["index_right"]
+
+        processed.add(index)
+
+        geometry_group.add(index)
+        geometry_group.update(intersects)
+
+        for intersecting_feature in intersects:
+            if intersecting_feature == index:
+                continue
+
+            if intersecting_feature in gdf.index:
+                group_by_geometry(
+                    intersecting_feature,
+                    joined_group.loc[joined_group.index == intersecting_feature],
+                    geometry_group,
+                )
+
+    unique_indices = joined_group.index.unique()
+
+    for index in unique_indices:
+        if index in processed:
+            continue
+
+        geometry_group: set[Hashable] = set()
+        group_by_geometry(
+            index,
+            joined_group.loc[joined_group.index == index],
+            geometry_group,
+        )
+        geometry_group_sets.append(geometry_group)
+
+    for i, geometry_group in enumerate(geometry_group_sets, start=1):
+        for idx in geometry_group:
+            if idx in gdf.index:
+                gdf.at[idx, geometry_group_column] = i  # noqa: PD008
+
+    gdf[geometry_group_column] = gdf[geometry_group_column].astype("int64")
+
+    return gdf
