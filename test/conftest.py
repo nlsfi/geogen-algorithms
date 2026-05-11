@@ -200,7 +200,7 @@ class IntegrationTest:
         self._check_test_data_has_z_coordinates(
             test_gdfs.input_data, test_gdfs.control, test_gdfs.result
         )
-        self._check_test_data_single_geometries(test_gdfs.input_data, test_gdfs.result)
+        self._check_test_data_geometries(test_gdfs.input_data, test_gdfs.result)
 
         if self.check_missing_reference:
             with pytest.raises(
@@ -290,7 +290,7 @@ class IntegrationTest:
             msg = "Control or result data has z when other does not."
             raise AssertionError(msg)
 
-    def _check_test_data_single_geometries(
+    def _check_test_data_geometries(
         self,
         input_data: GeoDataFrame,
         result: GeoDataFrame,
@@ -313,6 +313,10 @@ class IntegrationTest:
 
         if input_has_only_single_geometries and not result_has_only_single_geometries:
             msg = "Input has only single geometries but result does not."
+            raise AssertionError(msg)
+
+        if result.geometry.is_empty.any():
+            msg = "Result has empty geometries."
             raise AssertionError(msg)
 
     def _check_algorithm_passes_with_dummy_data(
