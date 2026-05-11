@@ -260,19 +260,19 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
     [
         (
             GeoDataFrame(
-                {"id": [1], "class": ["A"]},
+                {"id": ["1"], "class": ["A"]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1], "class": ["A"], "old_ids": [(1,)]},
+                {"id": ["1"], "class": ["A"], "old_ids": [("1",)]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [2, 1], "class": ["A", "A"]},
+                {"id": ["2", "1"], "class": ["A", "A"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(1.0001, 0), (2, 0), (2, 1), (1.0001, 1)]),
@@ -281,13 +281,13 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1], "class": ["A"], "old_ids": [(2, 1)]},
+                {"id": ["1"], "class": ["A"], "old_ids": [("2", "1")]},
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "B"]},
+                {"id": ["1", "2"], "class": ["A", "B"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(1.0001, 0), (2, 0), (2, 1), (1.0001, 1)]),
@@ -296,7 +296,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "B"], "old_ids": [(1,), (2,)]},
+                {"id": ["1", "2"], "class": ["A", "B"], "old_ids": [("1",), ("2",)]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(1.0001, 0), (2, 0), (2, 1), (1.0001, 1)]),
@@ -311,7 +311,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
         ),
         (
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "A"]},
+                {"id": ["1", "2"], "class": ["A", "A"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(5, 5), (6, 5), (6, 6), (5, 6)]),
@@ -320,7 +320,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "A"], "old_ids": [(1,), (2,)]},
+                {"id": ["1", "2"], "class": ["A", "A"], "old_ids": [("1",), ("2",)]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(5, 5), (6, 5), (6, 6), (5, 6)]),
