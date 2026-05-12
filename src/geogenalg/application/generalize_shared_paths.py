@@ -47,7 +47,7 @@ class GeneralizeSharedPaths(BaseAlgorithm):
     used to build a buffer around it, and check how big a proportion of a
     shared path is inside this buffer. If the minimum percentage is exceeded,
     the shared path will be removed. The data is intended to already be
-    generalize to the target scale."""
+    generalized to the target scale."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {
