@@ -65,8 +65,9 @@ class GeneralizePowerLines(BaseAlgorithm):
     """Tolerance used for geometry simplification."""
     reference_key_fences: str = "fences"
     """Reference key for fence dataset. This mandatory linestring reference
-    data is intended contain fences which wrap around the substations reference
-    data. The data is intended to already be generalized to the target scale."""
+    data is intended to contain fences which wrap around the substations
+    reference data. The data is intended to already be generalized to the
+    target scale."""
     reference_key_substations: str = "substations"
     """Reference key for substation dataset. This mandatory reference data is
     intended to contain polygons around which reference fence features may wrap
