@@ -37,7 +37,11 @@ class GeneralizeShoreline(BaseAlgorithm):
     is expected shift geometries. This is likely at least the buffer distance
     used for exaggeration."""
     reference_key: str = "areas"
-    "Reference data key to use as the source of the generalized shoreline."
+    """Reference data key for water area data. This mandatory reference data is
+    used to build a matching shoreline dataset from its exterior. The input data
+    is used to split the new shoreline dataset into parts to match the original
+    shoreline with its attributes. The data is intended to already be generalized
+    to the target scale."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {

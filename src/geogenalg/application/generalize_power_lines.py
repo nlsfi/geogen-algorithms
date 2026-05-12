@@ -64,9 +64,17 @@ class GeneralizePowerLines(BaseAlgorithm):
     simplification_tolerance: float = Field(0.0, ge=0.0)
     """Tolerance used for geometry simplification."""
     reference_key_fences: str = "fences"
-    """Reference key for generalized fence dataset."""
+    """Reference key for fence dataset. This mandatory linestring reference
+    data is intended contain fences which wrap around the substations reference
+    data. The data is intended to already be generalized to the target scale."""
     reference_key_substations: str = "substations"
-    """Reference key for substation dataset."""
+    """Reference key for substation dataset. This mandatory reference data is
+    intended to contain polygons around which reference fence features may wrap
+    around. The data has to be of the previous scale. This is because the data
+    is used in conjuction with the fence data to identify substations which no
+    longer have a fence feature around them. In this case a power line
+    connecting to a substation will be extended to the substation's
+    centroid."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {

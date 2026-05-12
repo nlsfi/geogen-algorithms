@@ -36,7 +36,10 @@ class GeneralizeCliffs(BaseAlgorithm):
     length_threshold: float = Field(50.0, gt=0)
     """Minimum length for cliff feature to be preserved."""
     reference_key: str = "roads"
-    """Reference data key for roads data."""
+    """Reference data key for roads data. This mandatory reference data is used
+    to remove sections out of the input cliff data at a given buffer distance.
+    The road data is intended to already be generalized to the target scale,
+    although this is not strictly necessary."""
 
     valid_input_geometry_types: ClassVar = {"LineString", "MultiLineString"}
     reference_data_schema: ClassVar = {

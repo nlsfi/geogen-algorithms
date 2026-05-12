@@ -71,8 +71,13 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     """How many smoothing passes will be performed. Each smoothing passes
     (nearly) doubles the vertex count."""
     reference_key: str = "shoreline"
-    """Reference data key to use as a shoreline layer for preventing smoothing of
-    non-shoreline vertices."""
+    """Reference data key for shoreline data. This optional reference data is
+    intended to be a linestring dataset which (mostly) follows the input data
+    exterior and shares its vertices. It is used to identify segments in the
+    water area polygons which are not present in the shoreline, f.e. shared
+    segments between water area features, or territorial sea borders. These
+    segments are prevented from being smoothed. The shoreline data has to be of
+    the previous scale and has to match the input data."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
     reference_data_schema: ClassVar = {
