@@ -31,7 +31,9 @@ class RemoveOverlap(BaseAlgorithm):
     """
 
     reference_key: str = "mask"
-    """Reference data key to use as a mask layer for overlap detection."""
+    """Reference data key for mask data. This mandatory reference data is used
+    as a mask layer over the input data. Sections in the input data which
+    overlap the mask are removed."""
 
     valid_input_geometry_types: ClassVar = {
         "LineString",

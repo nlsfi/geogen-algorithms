@@ -85,9 +85,17 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """Area threshold for removing holes from building areas."""
 
     reference_key_parcels: str = "parcels"
-    """Reference data key for road data."""
+    """Reference data key for parcel data. This optional reference data is
+    intended to be a land parcel or similar polygonal dataset inside which
+    buildings in the input data reside in. The parcel polygons are turned into
+    building areas if they meet the coverage threshold. If not provided,
+    building areas will be formed only by buffering the buildings."""
     reference_key_roads: str = "roads"
-    """Reference data key for parcel data."""
+    """Reference data key for road data. This optional reference data is used
+    to create a buffer area around the roads which is removed out of the
+    generated building areas. The road data is intended to already be
+    generalized to the target scale, although this is not strictly
+    necessary."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
     reference_data_schema: ClassVar = {

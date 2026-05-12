@@ -60,8 +60,12 @@ class GeneralizeFences(BaseAlgorithm):
     """Maximum gap between two fence lines to be connected with a helper line."""
     attribute_for_line_merge: str = "kohdeluokka"
     """Name of the attribute to determine which line features can be merged."""
+    # TODO: this might not have to be strictly necessary in the general use case
     reference_key: str = "masts"
-    """Reference data key to use as a source of mast data."""
+    """Reference data key to use as a source of point data. This mandatory
+    reference data is used to identify closed fences containing points. These
+    fences have a different area threshold for removal. The data is intended to
+    already be generalized to the target scale."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {
