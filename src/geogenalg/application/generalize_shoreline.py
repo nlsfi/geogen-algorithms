@@ -38,10 +38,10 @@ class GeneralizeShoreline(BaseAlgorithm):
     used for exaggeration."""
     reference_key: str = "areas"
     """Reference data key for water area data. This mandatory reference data is
-    used to build a matching shoreline dataset from its exterior. The input data
-    is used to split the new shoreline dataset into parts to match the original
-    shoreline with its attributes. The data is intended to already be generalized
-    to the target scale."""
+    used to build a matching shoreline dataset from its exterior. The input
+    data is used to split the new shoreline dataset into parts to match the
+    original shoreline, including its attributes. The data is intended to
+    already be generalized to the target scale."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {
