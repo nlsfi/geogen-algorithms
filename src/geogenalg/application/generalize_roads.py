@@ -33,10 +33,10 @@ class GeneralizeRoads(BaseAlgorithm):
     threshold_length: float = Field(75.0, gt=0)
     """Unconnected/dead-end linestring shorter than this will be removed."""
     reference_key: str = "network"
-    """Reference key for other line datasets which are part of the same network.
-    This optional reference data is used to check connectivity i.e. if a road in
-    the input data is connected to a feature in the reference data it will not
-    be considered a dead end or disconnected."""
+    """Reference key for other line datasets which are part of the same network
+    as the input data. This optional reference data is used to check
+    connectivity i.e. if a road in the input data is connected to a feature in
+    the reference data it will not be considered a dead end or disconnected."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {
