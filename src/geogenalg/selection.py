@@ -224,7 +224,7 @@ def reduce_nearby_points_by_selecting(
     input_points_gdf: GeoDataFrame,
     reference_points_gdf: GeoDataFrame | None,
     distance_threshold: float,
-    priority_column: str,
+    priority_column: str | None = None,
 ) -> GeoDataFrame:
     """Reduce nearby points by keeping the higher-priority point within a threshold.
 
@@ -286,9 +286,14 @@ def reduce_nearby_points_by_selecting(
                 getattr(other_point, possible_matches.geometry.name)
             )
 
-            if distance < distance_threshold and (
-                getattr(input_point, priority_column)
-            ) <= getattr(other_point, priority_column):
+            prioritize_other = (
+                (getattr(input_point, priority_column))
+                <= getattr(other_point, priority_column)
+                if priority_column is not None
+                else True
+            )
+
+            if distance < distance_threshold and prioritize_other:
                 to_remove.add(input_point_index)
                 break
 
