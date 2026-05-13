@@ -7,7 +7,6 @@ from typing import ClassVar
 
 from cartagen.algorithms import buildings
 from geopandas import GeoDataFrame
-from pandas import Series
 from pydantic import Field
 from shapely import box
 from shapely.geometry import Polygon
@@ -28,7 +27,7 @@ from geogenalg.selection import (
     remove_small_polygons,
 )
 from geogenalg.split import explode_and_hash_id
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf, combine_gdfs
 from geogenalg.utility.fix_geometries import (
     drop_empty_geometries,
     fix_invalid_geometries,
@@ -42,6 +41,7 @@ NARROW_GAPS_THRESHOLD = 12
 BUFFER_SIZE_FOR_NARROW_PARTS = 3
 BUFFER_SIZE_FOR_NARROW_GAPS = 3.5
 POINT_SIZE_REDUCTION_MULTIPLIER = 1.66
+TEMPORARY_AREA_COLUMN = "temporary_area_column"
 
 
 @supports_identity
@@ -83,8 +83,6 @@ class GeneralizeBuildings(BaseAlgorithm):
     """Building classes that are always retained, regardless of thresholds."""
     building_class_column: str = "building_function"
     """Column name containing the building class information."""
-    original_area_column: str = "original_area"
-    """Column name for storing the building's original area."""
     main_angle_column: str = "main_angle"
     """Column name for storing the main angle of the building."""
 
@@ -108,9 +106,6 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         polygon_buildings_gdf = self._filter_buildings_by_area_and_class(
             polygon_buildings_gdf,
-        )
-        point_buildings_gdf = self._filter_buildings_by_area_and_class(
-            point_buildings_gdf,
         )
 
         polygon_buildings_gdf = self._dissolve_touching_buildings(
@@ -184,7 +179,9 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         result.loc[result["old_ids"].isna(), "old_ids"] = None
 
-        return hash_index_from_old_ids(result, "buildings", "old_ids")
+        return hash_index_from_old_ids(result, "buildings", "old_ids").drop(
+            TEMPORARY_AREA_COLUMN, axis=1
+        )
 
     def _generalize_point_buildings(
         self,
@@ -234,21 +231,18 @@ class GeneralizeBuildings(BaseAlgorithm):
             low_priority_buildings_gdf,
             all_buildings_gdf,
             self.minimum_distance_to_isolated_building,
-            self.original_area_column,
         )
 
         other_buildings_gdf = reduce_nearby_points_by_selecting(
             other_buildings_gdf,
             all_buildings_gdf,
             self.point_size * POINT_SIZE_REDUCTION_MULTIPLIER,
-            self.original_area_column,
         )
 
         always_kept_buildings_gdf = reduce_nearby_points_by_selecting(
             always_kept_buildings_gdf,
             always_kept_buildings_gdf,
             self.point_size * POINT_SIZE_REDUCTION_MULTIPLIER,
-            self.original_area_column,
         )
 
         return combine_gdfs(
@@ -427,10 +421,10 @@ class GeneralizeBuildings(BaseAlgorithm):
         if input_gdf.empty:
             return input_gdf
 
-        return input_gdf[
+        return input_gdf.loc[
             (
                 (
-                    input_gdf[self.original_area_column]
+                    input_gdf[TEMPORARY_AREA_COLUMN]
                     >= self.area_threshold_for_all_buildings
                 )
                 & ~(
@@ -440,7 +434,7 @@ class GeneralizeBuildings(BaseAlgorithm):
                         )
                     )
                     & (
-                        input_gdf[self.original_area_column]
+                        input_gdf[TEMPORARY_AREA_COLUMN]
                         < self.area_threshold_for_low_priority_buildings
                     )
                 )
@@ -462,29 +456,24 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         """
         if input_gdf.empty:
-            if self.original_area_column not in input_gdf.columns:
-                input_gdf[self.original_area_column] = Series(dtype=float)
-            if self.main_angle_column not in input_gdf.columns:
-                input_gdf[self.main_angle_column] = Series(dtype=float)
-            return input_gdf
+            return add_columns_to_gdf(
+                input_gdf,
+                {
+                    TEMPORARY_AREA_COLUMN: "float",
+                    self.main_angle_column: "float",
+                },
+            )
 
-        geom_types = input_gdf.geometry.geom_type.unique()
-        if all(geom_type in {"Polygon", "MultiPolygon"} for geom_type in geom_types):
-            if self.original_area_column not in input_gdf.columns:
-                input_gdf[self.original_area_column] = input_gdf.geometry.area
-            if self.main_angle_column not in input_gdf.columns:
-                input_gdf[self.main_angle_column] = input_gdf.geometry.apply(
-                    calculate_main_angle
-                )
+        input_gdf[TEMPORARY_AREA_COLUMN] = input_gdf.geometry.apply(
+            lambda geom: geom.area if isinstance(geom, Polygon) else 0.0
+        )
 
-        # If the area and angle attributes of a point building have been lost, they are
-        # replaced with 0.0
-        elif all(geom_type in {"Point", "MultiPoint"} for geom_type in geom_types):
-            if self.original_area_column not in input_gdf.columns:
-                input_gdf[self.original_area_column] = 0.0
-            if self.main_angle_column not in input_gdf.columns:
-                input_gdf[self.main_angle_column] = 0.0
-                input_gdf[self.main_angle_column] = Series(dtype=float)
+        if self.main_angle_column not in input_gdf.columns:
+            input_gdf[self.main_angle_column] = input_gdf.geometry.apply(
+                lambda geom: calculate_main_angle(geom)
+                if isinstance(geom, Polygon)
+                else 0.0
+            )
 
         return input_gdf
 
