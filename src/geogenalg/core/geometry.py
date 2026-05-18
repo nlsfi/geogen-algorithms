@@ -6,8 +6,8 @@
 from collections.abc import Callable, Iterable
 from copy import deepcopy
 from enum import Enum
-from itertools import chain
-from math import atan2, degrees, pi, sqrt
+from itertools import chain, pairwise
+from math import atan2, degrees, isclose, pi, sqrt
 from statistics import mean
 from typing import Literal, NamedTuple
 from warnings import warn
@@ -1665,3 +1665,71 @@ def smooth_around_connection_point_of_two_lines(  # noqa: C901
         smoothed_lines.append(remove_repeated_points(modified_line))
 
     return tuple(smoothed_lines)
+
+
+def split_line_at_distances(
+    line: LineString,
+    distances: list[float],
+) -> list[LineString]:
+    """Split a LineString at distances measured along the line.
+
+    Returns
+    -------
+        List of LineString segments resulting from the split.
+
+    """
+    if not distances:
+        return [line]
+
+    coords = list(line.coords)
+
+    result_segments: list[LineString] = []
+
+    current_coords = [coords[0]]
+
+    distance_iter = iter(sorted(set(distances)))
+    next_split = next(distance_iter, None)
+
+    accumulated = 0.0
+
+    for start_coord, end_coord in pairwise(coords):
+        segment = LineString([start_coord, end_coord])
+
+        segment_length = segment.length
+        segment_end_distance = accumulated + segment_length
+
+        while (
+            next_split is not None and accumulated < next_split < segment_end_distance
+        ):
+            relative_distance = next_split - accumulated
+
+            split_point = segment.interpolate(relative_distance)
+
+            split_coord = (split_point.x, split_point.y)
+
+            current_coords.append(split_coord)
+
+            result_segments.append(LineString(current_coords))
+
+            current_coords = [split_coord]
+
+            next_split = next(distance_iter, None)
+
+        if next_split is not None and isclose(next_split, segment_end_distance):
+            current_coords.append(end_coord)
+
+            result_segments.append(LineString(current_coords))
+
+            current_coords = [end_coord]
+
+            next_split = next(distance_iter, None)
+
+        else:
+            current_coords.append(end_coord)
+
+        accumulated = segment_end_distance
+
+    if len(current_coords) > 1:
+        result_segments.append(LineString(current_coords))
+
+    return result_segments
