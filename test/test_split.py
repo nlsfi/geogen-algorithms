@@ -15,9 +15,14 @@ from shapely import (
     MultiPolygon,
     Point,
     box,
+    equals_exact,
 )
 
-from geogenalg.split import explode_and_hash_id
+from geogenalg.split import (
+    explode_and_hash_id,
+    split_line_at_distances,
+    split_lines_by_points,
+)
 
 
 @pytest.mark.parametrize(
@@ -312,3 +317,373 @@ def test_explode_and_hash_id_raises():
         ValueError, match=re.escape("GeoDataFrame must have a string index.")
     ):
         explode_and_hash_id(GeoDataFrame(index=[1]), "")
+
+
+@pytest.mark.parametrize(
+    (
+        "lines_gdf",
+        "points_gdf",
+        "max_distance",
+        "expected_geometries",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    )
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(5, 0),
+                ]
+            ),
+            0.1,
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [5, 0],
+                            [10, 0],
+                        ]
+                    )
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(5, 0),
+                ]
+            ),
+            0.1,
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    )
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(2, 0),
+                    Point(7, 0),
+                ]
+            ),
+            0.1,
+            [
+                LineString([[0, 0], [2, 0]]),
+                LineString([[2, 0], [7, 0]]),
+                LineString([[7, 0], [10, 0]]),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    )
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(5, 0.5),
+                ]
+            ),
+            1.0,
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    )
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(5, 2),
+                ]
+            ),
+            1.0,
+            [
+                LineString([[0, 0], [10, 0]]),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    )
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(0, 0),
+                    Point(10, 0),
+                ]
+            ),
+            0.1,
+            [
+                LineString([[0, 0], [10, 0]]),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [5, 0],
+                            [10, 0],
+                        ]
+                    )
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(5, 0),
+                    Point(5, 0),
+                ]
+            ),
+            0.1,
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [10, 10],
+                        ]
+                    ),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Point(5, 0),
+                    Point(2, 10),
+                ]
+            ),
+            0.1,
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+                LineString([[0, 10], [2, 10]]),
+                LineString([[2, 10], [10, 10]]),
+            ],
+        ),
+    ],
+    ids=[
+        "single split",
+        "split at existing vertex",
+        "multiple splits",
+        "snap nearby point",
+        "point too far away",
+        "ignore endpoints",
+        "duplicate split points",
+        "multiple lines",
+    ],
+)
+def test_split_lines_by_points(
+    lines_gdf: GeoDataFrame,
+    points_gdf: GeoDataFrame,
+    max_distance: float,
+    expected_geometries: list[LineString],
+):
+    result = split_lines_by_points(
+        lines_gdf,
+        points_gdf,
+        max_distance=max_distance,
+    )
+
+    assert len(result) == len(expected_geometries)
+
+    for result_geom, expected_geom in zip(
+        result.geometry,
+        expected_geometries,
+        strict=True,
+    ):
+        assert equals_exact(
+            result_geom,
+            expected_geom,
+            tolerance=1e-9,
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "line",
+        "distances",
+        "expected_geometries",
+    ),
+    [
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [5],
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 0],
+                ]
+            ),
+            [5],
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [2, 7],
+            [
+                LineString([[0, 0], [2, 0]]),
+                LineString([[2, 0], [7, 0]]),
+                LineString([[7, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 0],
+                ]
+            ),
+            [2.5, 7.5],
+            [
+                LineString([[0, 0], [2.5, 0]]),
+                LineString([[2.5, 0], [5, 0], [7.5, 0]]),
+                LineString([[7.5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [],
+            [
+                LineString([[0, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [0, 10],
+            [
+                LineString([[0, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [5, 5],
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+    ],
+    ids=[
+        "single split",
+        "split at existing vertex",
+        "multiple splits",
+        "multiple segments",
+        "no splits",
+        "ignore endpoints",
+        "duplicate distances",
+    ],
+)
+def test_split_line_at_distances(
+    line: LineString,
+    distances: list[float],
+    expected_geometries: list[LineString],
+):
+    result = split_line_at_distances(
+        line,
+        distances,
+    )
+
+    assert len(result) == len(expected_geometries)
+
+    for result_geom, expected_geom in zip(
+        result,
+        expected_geometries,
+        strict=True,
+    ):
+        assert equals_exact(
+            result_geom,
+            expected_geom,
+            tolerance=1e-9,
+        )
