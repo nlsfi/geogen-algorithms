@@ -4,15 +4,18 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from itertools import pairwise
-from math import isclose
+
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from geopandas import GeoDataFrame
 from pandas.api.types import is_string_dtype
-from shapely import LineString
 
+from geogenalg.core.geometry import split_line_at_distances
 from geogenalg.identity import hash_duplicate_indexes
+
+if TYPE_CHECKING:
+    from shapely import LineString
 
 
 def explode_and_hash_id(
@@ -119,71 +122,3 @@ def split_lines_by_points(
 
     result = pd.concat(result_rows, ignore_index=True)
     return GeoDataFrame(result, crs=lines_gdf.crs)
-
-
-def split_line_at_distances(
-    line: LineString,
-    distances: list[float],
-) -> list[LineString]:
-    """Split a LineString at distances measured along the line.
-
-    Returns
-    -------
-        List of LineString segments resulting from the split.
-
-    """
-    if not distances:
-        return [line]
-
-    coords = list(line.coords)
-
-    result_segments: list[LineString] = []
-
-    current_coords = [coords[0]]
-
-    distance_iter = iter(sorted(set(distances)))
-    next_split = next(distance_iter, None)
-
-    accumulated = 0.0
-
-    for start_coord, end_coord in pairwise(coords):
-        segment = LineString([start_coord, end_coord])
-
-        segment_length = segment.length
-        segment_end_distance = accumulated + segment_length
-
-        while (
-            next_split is not None and accumulated < next_split < segment_end_distance
-        ):
-            relative_distance = next_split - accumulated
-
-            split_point = segment.interpolate(relative_distance)
-
-            split_coord = (split_point.x, split_point.y)
-
-            current_coords.append(split_coord)
-
-            result_segments.append(LineString(current_coords))
-
-            current_coords = [split_coord]
-
-            next_split = next(distance_iter, None)
-
-        if next_split is not None and isclose(next_split, segment_end_distance):
-            current_coords.append(end_coord)
-
-            result_segments.append(LineString(current_coords))
-
-            current_coords = [end_coord]
-
-            next_split = next(distance_iter, None)
-
-        else:
-            current_coords.append(end_coord)
-
-        accumulated = segment_end_distance
-
-    if len(current_coords) > 1:
-        result_segments.append(LineString(current_coords))
-
-    return result_segments

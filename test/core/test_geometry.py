@@ -71,6 +71,7 @@ from geogenalg.core.geometry import (
     smooth_around_connection_point_of_two_lines,
     smooth_around_ring_closing_vertex,
     snap_to_closest_vertex_or_segment,
+    split_line_at_distances,
     split_linear_geometry,
 )
 
@@ -2606,3 +2607,138 @@ def test_smooth_around_connection_point_of_two_lines(
     assert equals_exact(result_1, expected_1, tolerance=0.000000001)
 
     assert equals_exact(result_2, expected_2, tolerance=0.000000001)
+
+
+@pytest.mark.parametrize(
+    (
+        "line",
+        "distances",
+        "expected_geometries",
+    ),
+    [
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [5],
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 0],
+                ]
+            ),
+            [5],
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [2, 7],
+            [
+                LineString([[0, 0], [2, 0]]),
+                LineString([[2, 0], [7, 0]]),
+                LineString([[7, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [5, 0],
+                    [10, 0],
+                ]
+            ),
+            [2.5, 7.5],
+            [
+                LineString([[0, 0], [2.5, 0]]),
+                LineString([[2.5, 0], [5, 0], [7.5, 0]]),
+                LineString([[7.5, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [],
+            [
+                LineString([[0, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [0, 10],
+            [
+                LineString([[0, 0], [10, 0]]),
+            ],
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [10, 0],
+                ]
+            ),
+            [5, 5],
+            [
+                LineString([[0, 0], [5, 0]]),
+                LineString([[5, 0], [10, 0]]),
+            ],
+        ),
+    ],
+    ids=[
+        "single split",
+        "split at existing vertex",
+        "multiple splits",
+        "multiple segments",
+        "no splits",
+        "ignore endpoints",
+        "duplicate distances",
+    ],
+)
+def test_split_line_at_distances(
+    line: LineString,
+    distances: list[float],
+    expected_geometries: list[LineString],
+):
+    result = split_line_at_distances(
+        line,
+        distances,
+    )
+
+    assert len(result) == len(expected_geometries)
+
+    for result_geom, expected_geom in zip(
+        result,
+        expected_geometries,
+        strict=True,
+    ):
+        assert equals_exact(
+            result_geom,
+            expected_geom,
+            tolerance=1e-9,
+        )
