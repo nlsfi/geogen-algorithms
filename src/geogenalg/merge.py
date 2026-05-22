@@ -183,7 +183,7 @@ def dissolve_and_inherit_attributes(
 
         return (
             grouped_by_geom.groupby(
-                by="__geometry_group",
+                by="_geometry_group",
                 as_index=False,
                 level=None,
                 sort=False,
@@ -192,7 +192,7 @@ def dissolve_and_inherit_attributes(
                 dissolve_geometry_group,
                 include_groups=False,
             )
-            .drop("__geometry_group", axis=1)
+            .drop("_geometry_group", axis=1)
         )
 
     attribute_groups = gdf.groupby(

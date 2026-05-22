@@ -72,9 +72,9 @@ class KeepIntersection(BaseAlgorithm):
         mask_gdf = GeoDataFrame(geometry=mask_data.geometry, crs=mask_data.geometry.crs)
 
         gdf = data.copy()
-        gdf["__index"] = gdf.index
+        gdf["_index"] = gdf.index
         result = gdf.overlay(mask_gdf, how="intersection")
-        result = result.set_index("__index")
+        result = result.set_index("_index")
         result.index.name = index_name
 
         # Sometimes gdf.overlay results in multiple single geometries, sometimes

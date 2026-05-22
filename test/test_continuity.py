@@ -546,11 +546,11 @@ def test_get_lines_along_reference_lines(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         True,
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                         False,
                     ],
@@ -570,11 +570,11 @@ def test_get_lines_along_reference_lines(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         False,
                         False,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                         False,
                     ],
@@ -595,12 +595,12 @@ def test_get_lines_along_reference_lines(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         True,
                         True,
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                         False,
                         True,
@@ -652,11 +652,11 @@ def test_flag_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         False,
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         True,
                         False,
                     ],
@@ -680,10 +680,10 @@ def test_flag_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         False,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                     ],
                 },
@@ -706,10 +706,10 @@ def test_flag_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         True,
                     ],
                 },
@@ -875,8 +875,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [True],
-                    "__end_connected": [False],
+                    "_start_connected": [True],
+                    "_end_connected": [False],
                 },
                 geometry=[
                     LineString(
@@ -918,8 +918,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [False],
-                    "__end_connected": [True],
+                    "_start_connected": [False],
+                    "_end_connected": [True],
                 },
                 geometry=[
                     LineString(
@@ -962,8 +962,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [True],
-                    "__end_connected": [True],
+                    "_start_connected": [True],
+                    "_end_connected": [True],
                 },
                 geometry=[
                     LineString(
@@ -1006,8 +1006,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [False],
-                    "__end_connected": [False],
+                    "_start_connected": [False],
+                    "_end_connected": [False],
                 },
                 geometry=[
                     LineString(
@@ -1049,8 +1049,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 1000),
                         ]
                     ),
-                    "__start_connected": [False],
-                    "__end_connected": [False],
+                    "_start_connected": [False],
+                    "_end_connected": [False],
                 },
                 geometry=[
                     LineString(
@@ -1874,11 +1874,11 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         1,
                         1,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                     ],
@@ -1899,12 +1899,12 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         2,
                         2,
                         2,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                         0,
@@ -1928,13 +1928,13 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         3,
                         3,
                         3,
                         0,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                         0,
@@ -1958,11 +1958,11 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         0,
                         0,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                     ],

@@ -496,7 +496,7 @@ def calculate_edge_adjacency(
 
 def group_geometries_by_intersections_recursively(  # noqa: C901
     input_gdf: GeoDataFrame,
-    geometry_group_column: str = "__geometry_group",
+    geometry_group_column: str = "_geometry_group",
 ) -> GeoDataFrame:
     """Recursively determine which geometries intersect.
 

@@ -308,13 +308,13 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         # Dissolve the expanded narrow parts and already large enough parts
         result_gdf = combine_gdfs([simplified_gdf, narrow_parts_gdf])
-        result_gdf["__temp_id"] = result_gdf.index
+        result_gdf["_temp_id"] = result_gdf.index
         result_gdf = explode_and_hash_id(result_gdf, "buildings")
         result_gdf = dissolve_and_inherit_attributes(
             result_gdf,
-            "__temp_id",
+            "_temp_id",
         )
-        result_gdf = result_gdf.drop("__temp_id", axis=1)
+        result_gdf = result_gdf.drop("_temp_id", axis=1)
 
         # Simplify polygons again using CartaGen Ruas simplification
         result_gdf = GeneralizeBuildings._simplify_buildings(

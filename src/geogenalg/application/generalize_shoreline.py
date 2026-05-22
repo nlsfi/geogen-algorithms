@@ -85,20 +85,20 @@ class GeneralizeShoreline(BaseAlgorithm):
         # GeoDataFrame index is not inherited with the identity overlay, but it
         # needs to remain unchanged for the new shoreline, so copy index as a
         # column to set as index later.
-        buffered_old_shoreline["__duplicated_index"] = buffered_old_shoreline.index
+        buffered_old_shoreline["_duplicated_index"] = buffered_old_shoreline.index
 
         # There may be small artifact features left over from the identity
         # overlay. These do not inherit attributes, so set an always not null
         # column beforehand so artifacts can be identified from having this be
         # null.
-        buffered_old_shoreline["__identification_successful"] = "true"
+        buffered_old_shoreline["_identification_successful"] = "true"
 
         new_shoreline = overlay(new_shoreline, buffered_old_shoreline, how="identity")
         new_shoreline = new_shoreline.loc[
-            ~new_shoreline["__identification_successful"].isna()
+            ~new_shoreline["_identification_successful"].isna()
         ]
-        new_shoreline = new_shoreline.drop("__identification_successful", axis=1)
-        new_shoreline = new_shoreline.set_index("__duplicated_index")
+        new_shoreline = new_shoreline.drop("_identification_successful", axis=1)
+        new_shoreline = new_shoreline.set_index("_duplicated_index")
         new_shoreline.index.name = data.index.name
 
         new_shoreline.geometry = new_shoreline.geometry.remove_repeated_points()

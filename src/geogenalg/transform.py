@@ -97,13 +97,13 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
     # Apply mask, find out which geometries were modified and apply processing
     # function to them
     masked_geoms = gdf.geometry.difference(mask)
-    gdf["modified_by_mask__"] = ~gdf.geometry.geom_equals(masked_geoms)
+    gdf["modified_by_mask_"] = ~gdf.geometry.geom_equals(masked_geoms)
     gdf.geometry = masked_geoms
     gdf = gdf.loc[~gdf.geometry.is_empty]
 
     geom_column_name = str(gdf.geometry.name)
     for row in gdf.itertuples():
-        if not row.modified_by_mask__:
+        if not row.modified_by_mask_:
             continue
 
         geom = getattr(row, geom_column_name)
@@ -124,7 +124,7 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
 
         gdf.loc[row.Index, geom_column_name] = new_geom
 
-    gdf = gdf.drop("modified_by_mask__", axis=1)
+    gdf = gdf.drop("modified_by_mask_", axis=1)
     gdf = gdf.loc[~gdf.geometry.is_empty]
 
     # Extract new lines from original, non-segmentized centerline

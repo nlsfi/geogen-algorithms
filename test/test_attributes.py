@@ -136,7 +136,7 @@ def test_inherit_attributes(
                 {
                     "id": [1, 2, 3],
                     "other": [111111, 222222, 333333],
-                    "__old_ids": [
+                    "_old_ids": [
                         (1,),
                         (2,),
                         (3,),
@@ -172,7 +172,7 @@ def test_inherit_attributes(
                 {
                     "id": [1, 3],
                     "other": [111111, 333333],
-                    "__old_ids": [
+                    "_old_ids": [
                         (1,),
                         (3, 2),
                     ],
@@ -206,7 +206,7 @@ def test_inherit_attributes(
                 {
                     "id": [2, 3],
                     "other": [222222, 333333],
-                    "__old_ids": [
+                    "_old_ids": [
                         (2, 1),
                         (3,),
                     ],
@@ -236,7 +236,7 @@ def test_inherit_attributes_from_largest(
     result = inherit_attributes_from_largest(
         source_gdf,
         target_gdf,
-        old_ids_column="__old_ids",
+        old_ids_column="_old_ids",
         measure_by=measure_by,
     )
     assert_geodataframe_equal(

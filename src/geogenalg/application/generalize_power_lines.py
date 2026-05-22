@@ -209,8 +209,8 @@ class GeneralizePowerLines(BaseAlgorithm):
 
         fences_union = fences.union_all()
 
-        start_connected_column = "__start_connected"
-        end_connected_column = "__end_connected"
+        start_connected_column = "_start_connected"
+        end_connected_column = "_end_connected"
         parallels = flag_polygon_centerline_connections(
             parallels,
             fences,
