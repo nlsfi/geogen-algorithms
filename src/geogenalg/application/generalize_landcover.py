@@ -51,8 +51,6 @@ class GeneralizeLandcover(BaseAlgorithm):
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""
-    buffer_cap_style: Literal["round", "square", "flat"] = "square"
-    """Cap style used in buffer operations."""
     buffer_join_style: Literal["round", "mitre", "bevel"] = "bevel"
     """Join style used in buffer operations."""
     group_by: frozenset[str] = frozenset()
@@ -72,7 +70,6 @@ class GeneralizeLandcover(BaseAlgorithm):
         def _buffer(gdf: GeoDataFrame, distance: float) -> None:
             gdf.geometry = gdf.geometry.buffer(
                 distance,
-                cap_style=self.buffer_cap_style,
                 join_style=self.buffer_join_style,
             )
 
