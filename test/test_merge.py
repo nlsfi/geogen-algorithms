@@ -427,6 +427,65 @@ def test_merge_lines_with_same_attribute_value_into_one(
             None,
             "most_intersection",
         ),
+        # 10.
+        (
+            GeoDataFrame(
+                {
+                    "id": [1, 2],
+                    "geometry": [
+                        box(0, 0, 1, 1),
+                        box(1, 1, 2, 2),
+                    ],
+                }
+            ),
+            GeoDataFrame(
+                {
+                    "id": [1, 2],
+                    "old_ids": [(1,), (2,)],
+                    "geometry": [
+                        box(0, 0, 1, 1),
+                        box(1, 1, 2, 2),
+                    ],
+                }
+            ),
+            None,
+            "most_intersection",
+        ),
+        # 11.
+        (
+            GeoDataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "geometry": [
+                        box(0, 0, 1, 1),
+                        box(1, 1, 2, 2),
+                        box(2, 1, 3, 2),
+                    ],
+                }
+            ),
+            GeoDataFrame(
+                {
+                    "id": [1, 2],
+                    "old_ids": [(1,), (2, 3)],
+                    "geometry": [
+                        box(0, 0, 1, 1),
+                        Polygon(
+                            [
+                                [1, 1],
+                                [1, 2],
+                                [2, 2],
+                                [3, 2],
+                                [3, 1],
+                                [2, 1],
+                                [1, 1],
+                            ]
+                        ),
+                    ],
+                }
+            ),
+            None,
+            "most_intersection",
+        ),
     ],
     ids=[
         "single polygon",  # 1.
@@ -438,6 +497,8 @@ def test_merge_lines_with_same_attribute_value_into_one(
         "three intersecting polygons with extra attributes, two in same group, inherit from most_intersection",  # 7.
         "multiple_groups",  # 8.
         "disjoint_features_no_modified_geoms",  # 9.
+        "single_touching_point",  # 10.
+        "single_touching_point_to_otherwise_dissolved",  # 11.
     ],
 )
 def test_dissolve_and_inherit_attributes(
