@@ -740,7 +740,7 @@ def test_calculate_edge_adjacency_non_polygon_raises():
             GeoDataFrame(geometry=[]),
             add_columns_to_gdf(
                 GeoDataFrame(geometry=[]),
-                {"__geometry_group": "int64"},
+                {"_geometry_group": "int64"},
             ),
         ),
         (
@@ -752,7 +752,7 @@ def test_calculate_edge_adjacency_non_polygon_raises():
             ),
             GeoDataFrame(
                 {
-                    "__geometry_group": [
+                    "_geometry_group": [
                         1,
                         2,
                     ],
@@ -772,7 +772,7 @@ def test_calculate_edge_adjacency_non_polygon_raises():
             ),
             GeoDataFrame(
                 {
-                    "__geometry_group": [
+                    "_geometry_group": [
                         1,
                         1,
                     ],
@@ -795,7 +795,7 @@ def test_calculate_edge_adjacency_non_polygon_raises():
             ),
             GeoDataFrame(
                 {
-                    "__geometry_group": [
+                    "_geometry_group": [
                         1,
                         1,
                         2,
@@ -821,7 +821,7 @@ def test_calculate_edge_adjacency_non_polygon_raises():
             ),
             GeoDataFrame(
                 {
-                    "__geometry_group": [
+                    "_geometry_group": [
                         1,
                         1,
                     ],

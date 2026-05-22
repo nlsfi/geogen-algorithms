@@ -43,7 +43,7 @@ def hash_duplicate_indexes(
 
     gdf = data.copy()
 
-    temp_index = "__temp_index"
+    temp_index = "_temp_index"
 
     gdf[temp_index] = gdf.index
 

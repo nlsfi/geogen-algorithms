@@ -99,15 +99,15 @@ def inherit_attributes_from_largest(
             continue
 
         if measure_by == "area":
-            intersecting_features["__temp_size"] = intersecting_features.geometry.area
+            intersecting_features["_temp_size"] = intersecting_features.geometry.area
         else:
-            intersecting_features["__temp_size"] = intersecting_features.geometry.length
+            intersecting_features["_temp_size"] = intersecting_features.geometry.length
 
         intersecting_features = intersecting_features.sort_values(
-            "__temp_size",
+            "_temp_size",
             ascending=False,
         )
-        intersecting_features = intersecting_features.drop("__temp_size", axis=1)
+        intersecting_features = intersecting_features.drop("_temp_size", axis=1)
 
         largest_feature = intersecting_features.iloc[0]
 
