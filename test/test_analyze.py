@@ -832,6 +832,26 @@ def test_calculate_edge_adjacency_non_polygon_raises():
                 ],
             ),
         ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(1, 1, 2, 2),
+                ],
+            ),
+            GeoDataFrame(
+                {
+                    "_geometry_group": [
+                        1,
+                        1,
+                    ],
+                },
+                geometry=[
+                    box(0, 0, 1, 1),
+                    box(1, 1, 2, 2),
+                ],
+            ),
+        ),
     ],
     ids=[
         "empty",
@@ -839,9 +859,10 @@ def test_calculate_edge_adjacency_non_polygon_raises():
         "grouping_works",
         "mixed",
         "lines",
+        "single_point_touching_polygon",
     ],
 )
-def test_group_by_geometry_recursively(
+def test_group_geometries_by_intersections_recursively(
     input_gdf: GeoDataFrame,
     expected: GeoDataFrame,
 ):

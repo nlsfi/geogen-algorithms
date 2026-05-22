@@ -508,6 +508,12 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
 
     All of these will be in the same group.
 
+    The function works by determining which rows each row intersects via a
+    spatial join. The function then goes through each row and checks which
+    other rows it intersects, then recursively descending to check what other
+    rows those rows intersect (skipping already processed rows) and collecting
+    the indices of each row found.
+
     Args:
     ----
         input_gdf: GeoDataFrame with geometries to group.
@@ -519,6 +525,9 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
 
     """
     gdf = input_gdf.copy()
+
+    # Initialize group column as each row being its own group, this way if row
+    # truly does not belong to a group it'll still have a valid value.
     gdf[geometry_group_column] = range(gdf.shape[0])
 
     geometry_group_sets = []
