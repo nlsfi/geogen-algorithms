@@ -7,12 +7,12 @@
 
 from typing import TYPE_CHECKING
 
-import pandas as pd
 from geopandas import GeoDataFrame
 from pandas.api.types import is_string_dtype
 
 from geogenalg.core.geometry import split_line_at_distances
 from geogenalg.identity import hash_duplicate_indexes
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
 if TYPE_CHECKING:
     from shapely import LineString
@@ -79,7 +79,7 @@ def split_lines_by_points(
     result_rows = []
 
     for i, row in enumerate(lines_gdf.itertuples()):
-        line: LineString = row.geometry
+        line: LineString = getattr(row, lines_gdf.geometry.name)
 
         candidate_idx = list(
             points_sindex.intersection(
@@ -116,7 +116,7 @@ def split_lines_by_points(
             result_rows.append(new_row)
 
     if not result_rows:
-        return lines_gdf.iloc[0:0].copy()
+        return copy_gdf_as_empty(lines_gdf)
 
-    result = pd.concat(result_rows, ignore_index=False)
+    result = combine_gdfs(result_rows, ignore_index=False)
     return GeoDataFrame(result, crs=lines_gdf.crs)
