@@ -1634,6 +1634,7 @@ def smooth_around_connection_point_of_two_lines(  # noqa: C901
         smooth_end = point.coords[0] == line.coords[-1]
 
         if not smooth_start and not smooth_end:
+            smoothed_lines.append(line)
             continue
 
         before_in_coords = vertex_before in line.coords
@@ -1724,8 +1725,9 @@ def split_line_at_distances(
 
             next_split = next(distance_iter, None)
 
-        else:
-            current_coords.append(end_coord)
+            continue
+
+        current_coords.append(end_coord)
 
         accumulated = segment_end_distance
 
