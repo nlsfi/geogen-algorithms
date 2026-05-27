@@ -78,7 +78,7 @@ def split_lines_by_points(
 
     result_rows = []
 
-    for row in lines_gdf.itertuples():
+    for i, row in enumerate(lines_gdf.itertuples()):
         line: LineString = row.geometry
 
         candidate_idx = list(
@@ -88,8 +88,7 @@ def split_lines_by_points(
         )
 
         if not candidate_idx:
-            new_row = lines_gdf.loc[[row.Index]]  # keep as single-row DataFrame
-            result_rows.append(new_row)
+            result_rows.append(lines_gdf.iloc[[i]])
             continue
 
         candidate_points = points_gdf.iloc[candidate_idx]
@@ -104,8 +103,7 @@ def split_lines_by_points(
             split_distances.append(distance_along)
 
         if not split_distances:
-            new_row = lines_gdf.loc[[row.Index]]  # keep as single-row DataFrame
-            result_rows.append(new_row)
+            result_rows.append(lines_gdf.iloc[[i]])
             continue
 
         split_distances = sorted(set(split_distances))
@@ -113,12 +111,12 @@ def split_lines_by_points(
         segments = split_line_at_distances(line, split_distances)
 
         for segment in segments:
-            new_row = lines_gdf.loc[[row.Index]].copy()  # single-row DataFrame
-            new_row["geometry"] = [segment]
+            new_row = lines_gdf.iloc[[i]].copy()
+            new_row.geometry = [segment]
             result_rows.append(new_row)
 
     if not result_rows:
-        return lines_gdf.iloc[0:0].copy()  # empty GeoDataFrame with correct schema
+        return lines_gdf.iloc[0:0].copy()
 
-    result = pd.concat(result_rows, ignore_index=True)
+    result = pd.concat(result_rows, ignore_index=False)
     return GeoDataFrame(result, crs=lines_gdf.crs)
