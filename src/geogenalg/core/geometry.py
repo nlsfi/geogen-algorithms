@@ -838,6 +838,71 @@ def assign_nearest_z(
     return result_gdf
 
 
+def assign_z_from_attribute(
+    gdf: GeoDataFrame,
+    z_attribute: str,
+    overwrite_z: bool = False,  # noqa: FBT001, FBT002
+) -> GeoDataFrame:
+    """Assign Z values to geometries from a GeoDataFrame attribute.
+
+    Sets the Z value of all vertices in each geometry to the value
+    of the specified attribute for that row. Works for Point, LineString,
+    and Polygon geometries and their multi versions.
+
+    Args:
+    ----
+        gdf: GeoDataFrame with geometries and a Z attribute column.
+        z_attribute: Name of the column to use as Z value.
+        overwrite_z: Whether to overwrite existing Z values.
+
+    Returns:
+    -------
+        A copy of `gdf` with Z values assigned from the attribute.
+
+    """
+
+    def _with_z(geom: BaseGeometry, z: float) -> BaseGeometry:
+        if not overwrite_z and geom.has_z:
+            return geom
+        if hasattr(geom, "geoms"):
+            return type(geom)([_with_z(part, z) for part in geom.geoms])
+        return type(geom)([(x, y, z) for x, y, *_ in geom.coords])
+
+    geom_col = gdf.geometry.name
+    result_gdf = gdf.copy()
+    result_gdf.geometry = result_gdf.apply(
+        lambda row: _with_z(row[geom_col], row[z_attribute]),
+        axis=1,
+    )
+    return result_gdf
+
+
+def drop_z(gdf: GeoDataFrame) -> GeoDataFrame:
+    """Drop Z values from geometries in a GeoDataFrame.
+
+    Works for Point, LineString, and Polygon geometries and their
+    multi versions.
+
+    Args:
+    ----
+        gdf: GeoDataFrame with geometries.
+
+    Returns:
+    -------
+        A copy of `gdf` with Z values removed from all geometries.
+
+    """
+
+    def _without_z(geom: BaseGeometry) -> BaseGeometry:
+        if hasattr(geom, "geoms"):
+            return type(geom)([_without_z(part) for part in geom.geoms])
+        return type(geom)([(x, y) for x, y, *_ in geom.coords])
+
+    result_gdf = gdf.copy()
+    result_gdf.geometry = result_gdf.geometry.apply(_without_z)
+    return result_gdf
+
+
 def largest_part(
     geom: BaseGeometry,
     *,
