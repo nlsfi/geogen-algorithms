@@ -119,4 +119,4 @@ def split_lines_by_points(
         return copy_gdf_as_empty(lines_gdf)
 
     result = combine_gdfs(result_rows, ignore_index=False)
-    return GeoDataFrame(result, crs=lines_gdf.crs)
+    return GeoDataFrame(result, geometry=lines_gdf.geometry.name, crs=lines_gdf.crs)
