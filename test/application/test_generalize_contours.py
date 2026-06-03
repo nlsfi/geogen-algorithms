@@ -20,10 +20,10 @@ def test_generalize_contours(
     testdata_path: Path,
     tmp_path: Path,
 ) -> None:
-    gpkg = GeoPackagePath(testdata_path / "contours.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "contours_2.gpkg")
 
     slope_data = read_gdf_from_file_and_set_index(
-        testdata_path / "contours.gpkg",
+        testdata_path / "contours_2.gpkg",
         UNIQUE_ID_COLUMN,
         layer="symbol",
     )
@@ -34,7 +34,7 @@ def test_generalize_contours(
 
     IntegrationTest(
         input_uri=gpkg.to_input("contour"),
-        control_uri=gpkg.to_input("control"),
+        control_uri=gpkg.to_input("contour_control"),
         algorithm=GeneralizeContours(
             interval=5,
             gaussian_filter_strength=8,
