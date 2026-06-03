@@ -47,7 +47,6 @@ from geogenalg.core.geometry import (
     centerline_length,
     chaikin_smooth_keep_topology,
     chaikin_smooth_skip_coords,
-    drop_z,
     elongation,
     equalize_z,
     explode_line,
@@ -1274,89 +1273,6 @@ def test_assign_z_from_attribute_multilinestring():
     )
     out = assign_z_from_attribute(gdf, "elevation")
     assert_frame_equal(_coords_df(out), _coords_df(expected))
-
-
-def test_drop_z_points():
-    gdf = GeoDataFrame(
-        {"id": [1, 2]},
-        geometry=[Point(0.0, 0.0, 5.0), Point(1.0, 1.0, 10.0)],
-    )
-    expected = GeoDataFrame(
-        {"id": [1, 2]},
-        geometry=[Point(0.0, 0.0), Point(1.0, 1.0)],
-    )
-    out = drop_z(gdf)
-    assert_frame_equal(
-        _coords_df(out, include_z=False), _coords_df(expected, include_z=False)
-    )
-    assert not out.has_z.any()
-
-
-def test_drop_z_linestrings():
-    gdf = GeoDataFrame(
-        {"id": [1]},
-        geometry=[LineString([(0.0, 0.0, 1.0), (1.0, 0.0, 2.0), (1.0, 1.0, 3.0)])],
-    )
-    expected = GeoDataFrame(
-        {"id": [1]},
-        geometry=[LineString([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)])],
-    )
-    out = drop_z(gdf)
-    assert_frame_equal(
-        _coords_df(out, include_z=False), _coords_df(expected, include_z=False)
-    )
-    assert not out.has_z.any()
-
-
-def test_drop_z_already_2d():
-    gdf = GeoDataFrame(
-        {"id": [1]},
-        geometry=[LineString([(0.0, 0.0), (1.0, 1.0)])],
-    )
-    out = drop_z(gdf)
-    assert_frame_equal(
-        _coords_df(out, include_z=False), _coords_df(gdf, include_z=False)
-    )
-    assert not out.has_z.any()
-
-
-def test_drop_z_multilinestring():
-    gdf = GeoDataFrame(
-        {"id": [1]},
-        geometry=[
-            MultiLineString(
-                [
-                    [(0.0, 0.0, 1.0), (1.0, 0.0, 2.0)],
-                    [(1.0, 1.0, 3.0), (2.0, 1.0, 4.0)],
-                ]
-            )
-        ],
-    )
-    expected = GeoDataFrame(
-        {"id": [1]},
-        geometry=[
-            MultiLineString(
-                [
-                    [(0.0, 0.0), (1.0, 0.0)],
-                    [(1.0, 1.0), (2.0, 1.0)],
-                ]
-            )
-        ],
-    )
-    out = drop_z(gdf)
-    assert_frame_equal(
-        _coords_df(out, include_z=False), _coords_df(expected, include_z=False)
-    )
-    assert not out.has_z.any()
-
-
-def test_drop_z_multipoint():
-    gdf = GeoDataFrame(
-        {"id": [1]},
-        geometry=[MultiPoint([(0.0, 0.0, 1.0), (1.0, 1.0, 2.0)])],
-    )
-    out = drop_z(gdf)
-    assert not out.has_z.any()
 
 
 @pytest.mark.parametrize(
