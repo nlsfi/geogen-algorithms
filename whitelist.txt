@@ -2,10 +2,12 @@
 aggfunc
 alg
 algs
+allclose
 arctan2
 argmax
 argspec
 atan2
+atol
 basealgorithm
 basemetadata
 bbox
@@ -71,6 +73,7 @@ ramer
 rdp
 rect
 rglob
+rtol
 segmentize
 segmentized
 shapelysmooth

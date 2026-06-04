@@ -3,6 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,14 +12,17 @@ from warnings import catch_warnings
 
 import pytest
 from geopandas import GeoDataFrame, read_file
+from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from shapely import Point, Polygon, box
+from shapely.geometry import LineString, MultiLineString, MultiPolygon
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.testing import (
     GeoPackageInput,
     TestReportWarning,
     assert_gdf_equal_save_diff,
+    assert_geoseries_coordinates_equal,
     get_alg_results_from_geopackage,
     get_test_gdfs,
 )
@@ -395,3 +399,347 @@ def test_get_test_gdfs(
 
     for key, ref_gdf in other_ref.items():
         assert_geodataframe_equal(ref_gdf, ref_before[key])
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "tolerance", "error_msg"),
+    [
+        (
+            GeoSeries(),
+            GeoSeries([Point(0, 0)]),
+            0,
+            "GeoSeries are of different length.",
+        ),
+        (
+            GeoSeries([box(0, 0, 1, 1)]),
+            GeoSeries([Point(0, 0)]),
+            0,
+            "Geometries are not of equivalent type: Polygon != Point",
+        ),
+        (
+            GeoSeries([Point(0, 0)]),
+            GeoSeries([Point(0, 0)]),
+            0,
+            None,
+        ),
+        (
+            GeoSeries([Point(0, 0.01)]),
+            GeoSeries([Point(0, 0)]),
+            0.1,
+            None,
+        ),
+        (
+            GeoSeries([Point(0, 0.1)]),
+            GeoSeries([Point(0, 0)]),
+            0.01,
+            "Geometries are not equivalent: POINT (0 0.1) != POINT (0 0)",
+        ),
+        (
+            GeoSeries([Point(0, 0, 1)]),
+            GeoSeries([Point(0, 0, 0)]),
+            0.1,
+            "Geometries are not equivalent: POINT Z (0 0 1) != POINT Z (0 0 0)",
+        ),
+        (
+            GeoSeries([Point(0, 0, 0)]),
+            GeoSeries([Point(0, 0, 0)]),
+            0,
+            None,
+        ),
+        (
+            GeoSeries([LineString([[0, 0, 0], [1, 0, 0]])]),
+            GeoSeries([LineString([[0, 0, 0], [1, 0, 0]])]),
+            0,
+            None,
+        ),
+        (
+            GeoSeries([LineString([[0, 0, 0], [1, 0, 0]])]),
+            GeoSeries([LineString([[0, 0, 0], [1, 0, 1]])]),
+            0,
+            "LINESTRING Z (0 0 0, 1 0 0) != LINESTRING Z (0 0 0, 1 0 1)",
+        ),
+        (
+            GeoSeries([LineString([[0, 0, 0.0000001], [1, 0, 0]])]),
+            GeoSeries([LineString([[0, 0, 0.000001], [1, 0, 0]])]),
+            0.000001,
+            None,
+        ),
+        (
+            GeoSeries(
+                [
+                    Polygon(
+                        [
+                            [0, 0, 0],
+                            [1, 0, 0],
+                            [1, 1, 0],
+                            [0, 1, 0],
+                        ]
+                    ),
+                ]
+            ),
+            GeoSeries(
+                [
+                    Polygon(
+                        [
+                            [0, 0, 0],
+                            [1, 0, 0],
+                            [1, 1, 0],
+                            [0, 1, 0.1],
+                        ]
+                    ),
+                ]
+            ),
+            0,
+            "Geometries are not equivalent: POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 1 0, 0 0 0)) != POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 1 0.1, 0 0 0))",
+        ),
+        (
+            GeoSeries(
+                [
+                    Polygon(
+                        [
+                            [0, 0, 0],
+                            [1, 0, 0],
+                            [1, 1, 0],
+                            [0, 1, 0],
+                        ]
+                    ),
+                ]
+            ),
+            GeoSeries(
+                [
+                    Polygon(
+                        [
+                            [0, 0, 0],
+                            [1, 0, 0],
+                            [1, 1, 0],
+                            [0, 1, 0.11],
+                        ]
+                    ),
+                ]
+            ),
+            0.1,
+            "Geometries are not equivalent: POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 1 0, 0 0 0)) != POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 1 0.11, 0 0 0))",
+        ),
+        (
+            GeoSeries(
+                [
+                    MultiPolygon(
+                        [
+                            Polygon(
+                                [
+                                    [0, 0, 0],
+                                    [1, 0, 0],
+                                    [1, 1, 0],
+                                    [0, 1, 0],
+                                ]
+                            ),
+                            Polygon(
+                                [
+                                    [5, 5, 5],
+                                    [6, 5, 5],
+                                    [6, 6, 5],
+                                    [5, 6, 5],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            GeoSeries(
+                [
+                    MultiPolygon(
+                        [
+                            Polygon(
+                                [
+                                    [0, 0, 0],
+                                    [1, 0, 0],
+                                    [1, 1, 0],
+                                    [0, 1, 0],
+                                ]
+                            ),
+                            Polygon(
+                                [
+                                    [5, 5, 5],
+                                    [6, 5, 5],
+                                    [6, 6, 5],
+                                    [5, 6, 5],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            0,
+            None,
+        ),
+        (
+            GeoSeries(
+                [
+                    MultiPolygon(
+                        [
+                            Polygon(
+                                [
+                                    [0, 0, 0.0001],
+                                    [1, 0, 0],
+                                    [1, 1, 0],
+                                    [0, 1, 0],
+                                ]
+                            ),
+                            Polygon(
+                                [
+                                    [5, 5, 5],
+                                    [6, 5, 5],
+                                    [6, 6, 5],
+                                    [5, 6, 5],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            GeoSeries(
+                [
+                    MultiPolygon(
+                        [
+                            Polygon(
+                                [
+                                    [0, 0, 0],
+                                    [1, 0, 0],
+                                    [1, 1, 0],
+                                    [0, 1, 0],
+                                ]
+                            ),
+                            Polygon(
+                                [
+                                    [5, 5, 5],
+                                    [6, 5, 5],
+                                    [6, 6, 5],
+                                    [5, 6, 5],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            0,
+            "Geometries are not equivalent: MULTIPOLYGON Z (((0 0 0.0001, 1 0 0, 1 1 0, 0 1 0, 0 0 0.0001)), ((5 5 5, 6 ...  != MULTIPOLYGON Z (((0 0 0, 1 0 0, 1 1 0, 0 1 0, 0 0 0)), ((5 5 5, 6 5 5, 6 6  ... ",
+        ),
+        (
+            GeoSeries(
+                [
+                    MultiLineString(
+                        [
+                            LineString(
+                                [
+                                    [0, 0, 0.0001],
+                                    [1, 1, 0],
+                                ]
+                            ),
+                            LineString(
+                                [
+                                    [5, 5, 0],
+                                    [7, 7, 0],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            GeoSeries(
+                [
+                    MultiLineString(
+                        [
+                            LineString(
+                                [
+                                    [0, 0, 0],
+                                    [1, 1, 0],
+                                ]
+                            ),
+                            LineString(
+                                [
+                                    [5, 5, 0],
+                                    [7, 7, 0],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            0,
+            "Geometries are not equivalent: MULTILINESTRING Z ((0 0 0.0001, 1 1 0), (5 5 0, 7 7 0)) != MULTILINESTRING Z ((0 0 0, 1 1 0), (5 5 0, 7 7 0))",
+        ),
+        (
+            GeoSeries(
+                [
+                    MultiLineString(
+                        [
+                            LineString(
+                                [
+                                    [0, 0, 0.0001],
+                                    [1, 1, 0],
+                                ]
+                            ),
+                            LineString(
+                                [
+                                    [5, 5, 0],
+                                    [7, 7, 0],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            GeoSeries(
+                [
+                    MultiLineString(
+                        [
+                            LineString(
+                                [
+                                    [0, 0, 0],
+                                    [1, 1, 0],
+                                ]
+                            ),
+                            LineString(
+                                [
+                                    [5, 5, 0],
+                                    [7, 7, 0],
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            0.1,
+            None,
+        ),
+    ],
+    ids=[
+        "different_length",
+        "different_type",
+        "no_z_passes",
+        "no_z_passes_tolerance",
+        "no_z_does_not_pass_tolerance",
+        "z_unequal",
+        "z_equal",
+        "z_equal_line",
+        "z_unequal_line",
+        "z_equal_line_within_tolerance",
+        "polygon_not_equal",
+        "polygon_not_equal_tolerance",
+        "multipolygon_equals",
+        "multipolygon_not_equal",
+        "multilinestring_not_equal",
+        "multilinestring_equal",
+    ],
+)
+def test_assert_geoseries_z_values_match(
+    a: GeoSeries,
+    b: GeoSeries,
+    tolerance: int,
+    error_msg: str | None,
+):
+    if error_msg is not None:
+        with pytest.raises(AssertionError, match=re.escape(error_msg)):
+            assert_geoseries_coordinates_equal(a, b, tolerance)
+    else:
+        assert_geoseries_coordinates_equal(a, b, tolerance)
