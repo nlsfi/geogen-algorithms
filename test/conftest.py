@@ -16,7 +16,6 @@ from warnings import warn
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
-from pandas.testing import assert_series_equal
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
@@ -26,6 +25,7 @@ from geogenalg.testing import (
     TestGeoDataFrames,
     TestReportWarning,
     assert_gdf_equal_save_diff,
+    assert_geoseries_coordinates_equal,
     dummy_geometry,
     get_test_gdfs,
 )
@@ -180,9 +180,16 @@ class IntegrationTest:
                 test_gdfs.control,
                 **self.assert_function_arguments,
             )
-            # Test GeoSeries separately, because assert_geodataframe_equal
+
+            # Test GeoSeries Zs separately, because assert_geodataframe_equal
             # does not check that Z values are equal.
-            assert_series_equal(test_gdfs.result.geometry, test_gdfs.control.geometry)
+            assert_geoseries_coordinates_equal(
+                test_gdfs.result.geometry,
+                test_gdfs.control.geometry,
+                tolerance=5e-07
+                if self.assert_function_arguments.get("check_less_precise")
+                else 0,
+            )
         else:
             self._assert_and_save_report(test_gdfs.result, test_gdfs.control)
 
