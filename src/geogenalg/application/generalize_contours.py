@@ -15,19 +15,24 @@ from geogenalg.application import (
     ReferenceDataInformation,
     supports_identity,
 )
-from geogenalg.continuity import smooth_linestring_connections
+from geogenalg.continuity import (
+    add_contiguous_lines_information,
+    smooth_linestring_connections,
+)
 from geogenalg.core.geometry import assign_z_from_attribute
-from geogenalg.merge import merge_connecting_lines_by_attribute
+from geogenalg.identity import hash_duplicate_indexes
 from geogenalg.split import split_lines_by_points
+
+SNAP_DISTANCE = 1.0
 
 
 @supports_identity
 class GeneralizeContours(BaseAlgorithm):
     """Generalize contour line geometries.
 
-    Input should contain LineString or MultiLineString geometries representing contours.
+    Input should contain LineString geometries representing contours.
 
-    Reference data should contain Point or MultiPoint geometries representing
+    Reference data should contain Point geometries representing
     positions of slope lines.
 
     Output is a GeoDataFrame containing generalized contour lines.
@@ -46,17 +51,17 @@ class GeneralizeContours(BaseAlgorithm):
     """Sigma value used for Gaussian smoothing."""
     length_threshold: float = Field(200, ge=0)
     """Minimum length for contour line."""
-    level_attribute: str = Field("n60_elevation_value")
+    level_attribute: str = Field("elevation_value")
     """Attribute containing contour elevation values."""
     reference_key: str = Field("slope")
     """Reference Point or MultiPoint data key for slope lines."""
 
-    valid_input_geometry_types: ClassVar = {"LineString", "MultiLineString"}
+    valid_input_geometry_types: ClassVar = {"LineString"}
 
     reference_data_schema: ClassVar = {
         "reference_key": ReferenceDataInformation(
             required=True,
-            valid_geometry_types={"Point", "MultiPoint"},
+            valid_geometry_types={"Point"},
         ),
     }
 
@@ -76,7 +81,7 @@ class GeneralizeContours(BaseAlgorithm):
             return gdf.copy()
 
         # Split contours at slope line positions
-        gdf = split_lines_by_points(gdf, reference_gdf, 1.0)
+        gdf = split_lines_by_points(gdf, reference_gdf, SNAP_DISTANCE)
 
         # Gaussian smoothing
         gdf.geometry = gdf.geometry.apply(
@@ -88,13 +93,18 @@ class GeneralizeContours(BaseAlgorithm):
 
         # TODO: Handle potentially intersecting contours after smoothing
 
-        # Merge contour segments back into continuous geometries
-        gdf = merge_connecting_lines_by_attribute(gdf, self.level_attribute)
+        # Add information about the total length of the continuous contour
+        gdf = add_contiguous_lines_information(
+            gdf, GeoDataFrame(geometry=[], crs=gdf.crs)
+        )
 
-        # Remove short lines
-        gdf = gdf[gdf.geometry.length >= self.length_threshold]
+        # Remove short contours
+        gdf = gdf[gdf["contiguous_length"] >= self.length_threshold]
 
-        # Assing z-values
-        return assign_z_from_attribute(gdf, self.level_attribute, overwrite_z=True)
+        gdf = hash_duplicate_indexes(gdf, "contour")
+        gdf = assign_z_from_attribute(gdf, self.level_attribute, overwrite_z=True)
+        return gdf.drop(
+            [column for column in gdf.columns if column not in data.columns], axis=1
+        )
 
         # TODO: reduce the number of vertices

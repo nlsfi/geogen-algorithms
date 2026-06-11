@@ -20,14 +20,13 @@ def test_generalize_contours(
     testdata_path: Path,
     tmp_path: Path,
 ) -> None:
-    gpkg = GeoPackagePath(testdata_path / "contours_2.gpkg")
+    gpkg = GeoPackagePath(testdata_path / "contours.gpkg")
 
     slope_data = read_gdf_from_file_and_set_index(
-        testdata_path / "contours_2.gpkg",
+        testdata_path / "contours.gpkg",
         UNIQUE_ID_COLUMN,
-        layer="symbol",
+        layer="slope_line",
     )
-    slope_data = slope_data[slope_data["symbol_type_id"] == 52192]
 
     slope_path = tmp_path / "slope.gpkg"
     slope_data.to_file(slope_path, layer="slope")
