@@ -54,13 +54,15 @@ class GeneralizeContours(BaseAlgorithm):
     level_attribute: str = Field("elevation_value")
     """Attribute containing contour elevation values."""
     reference_key: str = Field("slope")
-    """Reference Point or MultiPoint data key for slope lines."""
+    """Reference Point data key for slope line positions. If provided, contour lines
+    are split at slope line locations before smoothing, preserving the fixed anchor
+    points where slope lines intersect the contour lines."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
 
     reference_data_schema: ClassVar = {
         "reference_key": ReferenceDataInformation(
-            required=True,
+            required=False,
             valid_geometry_types={"Point"},
         ),
     }
@@ -71,7 +73,7 @@ class GeneralizeContours(BaseAlgorithm):
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
         gdf = data.copy()
-        reference_gdf = reference_data[self.reference_key]
+        reference_gdf = reference_data.get(self.reference_key, GeoDataFrame())
         gdf.geometry = gdf.geometry.force_2d()
 
         # Filter contours by elevation interval
@@ -81,7 +83,8 @@ class GeneralizeContours(BaseAlgorithm):
             return gdf.copy()
 
         # Split contours at slope line positions
-        gdf = split_lines_by_points(gdf, reference_gdf, SNAP_DISTANCE)
+        if not reference_gdf.empty:
+            gdf = split_lines_by_points(gdf, reference_gdf, SNAP_DISTANCE)
 
         # Gaussian smoothing
         gdf.geometry = gdf.geometry.apply(

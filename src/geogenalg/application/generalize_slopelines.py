@@ -31,7 +31,10 @@ class GeneralizeSlopeLines(BaseAlgorithm):
     tolerance: float = Field(1.0, ge=0)
     """Maximum allowed distance from a contour line."""
     reference_key: str = Field("contours")
-    """Reference LineString data key for generalized contours."""
+    """Reference LineString data key for generalized contours. This mandatory
+    reference data is used to check if slope line point is still near a
+    generalized contour line and if not, removed. The contour data is intended
+    to already be generalized to the target scale."""
 
     valid_input_geometry_types: ClassVar = {"Point"}
 
@@ -57,8 +60,4 @@ class GeneralizeSlopeLines(BaseAlgorithm):
         contours_gdf = contours_gdf.geometry.union_all()
 
         # Retain only points located on or near contour lines
-        mask = gdf.geometry.apply(
-            lambda geom: geom.distance(contours_gdf) <= self.tolerance
-        )
-
-        return gdf[mask].copy()
+        return gdf.loc[gdf.geometry.distance(contours_gdf) <= self.tolerance]
