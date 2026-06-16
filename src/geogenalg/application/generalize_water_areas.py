@@ -128,9 +128,17 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 .explode(index_parts=True)
                 .geometry
             )
+
             thin_sections = thin_sections.loc[
                 thin_sections.geometry.area > self.thin_section_min_size
             ].buffer(self.thin_section_exaggerate_by)
+
+            # don't exaggerate near common feature edges
+            thin_sections = thin_sections.loc[
+                thin_sections.geometry.disjoint(skip_coords)
+            ]
+            # TODO: fix this issue by removing the generated overlap?
+             # A straightforward intersection removal would move the edge however.
 
             def add_exaggerated_parts(geom: Polygon) -> Polygon:
                 intersecting_geoms = thin_sections.loc[
