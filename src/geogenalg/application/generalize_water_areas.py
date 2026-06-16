@@ -138,7 +138,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 thin_sections.geometry.disjoint(skip_coords)
             ]
             # TODO: fix this issue by removing the generated overlap?
-             # A straightforward intersection removal would move the edge however.
+            # A straightforward intersection removal would move the edge however.
 
             def add_exaggerated_parts(geom: Polygon) -> Polygon:
                 intersecting_geoms = thin_sections.loc[
