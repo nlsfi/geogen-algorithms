@@ -119,12 +119,15 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
         copy = data.copy()
 
-        gdf = copy.loc[
-            ~(
-                (copy[self.building_filter_column].isin(self.classes_for_filtering))
-                & (copy.geometry.area > self.building_size_filter_threshold)
-            )
-        ]
+        if self.classes_for_filtering:
+            gdf = copy.loc[
+                ~(
+                    (copy[self.building_filter_column].isin(self.classes_for_filtering))
+                    & (copy.geometry.area > self.building_size_filter_threshold)
+                )
+            ]
+        else:
+            gdf = copy
 
         gdf.geometry = gdf.simplify(self.buildings_simplify_tolerance)
         gdf = GeoDataFrame(
