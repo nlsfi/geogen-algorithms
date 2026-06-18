@@ -4,18 +4,30 @@
 #
 #  SPDX-License-Identifier: MIT
 from collections.abc import Hashable
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 from geopandas import GeoDataFrame, overlay
-from pandas import Series
-from shapely import MultiLineString, concave_hull, convex_hull
-from shapely.geometry import LineString, Polygon
+from pandas import Series, cut
+from pygeoops import centerline
+from shapely import MultiLineString, concave_hull, convex_hull, union_all
+from shapely.geometry import LineString, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import linemerge, nearest_points, split
 
+from geogenalg.continuity import cull_extraneous_branches
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import explode_line, segment_direction
-from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
+from geogenalg.core.geometry import (
+    angle_between_two_segments,
+    angle_difference,
+    ensure_geoms,
+    explode_line,
+    line_average_direction,
+    remove_holes,
+    scale_line_to_length,
+    segment_direction,
+)
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -588,3 +600,265 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
                 gdf.loc[idx, geometry_group_column] = i
 
     return gdf
+
+
+def polygonize_parallel_lines(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+) -> GeoDataFrame:
+    gdf = input_gdf.copy()
+    gdf.geometry = gdf.geometry.normalize()
+    polys_for_lines = gdf.union_all()
+
+    segments = gdf.geometry.apply(explode_line).explode()
+    hulls = []
+    for geom in segments:
+        parallel_check = geom.buffer(
+            parallel_distance, join_style="mitre", cap_style="flat"
+        )
+
+        direction = segment_direction(geom)
+        intersection = polys_for_lines.intersection(parallel_check)
+
+        if not isinstance(intersection, MultiLineString | LineString):
+            raise NotImplementedError
+
+        intersection = MultiLineString(
+            [
+                line
+                for line in ensure_geoms(intersection)
+                if angle_difference(line_average_direction(line), direction) < 15
+            ]
+        )
+
+        if intersection.is_empty:
+            continue
+
+        polygonized_lines = convex_hull(intersection)
+
+        if not isinstance(polygonized_lines, Polygon):
+            continue
+
+        hulls.append(polygonized_lines)
+
+    polygonized_lines = union_all(hulls)
+    GeoDataFrame(geometry=[polygonized_lines], crs=input_gdf.crs).to_file(
+        "hull_before.gpkg"
+    )
+    polygonized_lines = remove_holes(
+        polygonized_lines,
+        area_threshold=1000,
+    )
+    polygonized_lines = polygonized_lines.buffer(parallel_distance / 10)
+    polygonized_lines = polygonized_lines.buffer(-(parallel_distance / 10))
+    polygonized_lines = remove_holes(
+        polygonized_lines,
+        area_threshold=1000,
+    )
+
+    GeoDataFrame(geometry=[polygonized_lines], crs=input_gdf.crs).to_file(
+        "hull_cleaned.gpkg"
+    )
+    return cast(
+        "GeoDataFrame",
+        GeoDataFrame(geometry=[polygonized_lines], crs=input_gdf.crs).explode(),
+    )
+
+
+def split_polygons_to_sections_on_approximate_width(
+    input_gdf: GeoDataFrame,
+    width_bins: list[float],
+    width_scan_precision: float,
+    direction_precision: float = 45,
+) -> GeoDataFrame:
+    gdf = input_gdf.copy()
+    centerlines_gdf = GeoDataFrame(
+        geometry=gdf.geometry.segmentize(1).apply(
+            centerline, simplifytolerance=0.5, extend=False
+        ),
+        crs=gdf.crs,
+    )
+    centerlines_gdf.to_file("centerline_before.gpkg")
+
+    centerlines_gdf.geometry = centerlines_gdf.geometry.apply(cull_extraneous_branches)
+    centerlines_gdf = centerlines_gdf.loc[~centerlines_gdf.geometry.is_empty]
+
+    centerlines_gdf.to_file("centerline_after.gpkg")
+
+    gdf.geometry = gdf.geometry.apply(
+        width_lines,
+        check_distance=width_scan_precision,
+        allowed_direction_difference=20,
+    )
+    gdf = gdf.explode()
+
+    gdf.to_file("width_lines.gpkg")
+
+    labels = []
+    for i in range(len(width_bins) - 1):
+        current = width_bins[i]
+        next = width_bins[i + 1] if i < len(width_bins) - 2 else None
+
+        if next:
+            labels.append(f"{current} - {next}")
+        else:
+            labels.append(f"{current} -")
+
+    gdf["_width_class"] = cut(
+        gdf.geometry.length,
+        width_bins,
+        labels=labels,
+    )
+    gdf.geometry = gdf.geometry.buffer(3)
+    gdf = gdf.dissolve("_width_class", as_index=False)
+
+    # Start from widest
+    for i, feature in reversed(list(gdf.iterrows())[1:]):
+        feature_geom = feature[gdf.geometry.name]
+
+        lower_classes = gdf.loc[gdf["_width_class"] < feature["_width_class"]]
+        new_geom = feature_geom.difference(lower_classes.geometry.union_all())
+
+        gdf.at[i, gdf.geometry.name] = new_geom
+
+    gdf = gdf.explode().reset_index(drop=True)
+    gdf.geometry = gdf.geometry.intersection(input_gdf.union_all())
+    uncovered = input_gdf.union_all().difference(gdf.union_all())
+    uncovered_gdf = (
+        GeoDataFrame(geometry=[uncovered], crs=gdf.crs).explode().reset_index(drop=True)
+    )
+
+    uncovered_gdf.to_file("uncovered_gdf.gpkg")
+
+    gdf.to_file("test_before.gpkg")
+
+    join = uncovered_gdf.sjoin(gdf)
+    join.groupby(level=0)
+    join = join.sort_values("_width_class", ascending=False)
+    join = join.loc[~join.index.duplicated(keep="first")]
+    uncovered_gdf = join.drop("index_right", axis=1)
+
+    gdf = combine_gdfs([gdf, uncovered_gdf])
+
+    gdf = gdf.dissolve("_width_class", as_index=False).explode().reset_index(drop=True)
+
+    gdf["centerline"] = gdf.geometry.apply(
+        lambda geom: centerlines_gdf.union_all().intersection(geom)
+    )
+    gdf["centerline_length_inside"] = gdf["centerline"].length
+    gdf["approximate_direction"] = gdf.geometry.apply(
+        lambda geom: line_average_direction(
+            centerlines_gdf.union_all().intersection(geom)
+        )
+    )
+
+    def angle_fix(angle: float) -> float:
+        angle %= 360
+        return angle if angle <= 180 else 360 - angle
+
+    gdf["approximate_direction"] = gdf["approximate_direction"].apply(
+        lambda value: angle_fix(
+            direction_precision * round(value / direction_precision)
+        )
+    )
+
+    for _ in range(2):
+        small_ones = gdf.loc[gdf["centerline_length_inside"] < 100]
+
+        for i, feature in small_ones.iterrows():
+            feature_geom = feature[gdf.geometry.name]
+            other_features = gdf.loc[
+                (gdf.index != i)
+                & (gdf["approximate_direction"] == feature["approximate_direction"])
+                & (gdf.geometry.intersects(feature_geom))
+            ]
+
+            if other_features.empty:
+                continue
+
+            gdf.at[i, "_width_class"] = other_features["_width_class"].min()
+
+        gdf = (
+            gdf.dissolve("_width_class", as_index=False)
+            .explode()
+            .reset_index(drop=True)
+        )
+        gdf["centerline"] = gdf.geometry.apply(
+            lambda geom: centerlines_gdf.union_all().intersection(geom)
+        )
+        gdf["centerline_length_inside"] = gdf["centerline"].length
+        gdf["approximate_direction"] = gdf.geometry.apply(
+            lambda geom: line_average_direction(
+                centerlines_gdf.union_all().intersection(geom)
+            )
+        )
+        gdf["approximate_direction"] = gdf["approximate_direction"].apply(
+            lambda value: angle_fix(
+                direction_precision * round(value / direction_precision)
+            )
+        )
+
+    gdf.geometry = gdf.geometry.buffer(0.1).buffer(-0.1).buffer(-0.1).buffer(0.1)
+
+    return gdf
+
+
+def width_lines(
+    geom: Polygon,
+    check_distance: float,
+    allowed_direction_difference: float,
+) -> MultiPolygon | Polygon:
+    # FIXME: with the current approach vis-a-vis railroads, centerline is formed twice
+    center_line = centerline(
+        geom.segmentize(1),
+        simplifytolerance=0.5,
+    )
+    center_line = cull_extraneous_branches(center_line).segmentize(check_distance)
+    center_line = explode_line(center_line)
+
+    # TODO: this forms lines with a quite similar shape as voronoi polygons
+    # (makes sense since voronois are used to create the centerline). But maybe
+    # it's worth investigating if the point of this function could be achieved
+    # with the voronoi diagram, as this approach is extremely, horribly
+    # inefficient
+
+    width_lines = []
+    for segment in ensure_geoms(center_line):
+        scaled = scale_line_to_length(
+            segment,
+            100000,
+        )
+
+        split_geom = GeoDataFrame(
+            geometry=[
+                split(
+                    geom.boundary,
+                    scaled,
+                ),
+            ],
+        ).explode(reset_index=True)
+
+        if split_geom.shape[0] < 2:
+            continue
+
+        centroid = segment.centroid
+
+        split_geom["dist"] = split_geom.geometry.distance(segment.centroid)
+        split_geom = split_geom.sort_values("dist")
+
+        line_1 = LineString(
+            nearest_points(split_geom.geometry.iloc[0], centroid),
+        )
+
+        line_2 = LineString(
+            nearest_points(centroid, split_geom.geometry.iloc[1]),
+        )
+
+        if angle_between_two_segments(line_1, line_2) > allowed_direction_difference:
+            continue
+
+        width_line = linemerge((line_1, line_2))
+
+        width_lines.append(width_line)
+
+    return MultiLineString(width_lines)

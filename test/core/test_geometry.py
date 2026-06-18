@@ -40,6 +40,7 @@ from geogenalg.core.exceptions import (
 from geogenalg.core.geometry import (
     Dimensions,
     LineExtendFrom,
+    OrientedEnvelopeSides,
     add_topological_point,
     add_topological_points,
     assign_nearest_z,
@@ -52,6 +53,7 @@ from geogenalg.core.geometry import (
     explode_line,
     extend_line_by,
     extend_line_to_nearest,
+    extend_line_to_nearest_directionally,
     extract_interior_rings,
     extract_interior_rings_gdf,
     get_topological_points,
@@ -61,6 +63,7 @@ from geogenalg.core.geometry import (
     mean_z,
     move_to_point,
     oriented_envelope_dimensions,
+    oriented_envelope_sides,
     perforate_polygon_with_gdf_exteriors,
     point_on_line,
     polygon_rings_to_multilinestring,
@@ -2172,6 +2175,24 @@ def test_extend_line_by_raises():
             2,
             LineString([[0, 0, 1], [1, 0, 2], [1, 1, 2]]),
         ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(1, 1),
+            -1,
+            LineString([[0, 0], [1, 0], [1, 1]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(1, 1),
+            -2,
+            LineString([[0, 0], [1, 1], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(1, 1),
+            -3,
+            LineString([[1, 1], [0, 0], [1, 0]]),
+        ),
     ],
     ids=[
         "one_segment",
@@ -2182,6 +2203,9 @@ def test_extend_line_by_raises():
         "line_has_z_vertex_does_not",
         "line_has_z_vertex_does_not_start",
         "line_has_z_vertex_does_not_end",
+        "insert_with_negative_index",
+        "insert_with_negative_index_2",
+        "insert_with_negative_index_3",
     ],
 )
 def test_insert_vertex(
@@ -2834,3 +2858,236 @@ def test_split_line_at_distances(
             expected_geom,
             tolerance=1e-9,
         )
+
+
+@pytest.mark.parametrize(
+    (
+        "geom",
+        "expected_sides",
+    ),
+    [
+        (
+            box(0, 0, 1, 3),
+            OrientedEnvelopeSides(
+                short_first=LineString(
+                    [
+                        [0, 3],
+                        [1, 3],
+                    ]
+                ),
+                short_second=LineString(
+                    [
+                        [1, 0],
+                        [0, 0],
+                    ]
+                ),
+                long_first=LineString(
+                    [
+                        [0, 0],
+                        [0, 3],
+                    ]
+                ),
+                long_second=LineString(
+                    [
+                        [1, 3],
+                        [1, 0],
+                    ]
+                ),
+            ),
+        ),
+        (
+            box(0, 0, 1, 1),
+            OrientedEnvelopeSides(
+                short_first=LineString(
+                    [
+                        [0, 0],
+                        [0, 1],
+                    ]
+                ),
+                short_second=LineString(
+                    [
+                        [0, 1],
+                        [1, 1],
+                    ]
+                ),
+                long_first=LineString(
+                    [
+                        [1, 1],
+                        [1, 0],
+                    ]
+                ),
+                long_second=LineString(
+                    [
+                        [1, 0],
+                        [0, 0],
+                    ]
+                ),
+            ),
+        ),
+    ],
+    ids=[
+        "rectangle",
+        "square",
+    ],
+)
+def test_oriented_envelope_sides(
+    geom: BaseGeometry,
+    expected_sides: OrientedEnvelopeSides,
+):
+    assert oriented_envelope_sides(geom) == expected_sides
+
+
+@pytest.mark.parametrize(
+    (
+        "input_line",
+        "extend_to",
+        "extend_from",
+        "length_tolerance",
+        "search_angle",
+        "expected_line",
+    ),
+    [
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(5, 0),
+            LineExtendFrom.END,
+            40,
+            10,
+            LineString(
+                [
+                    [0, 0],
+                    [1, 0],
+                    [2, 0],
+                    [5, 0],
+                ]
+            ),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(5, 0),
+            LineExtendFrom.END,
+            2,
+            10,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(-5, 0),
+            LineExtendFrom.START,
+            10,
+            10,
+            LineString([[-5, 0], [0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(-5, 0),
+            LineExtendFrom.START,
+            2,
+            10,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(-5, 0.25),
+            LineExtendFrom.START,
+            10,
+            10,
+            LineString([[-5, 0.25], [0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(-5, 1),
+            LineExtendFrom.START,
+            10,
+            10,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(5, 0.25),
+            LineExtendFrom.END,
+            10,
+            10,
+            LineString(
+                [
+                    [0, 0],
+                    [1, 0],
+                    [2, 0],
+                    [5, 0.25],
+                ]
+            ),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(5, 1),
+            LineExtendFrom.END,
+            10,
+            10,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            MultiPoint([Point(5, 0), Point(-5, 0)]),
+            LineExtendFrom.BOTH,
+            10,
+            10,
+            LineString([[-5, 0], [0, 0], [1, 0], [2, 0], [5, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            MultiPoint([Point(5, 1), Point(-5, 0)]),
+            LineExtendFrom.BOTH,
+            10,
+            10,
+            LineString([[-5, 0], [0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            MultiPoint([Point(5, 0), Point(-5, 1)]),
+            LineExtendFrom.BOTH,
+            10,
+            10,
+            LineString([[0, 0], [1, 0], [2, 0], [5, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            MultiPoint([Point(5, 1), Point(-5, 1)]),
+            LineExtendFrom.BOTH,
+            10,
+            45,
+            LineString([[-5, 1], [0, 0], [1, 0], [2, 0], [5, 1]]),
+        ),
+    ],
+    ids=[
+        "extends_from_end",
+        "does_not_extend_from_end_low_tolerance",
+        "extends_from_start",
+        "does_not_extend_from_start_low_tolerance",
+        "extend_from_start_not_directly_in_line",
+        "does_not_extend_from_start_not_directly_in_line",
+        "extend_from_end_not_directly_in_line",
+        "does_not_extend_from_end_not_directly_in_line",
+        "extends_from_both",
+        "try_to_extend_from_both_but_only_start_in_triangle",
+        "try_to_extend_from_both_but_only_end_in_triangle",
+        "search_angle_parameter",
+    ],
+)
+def test_extend_line_to_nearest_directionally(
+    input_line: LineString,
+    extend_to: BaseGeometry,
+    extend_from: LineExtendFrom,
+    length_tolerance: float,
+    search_angle: float,
+    expected_line: LineString,
+):
+    assert (
+        extend_line_to_nearest_directionally(
+            input_line,
+            extend_to,
+            extend_from,
+            length_tolerance,
+            search_angle,
+        )
+        == expected_line
+    )

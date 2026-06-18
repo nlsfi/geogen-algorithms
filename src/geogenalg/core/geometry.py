@@ -7,13 +7,13 @@ from collections.abc import Callable, Iterable
 from copy import deepcopy
 from enum import Enum
 from itertools import chain, pairwise
-from math import atan2, degrees, isclose, pi, sqrt
+from math import atan2, degrees, isclose
 from statistics import mean
 from typing import Literal, NamedTuple
 from warnings import warn
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import array, column_stack, ndarray, vstack  # noqa: SC200
+from numpy import acos, array, column_stack, dot, ndarray, vstack  # noqa: SC200
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -26,8 +26,12 @@ from shapely import (
     Polygon,
     area,
     count_coordinates,
+    distance,
+    extract_unique_points,
     force_2d,
     get_coordinates,
+    get_num_coordinates,
+    get_point,
     length,
     polygonize,
     remove_repeated_points,
@@ -37,7 +41,7 @@ from shapely.affinity import rotate, scale, translate
 from shapely.coords import CoordinateSequence
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
-from shapely.ops import linemerge, nearest_points, split
+from shapely.ops import linemerge, nearest_points, split, substring
 from shapelysmooth import catmull_rom_smooth
 
 from geogenalg.core.exceptions import (
@@ -78,6 +82,37 @@ class Dimensions(NamedTuple):
 
     width: float
     height: float
+
+
+class OrientedEnvelopeSides(NamedTuple):
+    short_first: LineString
+    short_second: LineString
+    long_first: LineString
+    long_second: LineString
+
+
+def ensure_geoms(geom: BaseGeometry) -> list[BaseGeometry]:
+    # FIXME: test
+    if isinstance(geom, BaseMultipartGeometry):
+        return list(geom.geoms)
+
+    return [geom]
+
+
+def _modify_geometry_and_handle_multigeometries(
+    geom: BaseGeometry,
+    func: Callable[[BaseGeometry], BaseGeometry],
+) -> BaseGeometry:
+    if isinstance(geom, GeometryCollection):
+        msg = "Not implemented for GeometryCollection"
+        raise NotImplementedError(msg)
+
+    if isinstance(geom, BaseMultipartGeometry):
+        return type(geom)([func(part) for part in geom.geoms])
+
+    return type(geom)(
+        func(geom),
+    )
 
 
 def chaikin_smooth_skip_coords(
@@ -1055,7 +1090,11 @@ def remove_line_segments_at_wide_sections(
     return result
 
 
-def segment_direction(segment: LineString) -> float:
+def segment_direction(
+    segment: LineString,
+    *,
+    unit: Literal["degrees", "radians"] = "degrees",
+) -> float:
     """Calculate the direction of a two-point LineString relative to north.
 
     Calculation is done in the Cartesian plane.
@@ -1084,20 +1123,14 @@ def segment_direction(segment: LineString) -> float:
         msg = "Input geometry must have two vertexes."
         raise GeometryOperationError(msg)
 
-    dx = segment.coords[0][0] - segment.coords[1][0]
-    dy = segment.coords[0][1] - segment.coords[1][1]
+    # TODO: bring back the old thing and make this to a separate function
 
-    if dx == 0 and dy == 0:
-        msg = "Segment has duplicate vertexes."
-        raise GeometryOperationError(msg)
+    vertex_1 = segment.coords[0]
+    vertex_2 = segment.coords[1]
 
-    m = sqrt(dx**2 + dy**2)
-    direction = atan2(dx / m, dy / m)
+    angle = atan2(vertex_2[1] - vertex_1[1], vertex_2[0] - vertex_1[0])
 
-    if direction < 0:
-        return degrees(direction + 2 * pi)
-
-    return degrees(direction)
+    return degrees(angle) % 180 if unit == "degrees" else angle
 
 
 def equalize_z(  # noqa: C901, PLR0911
@@ -1374,14 +1407,16 @@ def insert_vertex(
 
     vertex_as_tuple = vertex.coords[0] if isinstance(vertex, Point) else vertex
 
+    index_to_insert = index if index >= 0 else len(coords) - (abs(index) - 1)
+
     vertex_has_z = len(vertex_as_tuple) == 3  # noqa: PLR2004
     if geom.has_z:
         z = vertex_as_tuple[2] if vertex_has_z else _interpolate_z()
 
-        coords.insert(index, (vertex_as_tuple[0], vertex_as_tuple[1], z))
+        coords.insert(index_to_insert, (vertex_as_tuple[0], vertex_as_tuple[1], z))
     else:
         coords.insert(
-            index,
+            index_to_insert,
             (
                 vertex_as_tuple[0],
                 vertex_as_tuple[1],
@@ -1772,3 +1807,254 @@ def split_line_at_distances(
         result_segments.append(LineString(current_coords))
 
     return result_segments
+
+
+def sinuosity(line: LineString) -> float:
+    # FIXME: unit test
+
+    length = line.length
+    if length == 0:
+        return 0.0
+
+    straight_distance = distance(
+        get_point(line, 0),
+        get_point(line, -1),
+    )
+
+    if straight_distance == 0:
+        return float("inf")
+
+    return length / straight_distance
+
+
+def angle_between_two_segments(
+    a: LineString,
+    b: LineString,
+) -> float:
+    # FIXME: unit test and cleanup
+    if count_coordinates(a) != 2 or count_coordinates(b) != 2:  # noqa: PLR2004
+        msg = "Input geometries must have exactly two vertexes."
+        raise GeometryOperationError(msg)
+
+    def angle(
+        segment_a: tuple[Point, Point],
+        segment_b: tuple[Point, Point],
+    ) -> float:
+        vertex_a = (
+            (segment_a[0].x - segment_a[1].x),
+            (segment_a[0].y - segment_a[1].y),
+        )
+        vertex_b = (
+            (segment_b[0].x - segment_b[1].x),
+            (segment_b[0].y - segment_b[1].y),
+        )
+
+        dot_prod = dot(vertex_a, vertex_b)
+
+        magnitude_a = dot(vertex_a, vertex_a) ** 0.5
+        magnitude_b = dot(vertex_b, vertex_b) ** 0.5
+
+        if magnitude_a == 0 or magnitude_b == 0:
+            return 0
+
+        intermediate = dot_prod / magnitude_b
+
+        if intermediate == 0:
+            return 0
+
+        angle = acos(intermediate / magnitude_a)
+
+        return degrees(angle)
+
+    return angle(
+        (Point(a.coords[0]), Point(a.coords[-1])),
+        (Point(b.coords[0]), Point(b.coords[-1])),
+    )
+
+
+def oriented_envelope_sides(geom: BaseGeometry) -> OrientedEnvelopeSides:
+    lines = list(explode_line(geom.minimum_rotated_rectangle.exterior).geoms)
+    lengths = [round(line.length, 6) for line in lines]
+
+    is_square = len(set(lengths)) == 1
+
+    if is_square:
+        return OrientedEnvelopeSides(
+            lines[0],
+            lines[1],
+            lines[2],
+            lines[3],
+        )
+
+    short = min(lengths)
+    long = max(lengths)
+
+    short_sides = [
+        line for line in lines if isclose(line.length, short, abs_tol=1e-3, rel_tol=0)
+    ]
+    long_sides = [
+        line for line in lines if isclose(line.length, long, abs_tol=1e-3, rel_tol=0)
+    ]
+
+    return OrientedEnvelopeSides(
+        short_first=short_sides[0],
+        short_second=short_sides[1],
+        long_first=long_sides[0],
+        long_second=long_sides[1],
+    )
+
+
+def remove_holes(
+    geom: Polygon | MultiPolygon,
+    *,
+    area_threshold: float = 0.0,
+) -> Polygon | MultiPolygon:
+    if geom.is_empty:
+        return type(geom)()
+
+    return _modify_geometry_and_handle_multigeometries(
+        geom,
+        lambda poly: Polygon(
+            shell=poly.exterior,
+            holes=[
+                interior
+                for interior in poly.interiors
+                if Polygon(interior).area > area_threshold
+            ],
+        ),
+    )
+
+
+def line_average_direction(geom: LineString | MultiLineString) -> float:
+    segments = explode_line(geom).geoms
+    return (
+        mean([segment_direction(segment) for segment in segments])
+        if len(segments) > 0
+        else 0.0
+    )
+
+
+def extend_line_to_nearest_directionally(
+    line: LineString,
+    extend_to: BaseGeometry,
+    extend_from: LineExtendFrom,
+    length_tolerance: float,
+    search_angle: float = 15,
+) -> LineString:
+    if search_angle < 0 or search_angle >= 180:  # noqa: PLR2004
+        msg = "Search angle must be above zero and below 180.0"
+        raise ValueError(msg)
+
+    if extend_from == LineExtendFrom.NONE:
+        return line
+
+    if get_num_coordinates(line) < 2:  # noqa: PLR2004
+        warn("Cannot extend line with less than 2 vertices!", stacklevel=2)
+        return line
+
+    start = LineString([line.coords[1], line.coords[0]])
+    end = LineString([line.coords[-2], line.coords[-1]])
+
+    if (
+        line.coords[0] == line.coords[-1]
+    ):  # line forms a ring, can't extend without self-intersection
+        return line
+
+    actually_extend_to = (
+        extend_to if line.disjoint(extend_to) else extend_to.difference(line)
+    )
+
+    match extend_from:
+        case LineExtendFrom.BOTH:
+            segments = {
+                LineExtendFrom.START: start,
+                LineExtendFrom.END: end,
+            }
+        case LineExtendFrom.START:
+            segments = {
+                LineExtendFrom.START: start,
+            }
+        case LineExtendFrom.END:
+            segments = {
+                LineExtendFrom.END: end,
+            }
+
+    def _get_search_side(
+        _segment: LineString,
+        angle: float,
+    ) -> LineString:
+        target_x = segment.coords[1][0]
+        target_y = segment.coords[1][1]
+
+        side = rotate(
+            _segment,
+            angle,
+        )
+
+        side = scale_line_to_length(
+            side,
+            length_tolerance,
+        )
+
+        return translate(
+            side,
+            target_x - side.coords[0][0],
+            target_y - side.coords[0][1],
+        )
+
+    for end, segment in segments.items():
+        if segment.length <= 0:
+            continue
+
+        segment.coords[1][0]
+        segment.coords[1][1]
+
+        side_1 = _get_search_side(segment, search_angle / 2)
+        side_2 = _get_search_side(segment, -search_angle / 2)
+
+        # FIXME: this triangle does not necessarily extend to the length_tolerance, especially
+        # with larger search angles. in practice this is likely not a huge deal but whatever I
+        # guess I should fix it
+        triangle = Polygon(
+            [
+                side_1.coords[0],
+                side_1.coords[1],
+                side_2.coords[1],
+                side_2.coords[0],
+            ]
+        )
+
+        found_intersection = extract_unique_points(
+            triangle.intersection(actually_extend_to)
+        )
+
+        if found_intersection.is_empty:
+            continue
+
+        _, point = nearest_points(segment, found_intersection)
+
+        line = insert_vertex(
+            line,
+            point,
+            end.value,
+        )
+
+    return line
+
+
+def angle_difference(a: float, b: float) -> float:
+    return abs((a - b + 180) % 360 - 180)
+
+
+def split_line_to_equal_lengths(line: LineString, length: float) -> MultiLineString:
+    line_length = line.length
+
+    substrings = []
+    start = 0.0
+
+    while start < line_length:
+        end = min(start + length, line_length)
+        substrings.append(substring(line, start, end))
+        start = end
+
+    return MultiLineString(substrings)
