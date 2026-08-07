@@ -9,12 +9,26 @@ from typing import Literal
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
-from shapely import MultiLineString, concave_hull, convex_hull
-from shapely.geometry import LineString, Polygon
+from shapely import (
+    BufferJoinStyle,
+    MultiLineString,
+    concave_hull,
+    convex_hull,
+    union_all,
+)
+from shapely.geometry import GeometryCollection, LineString, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import explode_line, segment_direction
+from geogenalg.core.geometry import (
+    angle_difference,
+    ensure_geoms,
+    explode_line,
+    line_mean_direction,
+    remove_holes,
+    segment_bearing,
+    segment_direction,
+)
 from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
@@ -132,7 +146,7 @@ def flag_parallel_lines(
     gdf = gdf.explode().reset_index(drop=True)
 
     # Normalize so that comparing the direction of segments later on is consistent
-    gdf[column_direction] = Series(gdf.geometry.normalize().apply(segment_direction))
+    gdf[column_direction] = Series(gdf.geometry.normalize().apply(segment_bearing))
     gdf[column_parallel_check] = gdf.geometry.buffer(
         parallel_distance, cap_style="flat"
     ).buffer(0.01, cap_style="square")
@@ -588,3 +602,109 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
                 gdf.loc[idx, geometry_group_column] = i
 
     return gdf
+
+
+def polygonize_parallel_lines(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    *,
+    maximum_angle_difference: float = 15,
+    postprocessing_join_style: BufferJoinStyle
+    | Literal["round", "mitre", "bevel"] = "round",
+) -> GeoDataFrame:
+    """Turn areas with parallel lines to polygons.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame contianing LineStrings.
+        parallel_distance: Minimum distance for two lines to be considered to
+            be parallel.
+        maximum_angle_difference: Maximum allowed difference in line angle for
+            two lines to still be considered to be parallel.
+        postprocessing_join_style: Buffer join style for post-processing
+            the generated polygons.
+
+    Returns:
+    -------
+        GeoDataFrame with polygons encompassing parallel lines.
+
+    """
+    if input_gdf.empty:
+        return copy_gdf_as_empty(input_gdf)
+
+    gdf = input_gdf.copy()
+    gdf.geometry = gdf.geometry.normalize()
+    polys_for_lines = gdf.union_all()
+
+    segments = gdf.geometry.apply(explode_line).explode()
+    hulls = []
+    for geom in segments:
+        parallel_check = geom.buffer(
+            parallel_distance,
+            join_style="mitre",
+            cap_style="flat",
+        )
+
+        direction = segment_direction(geom)
+        intersection = polys_for_lines.intersection(parallel_check)
+
+        if isinstance(intersection, GeometryCollection):
+            intersection = union_all(
+                [
+                    geom
+                    for geom in intersection.geoms
+                    if geom.geom_type in {"LineString", "MultiLineString"}
+                ],
+            )
+
+        if not isinstance(intersection, MultiLineString | LineString):
+            raise NotImplementedError
+
+        intersection = MultiLineString(
+            [
+                line
+                for line in ensure_geoms(intersection)
+                if angle_difference(
+                    line_mean_direction(line),
+                    direction,
+                )
+                < maximum_angle_difference
+            ]
+        )
+
+        if intersection.is_empty:
+            continue
+
+        polygonized_lines = convex_hull(intersection)
+
+        if not isinstance(polygonized_lines, Polygon):
+            continue
+
+        hulls.append(polygonized_lines)
+
+    polygonized_lines = union_all(hulls)
+    polygonized_lines = remove_holes(
+        polygonized_lines,
+        area_threshold=1000,
+    )
+    polygonized_lines = polygonized_lines.buffer(
+        parallel_distance / 10,
+        join_style=postprocessing_join_style,
+    )
+    polygonized_lines = polygonized_lines.buffer(
+        -(parallel_distance / 10),
+        join_style=postprocessing_join_style,
+    )
+    polygonized_lines = remove_holes(
+        polygonized_lines,
+        area_threshold=1000,
+    )
+
+    if polygonized_lines.is_empty:
+        return copy_gdf_as_empty(input_gdf)
+
+    return (
+        GeoDataFrame(geometry=[polygonized_lines], crs=input_gdf.crs)
+        .explode()
+        .reset_index(drop=True)
+    )

@@ -99,6 +99,7 @@ class GeneralizePowerLines(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
+        # TODO: refactor to use polygonize_parallel_lines
         fences = reference_data[self.reference_key_fences]
         substations = reference_data[self.reference_key_substations]
 

@@ -350,7 +350,7 @@ requires-dist = [
     { name = "geopandas", specifier = "==1.1.2" },
     { name = "networkx", specifier = "==3.4.2" },
     { name = "pydantic", specifier = ">=2.13.3" },
-    { name = "pygeoops", specifier = "==0.4.0" },
+    { name = "pygeoops", specifier = "==0.6.0" },
     { name = "scikit-learn", specifier = "==1.6.1" },
     { name = "shapely", specifier = "==2.1.2" },
     { name = "shapelysmooth", specifier = "==0.2.1" },
@@ -1005,16 +1005,18 @@ wheels = [
 
 [[package]]
 name = "pygeoops"
-version = "0.4.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "geopandas" },
+    { name = "numpy" },
+    { name = "pyproj" },
     { name = "shapely" },
     { name = "topojson" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/b5/d0c2fce9baf643b544ac5c5919338d338126e48a112f4de96c16b89ce7be/pygeoops-0.4.0.tar.gz", hash = "sha256:300dcc52ec09718841b79086b3f1dcda514c2c0b25171af764c3be724f22dbf1", size = 41365, upload-time = "2023-11-24T12:50:02.386Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/a9/eb105f6a5a5863c70a1d32e88e4e7b4e53403b8810e13a545064d0be0fb7/pygeoops-0.6.0.tar.gz", hash = "sha256:062282752fd6c6f1255fb6b31c702379b1466bdb0fd2579b08d21496df35ac82", size = 55504, upload-time = "2025-11-02T17:35:55.138Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/3e/2b586e3476f031bf8f9b9d7a3a6bfb42e485daf2bf3a868d45b5c99a7c38/pygeoops-0.4.0-py3-none-any.whl", hash = "sha256:8edc533f011349b52ee68e023aa00a3b8928dc973172e60b092b6329e4c96af8", size = 29317, upload-time = "2023-11-24T12:50:00.407Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/16/bb033060a00fe6c2a68c6f0c8c757c55cea4b4854b19dc5128c33e9f1266/pygeoops-0.6.0-py3-none-any.whl", hash = "sha256:570d6a1e2252801d3b8fba40f6b63326ea24f130e71ae37138940a35c02675d8", size = 36860, upload-time = "2025-11-02T17:35:54.044Z" },
 ]
 
 [[package]]

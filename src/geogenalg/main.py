@@ -18,6 +18,7 @@ from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
 from geogenalg.application.generalize_conservation_areas import (
     GeneralizeConservationAreas,
 )
+from geogenalg.application.generalize_railroads import GeneralizeRailroads
 
 try:
     import typer
@@ -453,6 +454,7 @@ def build_app() -> None:
         "building_areas": GeneralizeBuildingAreas,
         "dissolve_polygons": DissolvePolygons,
         "conservation_areas": GeneralizeConservationAreas,
+        "railroads": GeneralizeRailroads,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -519,6 +521,10 @@ def build_app() -> None:
             frozenset[str]: TransformedTypeInformation(
                 transformed_type=list[str],
                 custom_default=frozenset(),
+                extra_parse_help="Can be specified multiple times.",
+            ),
+            frozenset[int]: TransformedTypeInformation(
+                transformed_type=list[int],
                 extra_parse_help="Can be specified multiple times.",
             ),
         }

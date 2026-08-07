@@ -7,10 +7,12 @@ from collections import defaultdict
 from collections.abc import Callable
 from itertools import starmap
 from typing import Literal, cast
+from warnings import warn
 
 from geopandas import GeoDataFrame
+from networkx.classes.graph import Graph
 from pandas import Series
-from shapely import force_2d
+from shapely import force_2d, get_point
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
@@ -455,11 +457,15 @@ def flag_connections(
     gdf[end_connected_column] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[-1]))
     )
-    gdf[start_connected_column] = gdf[start_connected_column].apply(
-        lambda geom: geom in topological_points,
+    gdf[start_connected_column] = Series(
+        gdf[start_connected_column].apply(
+            lambda geom: geom in topological_points,
+        )
     )
-    gdf[end_connected_column] = gdf[end_connected_column].apply(
-        lambda geom: geom in topological_points,
+    gdf[end_connected_column] = Series(
+        gdf[end_connected_column].apply(
+            lambda geom: geom in topological_points,
+        )
     )
 
     return gdf
@@ -502,10 +508,12 @@ def flag_connections_to_reference(
     gdf = input_gdf.copy()
     gdf[start_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[0]))
     gdf[end_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[-1]))
-    gdf[start_connected_column] = gdf[start_connected_column].intersects(
-        reference_union
+    gdf[start_connected_column] = Series(
+        gdf[start_connected_column].intersects(reference_union)
     )
-    gdf[end_connected_column] = gdf[end_connected_column].intersects(reference_union)
+    gdf[end_connected_column] = Series(
+        gdf[end_connected_column].intersects(reference_union)
+    )
 
     return gdf
 
@@ -829,10 +837,10 @@ def _get_merged_line_connections(
         end_connected_column="connected_to_network_end",
     )
 
-    merged["start_connected"] = (
+    merged["start_connected"] = Series(
         merged["connected_to_self_start"] | merged["connected_to_network_start"]
     )
-    merged["end_connected"] = (
+    merged["end_connected"] = Series(
         merged["connected_to_self_end"] | merged["connected_to_network_end"]
     )
 
@@ -841,7 +849,7 @@ def _get_merged_line_connections(
 
 def add_contiguous_lines_information(  # noqa: PLR0913
     input_gdf: GeoDataFrame,
-    reference_network: GeoDataFrame,
+    reference_network: GeoDataFrame | None = None,
     *,
     line_type_column: str | None = None,
     length_column: str = "contiguous_length",
@@ -870,6 +878,9 @@ def add_contiguous_lines_information(  # noqa: PLR0913
         Input GeoDataFrame with boolean Series added.
 
     """
+    if reference_network is None:
+        reference_network = GeoDataFrame(geometry=[], crs=input_gdf.crs)
+
     gdf = cast("GeoDataFrame", input_gdf.copy())
 
     def _get_length(line: LineString, merged: GeoDataFrame) -> float:
@@ -885,6 +896,8 @@ def add_contiguous_lines_information(  # noqa: PLR0913
         return merged_lines.iloc[[0]].geometry.length.to_numpy()[0]
 
     def _flag(filtered_gdf: GeoDataFrame, reference_data: GeoDataFrame) -> GeoDataFrame:
+        if filtered_gdf.empty:
+            return filtered_gdf
         merged = _get_merged_line_connections(gdf, reference_data)
         merged["is_deadend"] = merged["start_connected"] != merged["end_connected"]
         merged["is_disconnected"] = (~merged["start_connected"]) & (
@@ -1044,7 +1057,15 @@ def count_connections(
         GeoDataFrame with Series added, telling how many connections each line end is
         connected to.
 
+    Raises:
+    ------
+        ValueError: If there are duplicate indices in the input GeoDataFrame.
+
     """
+    if input_gdf.index.has_duplicates:
+        msg = "Input GeoDataFrame cannot have duplicate indices."
+        raise ValueError(msg)
+
     start = input_gdf.geometry.apply(lambda geom: Point(geom.coords[0])).to_frame()
     end = input_gdf.geometry.apply(lambda geom: Point(geom.coords[-1])).to_frame()
 
@@ -1064,3 +1085,69 @@ def count_connections(
     gdf[end_connections_column] = end_count[0] - 1
 
     return gdf
+
+
+def gdf_to_networkx_graph(
+    input_gdf: GeoDataFrame,
+    *,
+    extra_data_to_add: list[str] | str | None = None,
+) -> Graph:
+    """Convert GeoDataFrame to networkx Graph.
+
+    By default saves the following data to graph edges:
+        - "idx": index of feature in GeoDataFrame.
+        - "geometry": LineString geometry.
+        - "length": length of LineString geometry.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame to create Graph from.
+        extra_data_to_add: Column name(s) to add extra data from.
+
+    Returns:
+    -------
+        Constructed graph.
+
+    """
+    if extra_data_to_add is None:
+        extra_data_to_add = []
+
+    if isinstance(extra_data_to_add, str):
+        extra_data_to_add = [extra_data_to_add]
+
+    graph = Graph()
+
+    for idx, feature in input_gdf.iterrows():
+        geometry = feature[input_gdf.geometry.name]
+
+        if len(geometry.coords) < 2:  # noqa: PLR2004
+            warn(
+                "Skipping line with less than two vertices",
+                UserWarning,
+                stacklevel=2,
+            )
+            continue
+
+        start_point = get_point(force_2d(geometry), 0)
+        end_point = get_point(force_2d(geometry), -1)
+        start = (round(start_point.x, 3), round(start_point.y, 3))
+        end = (round(end_point.x, 3), round(end_point.y, 3))
+
+        data = {
+            "geometry": geometry,
+            "idx": idx,
+            "length": geometry.length,
+        }
+
+        for column in extra_data_to_add:
+            if column in data:
+                continue
+            data[column] = feature[column]
+
+        graph.add_edge(
+            start,
+            end,
+            **data,
+        )
+
+    return graph

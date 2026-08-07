@@ -7,13 +7,13 @@ from collections.abc import Callable, Iterable
 from copy import deepcopy
 from enum import Enum
 from itertools import chain, pairwise
-from math import atan2, degrees, isclose, pi, sqrt
+from math import atan2, degrees, isclose
 from statistics import mean
 from typing import Literal, NamedTuple
 from warnings import warn
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import array, column_stack, ndarray, vstack  # noqa: SC200
+from numpy import array, column_stack, ndarray, pi, sqrt, vstack  # noqa: SC200
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -26,8 +26,10 @@ from shapely import (
     Polygon,
     area,
     count_coordinates,
+    distance,
     force_2d,
     get_coordinates,
+    get_point,
     length,
     polygonize,
     remove_repeated_points,
@@ -78,6 +80,46 @@ class Dimensions(NamedTuple):
 
     width: float
     height: float
+
+
+def ensure_geoms(geom: BaseGeometry) -> list[BaseGeometry]:
+    """Return list of geometry parts, even for single geometries.
+
+    This is a convenience function to allow f.e. iterating over geometry parts
+    without explicitly checking if the input is a single or multigeometry.
+
+    Returns:
+    -------
+        All geometries in a list.
+
+    Note:
+    ----
+        Output is a Python list, not a GeometrySequence.
+
+        If https://github.com/shapely/shapely/pull/1965 gets merged, this
+        is subject for removal.
+
+    """
+    if isinstance(geom, BaseMultipartGeometry):
+        return list(geom.geoms)
+
+    return [geom]
+
+
+def _modify_geometry_and_handle_multigeometries(
+    geom: BaseGeometry,
+    func: Callable[[BaseGeometry], BaseGeometry],
+) -> BaseGeometry:
+    if isinstance(geom, GeometryCollection):
+        msg = "Not implemented for GeometryCollection"
+        raise NotImplementedError(msg)
+
+    if isinstance(geom, BaseMultipartGeometry):
+        return type(geom)([func(part) for part in geom.geoms])
+
+    return type(geom)(
+        func(geom),
+    )
 
 
 def chaikin_smooth_skip_coords(
@@ -1055,7 +1097,7 @@ def remove_line_segments_at_wide_sections(
     return result
 
 
-def segment_direction(segment: LineString) -> float:
+def segment_bearing(segment: LineString) -> float:
     """Calculate the direction of a two-point LineString relative to north.
 
     Calculation is done in the Cartesian plane.
@@ -1098,6 +1140,49 @@ def segment_direction(segment: LineString) -> float:
         return degrees(direction + 2 * pi)
 
     return degrees(direction)
+
+
+def segment_direction(
+    segment: LineString,
+    *,
+    unit: Literal["degrees", "radians"] = "degrees",
+) -> float:
+    """Calculate the direction of a two-point LineString.
+
+    Calculation is done in the Cartesian plane. The direction is normalized
+    so that segments with reversed vertex order have the same direction.
+
+    The input geometry must be a segment, i.e. a LineString consisting
+    of two vertices.
+
+    Returns
+    -------
+        The calculated direction in the given unit. The value is normalized
+        to [0, 180) degrees or [0, π) radians.
+
+    Raises
+    ------
+        GeometryOperationError: If geometry does not have exactly two vertices,
+            or has two identical vertices.
+
+    """
+    if count_coordinates(segment) != 2:  # noqa: PLR2004
+        msg = "Input geometry must have two vertices."
+        raise GeometryOperationError(msg)
+
+    vertex_1 = segment.coords[0]
+    vertex_2 = segment.coords[1]
+
+    if vertex_1 == vertex_2:
+        msg = "Segment has duplicate vertices."
+        raise GeometryOperationError(msg)
+
+    angle = atan2(vertex_2[1] - vertex_1[1], vertex_2[0] - vertex_1[0])
+
+    if unit == "degrees":
+        return degrees(angle) % 180
+
+    return angle % pi
 
 
 def equalize_z(  # noqa: C901, PLR0911
@@ -1374,14 +1459,16 @@ def insert_vertex(
 
     vertex_as_tuple = vertex.coords[0] if isinstance(vertex, Point) else vertex
 
+    index_to_insert = index if index >= 0 else len(coords) - (abs(index) - 1)
+
     vertex_has_z = len(vertex_as_tuple) == 3  # noqa: PLR2004
     if geom.has_z:
         z = vertex_as_tuple[2] if vertex_has_z else _interpolate_z()
 
-        coords.insert(index, (vertex_as_tuple[0], vertex_as_tuple[1], z))
+        coords.insert(index_to_insert, (vertex_as_tuple[0], vertex_as_tuple[1], z))
     else:
         coords.insert(
-            index,
+            index_to_insert,
             (
                 vertex_as_tuple[0],
                 vertex_as_tuple[1],
@@ -1772,3 +1859,103 @@ def split_line_at_distances(
         result_segments.append(LineString(current_coords))
 
     return result_segments
+
+
+def sinuosity(line: LineString) -> float:
+    """Calculate sinuosity of linestring.
+
+    Sinuosity is the ratio of the total length of the linestring to
+    the distance between its endpoints.
+
+    Larger value represents a more winding path.
+
+    1.0 represents a perfectly straight line.
+
+    Returns
+    -------
+        Calculated sinuosity value.
+
+    """
+    length = line.length
+    if length == 0:
+        return 0.0
+
+    straight_distance = distance(
+        get_point(line, 0),
+        get_point(line, -1),
+    )
+
+    if straight_distance == 0:
+        return float("inf")
+
+    return length / straight_distance
+
+
+def remove_holes(
+    geom: Polygon | MultiPolygon,
+    *,
+    area_threshold: float = 0.0,
+) -> Polygon | MultiPolygon:
+    """Remove interior rings of a polygon.
+
+    Optionally set an area threshold to filter only small holes.
+
+    Returns
+    -------
+        (Multi)Polygon with holes removed.
+
+    """
+    if geom.is_empty:
+        return type(geom)()
+
+    return _modify_geometry_and_handle_multigeometries(
+        geom,
+        lambda poly: Polygon(
+            shell=poly.exterior,
+            holes=[
+                interior
+                for interior in poly.interiors
+                if Polygon(interior).area > area_threshold
+            ],
+        ),
+    )
+
+
+def line_mean_direction(
+    geom: LineString | MultiLineString,
+    *,
+    unit: Literal["degrees", "radians"] = "degrees",
+) -> float:
+    """Calculate mean direction of each line segment in a linestring.
+
+    Args:
+    ----
+        geom: (Multi)LineString to calculate mean direction of.
+        unit: Whether to return value in degrees or radians.
+
+    Returns:
+    -------
+        Calculated mean value.
+
+    """
+    segments = explode_line(geom).geoms
+    return (
+        mean([segment_direction(segment, unit=unit) for segment in segments])
+        if len(segments) > 0
+        else 0.0
+    )
+
+
+def angle_difference(a: float, b: float) -> float:
+    """Return the angular difference between two angle.
+
+    Inputs are in degrees. Angles are treated cyclically, such that
+    the difference between 359° and 1° is 2°.
+
+    Returns
+    -------
+        The difference between the two angles in degrees, always between 0 and
+        180.
+
+    """
+    return abs((a - b + 180) % 360 - 180)

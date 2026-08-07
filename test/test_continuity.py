@@ -4,12 +4,14 @@
 #
 #  SPDX-License-Identifier: MIT
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from geopandas.tools import overlay
+from networkx.classes.graph import Graph
 from shapely import box
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
@@ -26,6 +28,7 @@ from geogenalg.continuity import (
     flag_connections,
     flag_connections_to_reference,
     flag_polygon_centerline_connections,
+    gdf_to_networkx_graph,
     get_lines_along_reference_lines,
     get_segments_in_polygon_exteriors_but_not_in_lines,
     inspect_dead_end_candidates,
@@ -1990,3 +1993,119 @@ def test_count_connections(
         expected_gdf,
         check_like=True,
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "gdf",
+        "extra_data_to_add",
+        "expected_edges",
+    ),
+    [
+        (
+            GeoDataFrame(geometry=[]),
+            None,
+            [],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ]
+            ),
+            None,
+            [
+                (
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    {
+                        "idx": 0,
+                        "geometry": LineString([[0, 0], [1, 0]]),
+                        "length": 1.0,
+                    },
+                )
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [1, 1]]),
+                ]
+            ),
+            None,
+            [
+                (
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    {
+                        "idx": 0,
+                        "geometry": LineString([[0, 0], [1, 0]]),
+                        "length": 1.0,
+                    },
+                ),
+                (
+                    (1.0, 0.0),
+                    (1.0, 1.0),
+                    {
+                        "idx": 1,
+                        "geometry": LineString([[1, 0], [1, 1]]),
+                        "length": 1.0,
+                    },
+                ),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "dummy": ["test"],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ],
+            ),
+            "dummy",
+            [
+                (
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    {
+                        "idx": 0,
+                        "geometry": LineString([[0, 0], [1, 0]]),
+                        "dummy": "test",
+                        "length": 1.0,
+                    },
+                ),
+            ],
+        ),
+    ],
+    ids=[
+        "empty",
+        "single_line",
+        "multiple_lines",
+        "extra_data_to_add",
+    ],
+)
+def test_gdf_to_networkx_graph(
+    gdf: GeoDataFrame,
+    extra_data_to_add: list[str] | str | None,
+    expected_edges: list[
+        tuple[
+            tuple[float, float],
+            tuple[float, float],
+            dict[str, Any],
+        ]
+    ],
+):
+    graph = gdf_to_networkx_graph(gdf, extra_data_to_add=extra_data_to_add)
+
+    assert isinstance(graph, Graph)
+    assert graph.number_of_edges() == len(expected_edges)
+
+    for start, end, expected_data in expected_edges:
+        assert graph.has_edge(start, end)
+
+        edge_data = graph[start][end]
+
+        for column in expected_data:
+            assert edge_data[column] == expected_data[column]
