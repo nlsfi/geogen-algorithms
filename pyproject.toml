@@ -32,7 +32,7 @@ dependencies = [
     "geopandas==1.1.2",
     "networkx==3.4.2",
     "pydantic>=2.13.3",
-    "pygeoops==0.4.0",
+    "pygeoops==0.6.0",
     "scikit-learn==1.6.1",
     "shapely==2.1.2",
     "shapelysmooth==0.2.1",
@@ -101,11 +101,6 @@ lint = [
 [tool.ruff]
 target-version = "py312"
 line-length = 88
-# TODO: remove exclude section when railroads algorithm is refactored/reimplemented
-exclude = [
-    "src/geogenalg/application/railroads.py",
-]
-
 lint.ignore = [
     "FIX",   # flake8-fixme
     "TD002", # Missing author in TODO
@@ -187,11 +182,6 @@ spellcheck-targets = "names"
 dictionaries = "en_US,python,technical,pandas"
 select = ["SC"]
 per-file-ignores = ["test/*:SC200"]
-# TODO: remove exclude section when railroads algorithm is refactored/reimplemented
-exclude = """
-    # railroads has lots of ambiguous variable names etc
-    src/geogenalg/application/railroads.py
-"""
 
 [tool.mypy]
 python_version = "3.12"
@@ -219,10 +209,6 @@ source = ["src", "**/site-packages"]
 [tool.coverage.run]
 branch = true
 source_pkgs = ["geogenalg"]
-# TODO: remove exclude section when railroads algorithm is refactored/reimplemented
-omit = [
-    "src/geogenalg/application/railroads.py",
-]
 
 [tool.coverage.report]
 exclude_also = [

@@ -7,6 +7,8 @@ from typing import Literal
 
 from geopandas import GeoDataFrame
 
+from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
+
 
 def inherit_attributes(
     source_gdf: GeoDataFrame, target_gdf: GeoDataFrame
@@ -119,6 +121,9 @@ def inherit_attributes_from_largest(
                 intersecting_features.index.to_list(),
             )
         new_features.append(new_feature)
+
+    if not new_features:
+        return copy_gdf_as_empty(target_gdf)
 
     output = GeoDataFrame(
         new_features, geometry=target_gdf.geometry.name, crs=target_gdf.crs

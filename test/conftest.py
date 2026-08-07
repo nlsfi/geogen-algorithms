@@ -165,6 +165,10 @@ class IntegrationTest:
             msg = "Duplicate indices found in result GeoDataFrame."
             raise AssertionError(msg)
 
+        if any(test_gdfs.result.geometry.duplicated()):
+            msg = "Duplicate geometries found in result GeoDataFrame."
+            raise AssertionError(msg)
+
         # Run this first so if report saving is on you can see the result (provided
         # no errors happen during algorithm execution).
         report_env = os.environ.get("GEOGENALG_TEST_REPORT_SAVE")

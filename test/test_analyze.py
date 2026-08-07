@@ -9,6 +9,7 @@ import re
 import numpy as np
 import pytest
 from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
 from pandas.testing import assert_frame_equal
 from shapely import box
 from shapely.geometry import LineString, Point, Polygon
@@ -21,6 +22,7 @@ from geogenalg.analyze import (
     flag_parallel_lines,
     get_polygons_for_parallel_lines,
     group_geometries_by_intersections_recursively,
+    polygonize_parallel_lines,
 )
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.utility.dataframe_processing import add_columns_to_gdf
@@ -872,4 +874,158 @@ def test_group_geometries_by_intersections_recursively(
         result,
         expected,
         check_like=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "parallel_distance",
+        "maximum_angle_difference",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame(geometry=[]),
+            10,
+            15,
+            GeoDataFrame(geometry=[]),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(0, 5), (10, 5)]),
+                ],
+            ),
+            10,
+            15,
+            GeoDataFrame(
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 5],
+                            [10, 5],
+                            [10, 0],
+                            [0, 0],
+                            [0, 5],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(0, 100), (10, 100)]),
+                ],
+            ),
+            10,
+            15,
+            GeoDataFrame(
+                geometry=[],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(0, 5), (10, 5.5)]),
+                ],
+            ),
+            20,
+            1,
+            GeoDataFrame(
+                geometry=[],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(0, 5), (10, 5)]),
+                    LineString([(0, 10), (10, 10)]),
+                    LineString([(0, 12.5), (10, 12.5)]),
+                    LineString([(0, 15), (10, 16)]),
+                    LineString([(-2, 20), (40, 20)]),
+                ],
+            ),
+            10,
+            15,
+            GeoDataFrame(
+                geometry=[
+                    Polygon(
+                        [
+                            [40, 20],
+                            [10, 10],
+                            [10, 0],
+                            [0, 0],
+                            [0, 10],
+                            [-2, 20],
+                            [40, 20],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(0, 5), (10, 5)]),
+                    LineString([(0, 20), (10, 20)]),
+                    LineString([(0, 25), (10, 25)]),
+                ],
+            ),
+            10,
+            15,
+            GeoDataFrame(
+                geometry=[
+                    Polygon(
+                        [
+                            [10, 5],
+                            [10, 0],
+                            [0, 0],
+                            [0, 5],
+                            [10, 5],
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            [10, 25],
+                            [10, 20],
+                            [0, 20],
+                            [0, 25],
+                            [10, 25],
+                        ]
+                    ),
+                ],
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "parallel_lines_create_polygon",
+        "lines_too_far_apart",
+        "angle_difference_too_large",
+        "many_lines",
+        "multiple_parallel_clusters",
+    ],
+)
+def test_polygonize_parallel_lines(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    maximum_angle_difference: float,
+    expected_gdf: GeoDataFrame,
+):
+    assert_geodataframe_equal(
+        polygonize_parallel_lines(
+            input_gdf,
+            parallel_distance=parallel_distance,
+            maximum_angle_difference=maximum_angle_difference,
+            postprocessing_join_style="mitre",
+        ),
+        expected_gdf,
+        check_less_precise=True,
     )

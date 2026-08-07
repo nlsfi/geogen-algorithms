@@ -1,4 +1,5 @@
 2d
+acos
 aggfunc
 alg
 algs
@@ -16,6 +17,7 @@ bools
 cartagen
 catmull
 centerline
+centerlines
 centroid
 centroids
 chaikin
@@ -30,6 +32,7 @@ dataframe
 DBSCAN
 densify
 dest
+directionally
 docstring
 docstrings
 dtype
@@ -38,6 +41,7 @@ dy
 Expr
 fid
 fids
+func
 gdf
 gdfs
 geodataframe
@@ -62,11 +66,16 @@ linalg
 linemerge
 linestring
 loc
+multigeometries
 multilinestring
 multipolygon
+networkx
 nodata
+num
 peucker
 polygonize
+polygonized
+postprocessing
 pydantic
 pygeoops
 ramer
@@ -87,7 +96,10 @@ sqrt
 stacklevel
 starmap
 subdivs
+substring
+substrings
 testdata
+tol
 tolist
 topo
 typer

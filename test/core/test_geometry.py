@@ -11,6 +11,7 @@ from typing import Literal
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
+from numpy import isclose, pi
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 from shapely import (
@@ -42,12 +43,14 @@ from geogenalg.core.geometry import (
     LineExtendFrom,
     add_topological_point,
     add_topological_points,
+    angle_difference,
     assign_nearest_z,
     assign_z_from_attribute,
     centerline_length,
     chaikin_smooth_keep_topology,
     chaikin_smooth_skip_coords,
     elongation,
+    ensure_geoms,
     equalize_z,
     explode_line,
     extend_line_by,
@@ -57,6 +60,7 @@ from geogenalg.core.geometry import (
     get_topological_points,
     insert_vertex,
     largest_part,
+    line_mean_direction,
     lines_to_segments,
     mean_z,
     move_to_point,
@@ -65,10 +69,13 @@ from geogenalg.core.geometry import (
     point_on_line,
     polygon_rings_to_multilinestring,
     ramer_douglas_peucker_simplify_keep_coords,
+    remove_holes,
     remove_line_segments_at_wide_sections,
     remove_small_parts,
     scale_line_to_length,
+    segment_bearing,
     segment_direction,
+    sinuosity,
     smooth_around_connection_point_of_two_lines,
     smooth_around_ring_closing_vertex,
     snap_to_closest_vertex_or_segment,
@@ -1284,22 +1291,22 @@ def test_assign_z_from_attribute_multilinestring():
             Polygon(
                 shell=[
                     [0, 0],
-                    [10, 0],
-                    [10, 200],
+                    [50, 0],
+                    [50, 200],
                     [0, 200],
                     [0, 0],
                 ],
                 holes=[
                     [
-                        [1, 1],
-                        [9, 1],
-                        [9, 199],
-                        [1, 199],
-                        [1, 1],
+                        [10, 10],
+                        [40, 10],
+                        [40, 190],
+                        [10, 190],
+                        [10, 10],
                     ]
                 ],
             ),
-            416.0,
+            460.0,
             False,
         ),
         (
@@ -1331,11 +1338,11 @@ def test_assign_z_from_attribute_multilinestring():
         ),
     ],
     ids=[
-        "polygon, no holes, no exterior only",
-        "polygon, no holes, exterior only",
-        "polygon, holes, no exterior only",
-        "polygon, holes, exterior only",
-        "empty polygon",
+        "polygon_no_holes_no_exterior_only",
+        "polygon_no_holes_exterior_only",
+        "polygon_holes_no_exterior_only",
+        "polygon_holes_exterior_only",
+        "empty_polygon",
     ],
 )
 def test_centerline_length(
@@ -1645,8 +1652,8 @@ def test_remove_line_segments_at_wide_sections(
         "segment with Z",
     ],
 )
-def test_segment_direction(geom: LineString, expected: float):
-    assert segment_direction(geom) == expected
+def test_segment_bearing(geom: LineString, expected: float):
+    assert segment_bearing(geom) == expected
 
 
 @pytest.mark.parametrize(
@@ -1671,9 +1678,9 @@ def test_segment_direction(geom: LineString, expected: float):
         "duplicate",
     ],
 )
-def test_segment_direction_raises(geom: LineString, msg: str):
+def test_segment_bearing_raises(geom: LineString, msg: str):
     with pytest.raises(GeometryOperationError, match=re.escape(msg)):
-        segment_direction(geom)
+        segment_bearing(geom)
 
 
 @pytest.mark.parametrize(
@@ -2172,6 +2179,24 @@ def test_extend_line_by_raises():
             2,
             LineString([[0, 0, 1], [1, 0, 2], [1, 1, 2]]),
         ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(1, 1),
+            -1,
+            LineString([[0, 0], [1, 0], [1, 1]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(1, 1),
+            -2,
+            LineString([[0, 0], [1, 1], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            Point(1, 1),
+            -3,
+            LineString([[1, 1], [0, 0], [1, 0]]),
+        ),
     ],
     ids=[
         "one_segment",
@@ -2182,6 +2207,9 @@ def test_extend_line_by_raises():
         "line_has_z_vertex_does_not",
         "line_has_z_vertex_does_not_start",
         "line_has_z_vertex_does_not_end",
+        "insert_with_negative_index",
+        "insert_with_negative_index_2",
+        "insert_with_negative_index_3",
     ],
 )
 def test_insert_vertex(
@@ -2834,3 +2862,423 @@ def test_split_line_at_distances(
             expected_geom,
             tolerance=1e-9,
         )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_geom",
+        "expected",
+    ),
+    [
+        (
+            Point(0, 0),
+            [Point(0, 0)],
+        ),
+        (
+            MultiPoint([Point(0, 0), Point(1, 1)]),
+            [Point(0, 0), Point(1, 1)],
+        ),
+    ],
+    ids=[
+        "single",
+        "multi",
+    ],
+)
+def test_ensure_geoms(
+    input_geom: BaseGeometry,
+    expected: list[BaseGeometry],
+):
+    assert ensure_geoms(input_geom) == expected
+
+
+@pytest.mark.parametrize(
+    (
+        "input_geom",
+        "area_threshold",
+        "expected",
+    ),
+    [
+        (
+            Polygon(),
+            0.0,
+            Polygon(),
+        ),
+        (
+            MultiPolygon(),
+            0.0,
+            MultiPolygon(),
+        ),
+        (
+            box(0, 0, 1, 1),
+            0.0,
+            box(0, 0, 1, 1),
+        ),
+        (
+            MultiPolygon(
+                [
+                    box(0, 0, 1, 1),
+                    box(5, 5, 6, 6),
+                ]
+            ),
+            0.0,
+            MultiPolygon(
+                [
+                    box(0, 0, 1, 1),
+                    box(5, 5, 6, 6),
+                ]
+            ),
+        ),
+        (
+            Polygon(
+                shell=box(0, 0, 10, 10),
+                holes=[
+                    box(1, 1, 2, 2),
+                    box(4, 4, 5, 5),
+                ],
+            ),
+            0.0,
+            Polygon(shell=box(0, 0, 10, 10)),
+        ),
+        (
+            Polygon(
+                shell=box(0, 0, 10, 10),
+                holes=[
+                    box(1, 1, 2, 2),
+                    box(4, 4, 5, 5),
+                    box(6, 6, 8, 8),
+                ],
+            ),
+            1.0,
+            Polygon(
+                shell=box(0, 0, 10, 10),
+                holes=[
+                    box(6, 6, 8, 8),
+                ],
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=box(0, 0, 10, 10),
+                        holes=[
+                            box(1, 1, 2, 2),
+                            box(4, 4, 5, 5),
+                        ],
+                    ),
+                    Polygon(
+                        shell=box(20, 20, 30, 30),
+                        holes=[
+                            box(21, 21, 22, 22),
+                            box(24, 24, 25, 25),
+                        ],
+                    ),
+                ]
+            ),
+            0.0,
+            MultiPolygon(
+                [
+                    box(0, 0, 10, 10),
+                    box(20, 20, 30, 30),
+                ]
+            ),
+        ),
+        (
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=box(0, 0, 10, 10),
+                        holes=[
+                            box(1, 1, 2, 2),
+                            box(4, 4, 5, 5),
+                            box(6, 6, 8, 8),
+                        ],
+                    ),
+                    Polygon(
+                        shell=box(20, 20, 30, 30),
+                        holes=[
+                            box(21, 21, 22, 22),
+                            box(24, 24, 25, 25),
+                            box(26, 26, 28, 28),
+                        ],
+                    ),
+                ]
+            ),
+            1.0,
+            MultiPolygon(
+                [
+                    Polygon(
+                        shell=box(0, 0, 10, 10),
+                        holes=[
+                            box(6, 6, 8, 8),
+                        ],
+                    ),
+                    Polygon(
+                        shell=box(20, 20, 30, 30),
+                        holes=[
+                            box(26, 26, 28, 28),
+                        ],
+                    ),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "empty_single_polygon",
+        "empty_multi_polygon",
+        "no_holes_single_polygon",
+        "no_holes_multi_polygon",
+        "remove_all_holes_single",
+        "remove_some_holes_single",
+        "remove_all_holes_multi",
+        "remove_some_holes_multi",
+    ],
+)
+def test_remove_holes(
+    input_geom: BaseGeometry,
+    area_threshold: float,
+    expected: Polygon | MultiPolygon,
+):
+    assert remove_holes(input_geom, area_threshold=area_threshold) == expected
+
+
+@pytest.mark.parametrize(
+    (
+        "line",
+        "expected",
+    ),
+    [
+        (
+            LineString(),
+            0.0,
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            1.0,
+        ),
+        (
+            LineString([[0, 0], [1, 1], [2, 2], [3, 3]]),
+            1.0,
+        ),
+        (
+            LineString([[0, 0], [1, 0], [1, 1]]),
+            1.41421,
+        ),
+    ],
+    ids=[
+        "empty",
+        "straight_line",
+        "straight_line_multiple_segments",
+        "right_angle",
+    ],
+)
+def test_sinuosity(
+    line: LineString,
+    expected: float,
+):
+    assert isclose(sinuosity(line), expected)
+
+
+@pytest.mark.parametrize(
+    (
+        "a",
+        "b",
+        "expected",
+    ),
+    [
+        (10, 20, 10),
+        (20, 10, 10),
+        (45, 135, 90),
+        (359, 1, 2),
+        (1, 359, 2),
+        (-10, 10, 20),
+        (-170, 170, 20),
+        (720, 90, 90),
+    ],
+    ids=[
+        "simple",
+        "simple_reversed",
+        "right_angle",
+        "wraparound_forward",
+        "wraparound_reversed",
+        "negative_angle",
+        "negative_wraparound",
+        "multiple_full_turns",
+    ],
+)
+def test_angle_difference(
+    a: float,
+    b: float,
+    expected: float,
+):
+    assert angle_difference(a, b) == expected
+
+
+@pytest.mark.parametrize(
+    (
+        "a",
+        "b",
+    ),
+    [
+        (0, 1),
+        (10, 350),
+        (-45, 90),
+        (123.4, -567.8),
+    ],
+    ids=[
+        "small_difference",
+        "wraparound",
+        "negative_angle",
+        "floating_point",
+    ],
+)
+def test_angle_difference_is_symmetric(
+    a: float,
+    b: float,
+):
+    assert angle_difference(a, b) == angle_difference(b, a)
+
+
+@pytest.mark.parametrize(
+    (
+        "input_geom",
+        "unit",
+        "expected",
+    ),
+    [
+        (
+            LineString([(0, 0), (1, 0)]),
+            "degrees",
+            0.0,
+        ),
+        (
+            LineString([(0, 0), (1, 0), (1, 1)]),
+            "degrees",
+            45.0,
+        ),
+        (
+            MultiLineString(
+                [
+                    [(0, 0), (1, 0)],
+                    [(1, 0), (1, 1)],
+                ]
+            ),
+            "degrees",
+            45.0,
+        ),
+        (
+            LineString([(0, 0), (1, 0)]),
+            "radians",
+            0.0,
+        ),
+        (
+            LineString([(0, 0), (1, 0), (1, 1)]),
+            "radians",
+            pi / 4,
+        ),
+        (
+            MultiLineString(
+                [
+                    [(0, 0), (1, 0)],
+                    [(1, 0), (1, 1)],
+                ]
+            ),
+            "radians",
+            pi / 4,
+        ),
+    ],
+    ids=[
+        "linestring_degrees_horizontal",
+        "linestring_degrees_mean",
+        "multilinestring_degrees",
+        "linestring_radians_horizontal",
+        "linestring_radians_mean",
+        "multilinestring_radians",
+    ],
+)
+def test_line_mean_direction(
+    input_geom: LineString | MultiLineString,
+    unit: Literal["degrees", "radians"],
+    expected: float,
+):
+    assert isclose(line_mean_direction(input_geom, unit=unit), expected)
+
+
+@pytest.mark.parametrize(
+    (
+        "segment",
+        "unit",
+        "expected",
+    ),
+    [
+        (LineString([(0, 0), (1, 0)]), "degrees", 0),
+        (LineString([(0, 0), (0, 1)]), "degrees", 90),
+        (LineString([(0, 0), (-1, 0)]), "degrees", 0),
+        (LineString([(0, 0), (0, -1)]), "degrees", 90),
+        (LineString([(0, 0), (1, 1)]), "degrees", 45),
+        (LineString([(0, 0), (-1, 1)]), "degrees", 135),
+        (LineString([(0, 0), (-1, -1)]), "degrees", 45),
+        (LineString([(1, 0), (0, 0)]), "degrees", 0),
+        (LineString([(1, 1), (0, 0)]), "degrees", 45),
+        (LineString([(-1, 1), (0, 0)]), "degrees", 135),
+        (LineString([(0, 0), (1, 0)]), "radians", 0),
+        (LineString([(0, 0), (0, 1)]), "radians", pi / 2),
+        (LineString([(0, 0), (1, 1)]), "radians", pi / 4),
+        (LineString([(0, 0), (-1, 1)]), "radians", 3 * pi / 4),
+    ],
+    ids=[
+        "east",
+        "north",
+        "west_normalized",
+        "south_normalized",
+        "northeast",
+        "northwest",
+        "southwest_normalized",
+        "east_reversed",
+        "northeast_reversed",
+        "northwest_reversed",
+        "radians_east",
+        "radians_north",
+        "radians_northeast",
+        "radians_northwest",
+    ],
+)
+def test_segment_direction(
+    segment: LineString,
+    unit: Literal["degrees", "radians"],
+    expected: float,
+):
+    assert isclose(segment_direction(segment, unit=unit), expected)
+
+
+@pytest.mark.parametrize(
+    (
+        "segment",
+        "message",
+    ),
+    [
+        (
+            LineString(),
+            "Input geometry must have two vertices.",
+        ),
+        (
+            LineString([(0, 0), (1, 0), (2, 0)]),
+            "Input geometry must have two vertices.",
+        ),
+        (
+            LineString([(1, 1), (1, 1)]),
+            "Segment has duplicate vertices.",
+        ),
+    ],
+    ids=[
+        "empty",
+        "three_vertices",
+        "duplicate_vertices",
+    ],
+)
+def test_segment_direction_invalid_geometry(
+    segment: LineString,
+    message: str,
+):
+    with pytest.raises(GeometryOperationError, match=message):
+        segment_direction(segment)
