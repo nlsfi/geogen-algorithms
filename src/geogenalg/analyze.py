@@ -633,10 +633,14 @@ def polygonize_parallel_lines(
         return copy_gdf_as_empty(input_gdf)
 
     gdf = input_gdf.copy()
-    gdf.geometry = gdf.geometry.normalize()
     polys_for_lines = gdf.union_all()
 
     segments = gdf.geometry.apply(explode_line).explode()
+
+    # This approach works by going through each line segment in the input
+    # dataset, searching for other line segments by a buffered polygon, and if
+    # they are close enough and within the allowed angle difference, a convex
+    # hull of the lines is created.
     hulls = []
     for geom in segments:
         parallel_check = geom.buffer(
@@ -682,11 +686,16 @@ def polygonize_parallel_lines(
 
         hulls.append(polygonized_lines)
 
+    # Now that each segment is processed, combine all the results
     polygonized_lines = union_all(hulls)
+
+    # Do some post-processing by removing some of the smaller holes
     polygonized_lines = remove_holes(
         polygonized_lines,
         area_threshold=1000,
     )
+
+    # Do some further post-processing and remove thin spikes
     polygonized_lines = polygonized_lines.buffer(
         parallel_distance / 10,
         join_style=postprocessing_join_style,
