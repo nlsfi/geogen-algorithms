@@ -79,6 +79,9 @@ class GeneralizeRailroads(BaseAlgorithm):
     ) -> GeoDataFrame:
         gdf = data.copy()
 
+        # First, find potential fan tracks which are sets of parallel deadend
+        # tracks The approach used here is different to the one described in
+        # the article
         fan_candidates = add_contiguous_lines_information(gdf)
         fan_candidates = fan_candidates.loc[
             (fan_candidates["contiguous_length"] < self.fan_minimum_length)
@@ -108,11 +111,7 @@ class GeneralizeRailroads(BaseAlgorithm):
 
         pack_candidates = gdf.loc[~gdf.index.isin(fan_tracks.index)]
 
-        # This prunes the fan track areas by projecting a perpendicular line to
-        # the average direction of the tracks and keeps only the border lines.
-        # This is very similar to how packs are pruned later on, and should
-        # definitely be refactored to a function or similar. It could also
-        # probably be changed to keep more of the lines instead of the extremes
+        # Find the indexes of the outermost lines in the identified fan tracks
         remaining_fans = []
         for fan_area in fan_tracks["fan_area_id"].unique():
             if fan_area in {"free_track", "cluster_track"}:
@@ -122,9 +121,11 @@ class GeneralizeRailroads(BaseAlgorithm):
             ranked, _ = rank_parallel_lines(fan_area_lines)
             remaining_fans.extend([ranked.idxmin(), ranked.idxmax()])
 
+        # Keep only the outermost lines.
         fan_tracks = fan_tracks.loc[fan_tracks.index.isin(remaining_fans)]
         fan_tracks = fan_tracks.loc[fan_tracks["fan_area_id"] != -1]
 
+        # Start typifying the remaining track types
         pack_candidates = (
             GeoDataFrame(
                 geometry=[
@@ -193,6 +194,7 @@ class GeneralizeRailroads(BaseAlgorithm):
             .reset_index()
         )
 
+        # Tracks are now defined as being either part of a pack, cluster or a free track
         for track in tracks["pack_id"].unique():
             if track in {"free_track", "cluster_track"}:
                 continue
@@ -208,6 +210,9 @@ class GeneralizeRailroads(BaseAlgorithm):
                 continue
 
             rank, disjoint = rank_parallel_lines(track_lines)
+
+            # In case there is an errant track in a pack which is not actually parallel
+            # to the other ones, define it as a free track
             tracks.loc[
                 tracks.index.isin(disjoint),
                 "pack_id",
@@ -216,6 +221,8 @@ class GeneralizeRailroads(BaseAlgorithm):
             if rank.empty:
                 continue
 
+            # We're handling only pack tracks at this point, similar to fan tracks, only
+            # keep the outermost ones.
             to_keep = [rank.idxmax(), rank.idxmin(), *disjoint]
             to_remove = track_lines.loc[~track_lines.index.isin(to_keep)].index
 
