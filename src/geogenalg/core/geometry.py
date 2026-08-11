@@ -26,10 +26,8 @@ from shapely import (
     Polygon,
     area,
     count_coordinates,
-    distance,
     force_2d,
     get_coordinates,
-    get_point,
     length,
     polygonize,
     remove_repeated_points,
@@ -1859,36 +1857,6 @@ def split_line_at_distances(
         result_segments.append(LineString(current_coords))
 
     return result_segments
-
-
-def sinuosity(line: LineString) -> float:
-    """Calculate sinuosity of linestring.
-
-    Sinuosity is the ratio of the total length of the linestring to
-    the distance between its endpoints.
-
-    Larger value represents a more winding path.
-
-    1.0 represents a perfectly straight line.
-
-    Returns
-    -------
-        Calculated sinuosity value.
-
-    """
-    length = line.length
-    if length == 0:
-        return 0.0
-
-    straight_distance = distance(
-        get_point(line, 0),
-        get_point(line, -1),
-    )
-
-    if straight_distance == 0:
-        return float("inf")
-
-    return length / straight_distance
 
 
 def remove_holes(

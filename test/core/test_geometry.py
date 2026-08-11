@@ -75,7 +75,6 @@ from geogenalg.core.geometry import (
     scale_line_to_length,
     segment_bearing,
     segment_direction,
-    sinuosity,
     smooth_around_connection_point_of_two_lines,
     smooth_around_ring_closing_vertex,
     snap_to_closest_vertex_or_segment,
@@ -3040,43 +3039,6 @@ def test_remove_holes(
     expected: Polygon | MultiPolygon,
 ):
     assert remove_holes(input_geom, area_threshold=area_threshold) == expected
-
-
-@pytest.mark.parametrize(
-    (
-        "line",
-        "expected",
-    ),
-    [
-        (
-            LineString(),
-            0.0,
-        ),
-        (
-            LineString([[0, 0], [1, 0]]),
-            1.0,
-        ),
-        (
-            LineString([[0, 0], [1, 1], [2, 2], [3, 3]]),
-            1.0,
-        ),
-        (
-            LineString([[0, 0], [1, 0], [1, 1]]),
-            1.41421,
-        ),
-    ],
-    ids=[
-        "empty",
-        "straight_line",
-        "straight_line_multiple_segments",
-        "right_angle",
-    ],
-)
-def test_sinuosity(
-    line: LineString,
-    expected: float,
-):
-    assert isclose(sinuosity(line), expected)
 
 
 @pytest.mark.parametrize(
