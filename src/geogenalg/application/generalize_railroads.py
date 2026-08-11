@@ -55,8 +55,14 @@ class GeneralizeRailroads(BaseAlgorithm):
 
     fan_minimum_length: float = Field(400, ge=0.0)
     """Deadend tracks shorter than this are considered potential fan tracks."""
+    fan_rail_parallel_distance: float = Field(6, ge=0.0)
+    """Distance used to identify areas with parallel tracks, this is used in
+    identifying fan tracks."""
     pack_cluster_length_threshold: float = Field(200, ge=0.0)
     """Distance used to determine tracks which are of the same cluster."""
+    pack_track_maximum_length: float = Field(1000, ge=0.0)
+    """If average length of tracks in a potential pack is larger than this,
+    they will be identified as free tracks instead."""
 
     valid_input_geometry_types: ClassVar = {
         "LineString",
@@ -80,7 +86,7 @@ class GeneralizeRailroads(BaseAlgorithm):
         gdf = data.copy()
 
         # First, find potential fan tracks which are sets of parallel deadend
-        # tracks The approach used here is different to the one described in
+        # tracks. The approach used here is different to the one described in
         # the article
         fan_candidates = add_contiguous_lines_information(gdf)
         fan_candidates = fan_candidates.loc[
@@ -90,7 +96,7 @@ class GeneralizeRailroads(BaseAlgorithm):
 
         fan_areas = polygonize_parallel_lines(
             fan_candidates,
-            6,
+            self.fan_rail_parallel_distance,
         )
 
         fan_areas.geometry = fan_areas.buffer(-4).buffer(4)
@@ -152,7 +158,6 @@ class GeneralizeRailroads(BaseAlgorithm):
             for node in cluster:
                 graph.nodes[node]["cluster"] = cluster_id
 
-        codes = set()
         tracks_dict: dict[str, list] = {}
         for u, v in graph.edges():
             u_cluster = graph.nodes[u]["cluster"]
@@ -167,8 +172,6 @@ class GeneralizeRailroads(BaseAlgorithm):
 
             if u_cluster != -1 and v_cluster != -1 and u_cluster == v_cluster:
                 connection_code = "cluster_track"
-
-            codes.add(connection_code)
 
             if tracks_dict.get(connection_code) is None:
                 tracks_dict[connection_code] = [graph.edges[u, v]["geometry"]]
@@ -202,7 +205,7 @@ class GeneralizeRailroads(BaseAlgorithm):
             track_lines = tracks.loc[tracks["pack_id"] == track]
             mean_length = track_lines.geometry.length.mean()
 
-            if mean_length > 1000:  # noqa: PLR2004
+            if mean_length > self.pack_track_maximum_length:
                 tracks.loc[
                     tracks.index.isin(track_lines.index),
                     "pack_id",

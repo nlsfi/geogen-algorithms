@@ -23,7 +23,10 @@ def test_generalize_railroads(
         input_uri=gpkg.to_input("railroads"),
         control_uri=gpkg.to_input("control"),
         algorithm=GeneralizeRailroads(
-            # TODO: add parameters
+            fan_minimum_length=400,
+            fan_rail_parallel_distance=6,
+            pack_cluster_length_threshold=200,
+            pack_track_maximum_length=1000,
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={},
