@@ -21,7 +21,7 @@ from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 from geogenalg.merge import buffer_and_merge_polygons
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
 
 @supports_identity
@@ -122,7 +122,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         reference_roads = (
             reference_data[self.reference_key_roads]
             if self.reference_key_roads in reference_data
-            else GeoDataFrame(geometry=[], crs=data.crs)
+            else copy_gdf_as_empty(data)
         )
 
         copy = data.copy()
@@ -136,13 +136,16 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
         gdf.geometry = gdf.simplify(self.buildings_simplify_tolerance)
         gdf = GeoDataFrame(
-            geometry=GeoSeries(
-                boffet_areas(
-                    gdf.geometry.to_list(),
-                    self.boffet_area_buffer,
-                    self.boffet_area_erosion,
-                ),
-            ),
+            {
+                data.geometry.name: GeoSeries(
+                    boffet_areas(
+                        gdf.geometry.to_list(),
+                        self.boffet_area_buffer,
+                        self.boffet_area_erosion,
+                    ),
+                )
+            },
+            geometry=data.geometry.name,
             crs=data.crs,
         )
 
@@ -158,6 +161,9 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
                 parcels_gdf,
                 self.parcel_buffer_distance,
             ).explode(as_index=False)
+
+            if parcels_gdf.geometry.name != gdf.geometry.name:
+                parcels_gdf = parcels_gdf.rename_geometry(gdf.geometry.name)
 
             gdf = combine_gdfs(
                 [
