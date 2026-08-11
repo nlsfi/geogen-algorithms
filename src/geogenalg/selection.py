@@ -4,11 +4,12 @@
 #
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
+from math import hypot
 from typing import Any
 from warnings import catch_warnings
 
 from geopandas import GeoDataFrame
-from numpy import cos, radians, sin
+from numpy import cos, pi, sin
 from pandas import Series
 from shapely.geometry import LineString, Point
 
@@ -381,11 +382,13 @@ def rank_parallel_lines(
         return (Series(), [])
 
     centroid = input_gdf.union_all().centroid
-    direction = line_mean_direction(input_gdf.union_all()) + 90
-    direction_radians = radians(direction)
+    direction = line_mean_direction(input_gdf.union_all(), unit="radians") + pi / 2
 
-    dx = cos(direction_radians) * 10000
-    dy = sin(direction_radians) * 10000
+    min_x, min_y, max_x, max_y = input_gdf.total_bounds
+    perpendicular_line_length = hypot(max_x - min_x, max_y - min_y) * 2
+
+    dx = cos(direction) * perpendicular_line_length
+    dy = sin(direction) * perpendicular_line_length
 
     perpendicular_line = LineString(
         [
