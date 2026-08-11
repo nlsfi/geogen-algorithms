@@ -47,6 +47,9 @@ from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.application.generalize_shoreline import GeneralizeShoreline
+from geogenalg.application.generalize_tall_building_areas import (
+    GeneralizeTallBuildingAreas,
+)
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.application.generalize_watercourse_areas import (
     GeneralizeWaterCourseAreas,
@@ -452,6 +455,7 @@ def build_app() -> None:
         "shared_paths": GeneralizeSharedPaths,
         "power_lines": GeneralizePowerLines,
         "building_areas": GeneralizeBuildingAreas,
+        "tall_building_areas": GeneralizeTallBuildingAreas,
         "dissolve_polygons": DissolvePolygons,
         "conservation_areas": GeneralizeConservationAreas,
         "railroads": GeneralizeRailroads,
