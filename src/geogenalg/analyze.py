@@ -611,17 +611,20 @@ def polygonize_parallel_lines(
     maximum_angle_difference: float = 15,
     postprocessing_join_style: BufferJoinStyle
     | Literal["round", "mitre", "bevel"] = "round",
+    postprocessing_hole_threshold: float = 1000,
 ) -> GeoDataFrame:
     """Turn areas with parallel lines to polygons.
 
     Args:
     ----
-        input_gdf: GeoDataFrame contianing LineStrings.
+        input_gdf: GeoDataFrame containing LineStrings.
         parallel_distance: Minimum distance for two lines to be considered to
             be parallel.
         maximum_angle_difference: Maximum allowed difference in line angle for
             two lines to still be considered to be parallel.
         postprocessing_join_style: Buffer join style for post-processing
+            the generated polygons.
+        postprocessing_hole_threshold: Area threshold for removing holes from
             the generated polygons.
 
     Returns:
@@ -692,7 +695,7 @@ def polygonize_parallel_lines(
     # Do some post-processing by removing some of the smaller holes
     polygonized_lines = remove_holes(
         polygonized_lines,
-        area_threshold=1000,
+        area_threshold=postprocessing_hole_threshold,
     )
 
     # Do some further post-processing and remove thin spikes
@@ -706,7 +709,7 @@ def polygonize_parallel_lines(
     )
     polygonized_lines = remove_holes(
         polygonized_lines,
-        area_threshold=1000,
+        area_threshold=postprocessing_hole_threshold,
     )
 
     if polygonized_lines.is_empty:
