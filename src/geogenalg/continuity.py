@@ -23,7 +23,6 @@ from geogenalg.core.geometry import (
     extend_line_to_nearest,
     get_topological_points,
     smooth_around_connection_point_of_two_lines,
-    smooth_around_ring_closing_vertex,
 )
 from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
@@ -981,6 +980,7 @@ def get_segments_in_polygon_exteriors_but_not_in_lines(
 def smooth_linestring_connections(
     input_gdf: GeoDataFrame,
     *,
+    smoothed_distance: float = 30,
     spline_subdivisions: int = 10,
 ) -> GeoDataFrame:
     """Smooth segments around connection points of two lines.
@@ -988,6 +988,8 @@ def smooth_linestring_connections(
     Args:
     ----
         input_gdf: GeoDataFrame with lines.
+        smoothed_distance: How long a section around the connection point
+            is smoothed.
         spline_subdivisions: How many vertices are added to smoothed segments.
 
     Returns:
@@ -1017,17 +1019,12 @@ def smooth_linestring_connections(
             intersecting_lines.geometry.to_numpy()[0],
             intersecting_lines.geometry.to_numpy()[1],
             point,
+            smoothed_distance,
             spline_subdivisions=spline_subdivisions,
         )
 
         gdf.geometry.at[intersecting_lines.index.to_numpy()[0]] = smoothed_line_1  # noqa: PD008
         gdf.geometry.at[intersecting_lines.index.to_numpy()[1]] = smoothed_line_2  # noqa: PD008
-
-    gdf.geometry = gdf.geometry.apply(
-        lambda geom: smooth_around_ring_closing_vertex(
-            geom, spline_subdivisions=spline_subdivisions
-        )
-    )
 
     gdf.index = old_index
 

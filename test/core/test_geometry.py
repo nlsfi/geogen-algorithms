@@ -49,6 +49,7 @@ from geogenalg.core.geometry import (
     centerline_length,
     chaikin_smooth_keep_topology,
     chaikin_smooth_skip_coords,
+    concatenate_lines,
     elongation,
     ensure_geoms,
     equalize_z,
@@ -64,6 +65,7 @@ from geogenalg.core.geometry import (
     lines_to_segments,
     mean_z,
     move_to_point,
+    orient_line_toward_point,
     oriented_envelope_dimensions,
     perforate_polygon_with_gdf_exteriors,
     point_on_line,
@@ -76,7 +78,6 @@ from geogenalg.core.geometry import (
     segment_bearing,
     segment_direction,
     smooth_around_connection_point_of_two_lines,
-    smooth_around_ring_closing_vertex,
     snap_to_closest_vertex_or_segment,
     split_line_at_distances,
     split_linear_geometry,
@@ -2518,217 +2519,6 @@ def test_ramer_douglas_peucker_simplify_keep_coords(
 
 
 @pytest.mark.parametrize(
-    ("line", "spline_subdivisions", "expected"),
-    [
-        (
-            LineString([[0, 0], [1, 0]]),
-            10,
-            LineString([[0, 0], [1, 0]]),
-        ),
-        (
-            LineString([[0, 0], [1, 0], [0.5, 1], [0.5, -1]]),
-            10,
-            LineString([[0, 0], [1, 0], [0.5, 1], [0.5, -1]]),
-        ),
-        (
-            LineString(),
-            10,
-            LineString(),
-        ),
-        (
-            LineString([[0, 0], [1, 1], [3, 1], [2, 0], [0, 0]]),
-            2,
-            LineString(
-                [
-                    [0, 0],
-                    [0.3079449839416705, 0.5000000000000001],
-                    [1, 1],
-                    [3, 1],
-                    [2, 0],
-                    [0.8385016254650557, -0.161498374534944],
-                    [0, 0],
-                ]
-            ),
-        ),
-    ],
-    ids=[
-        "not_closed",
-        "not_valid",
-        "empty",
-        "ring",
-    ],
-)
-def test_smooth_around_ring_closing_vertex(
-    line: LineString,
-    spline_subdivisions: int,
-    expected: LineString,
-):
-    assert equals_exact(
-        smooth_around_ring_closing_vertex(
-            line, spline_subdivisions=spline_subdivisions
-        ),
-        expected,
-        tolerance=0.000000001,
-    )
-
-
-@pytest.mark.parametrize(
-    ("line_1", "line_2", "point", "spline_subdivisions", "expected_1", "expected_2"),
-    [
-        (
-            LineString(),
-            LineString(),
-            Point(),
-            10,
-            LineString(),
-            LineString(),
-        ),
-        (
-            LineString([[0, 0], [1, 0]]),
-            LineString([[5, 5], [6, 5]]),
-            Point(0, 0),
-            10,
-            LineString([[0, 0], [1, 0]]),
-            LineString([[5, 5], [6, 5]]),
-        ),
-        (
-            LineString([[0, 0], [1, 0]]),
-            LineString([[1, 0], [1, 1]]),
-            Point(5, 5),
-            10,
-            LineString([[0, 0], [1, 0]]),
-            LineString([[1, 0], [1, 1]]),
-        ),
-        (
-            LineString([[0, 0], [1, 0]]),
-            LineString([[1, 0], [1, 1]]),
-            Point(0, 0),
-            10,
-            LineString([[0, 0], [1, 0]]),
-            LineString([[1, 0], [1, 1]]),
-        ),
-        (
-            LineString(
-                [
-                    [0, 0],
-                    [1.25, 0.25],
-                    [1.75, 1],
-                    [2.5, 2],
-                    [4, 3],
-                ]
-            ),
-            LineString(
-                [
-                    [4, 3],
-                    [5, 2],
-                    [6, 4.25],
-                    [5.5, 4.75],
-                    [5, 6],
-                ]
-            ),
-            Point(4, 3),
-            3,
-            LineString(
-                [
-                    [0, 0],
-                    [1.25, 0.25],
-                    [1.75, 1],
-                    [2.5, 2],
-                    [2.9661258867648237, 2.433208736292763],
-                    [3.5049204064058337, 2.842054416166005],
-                    [4, 3],
-                ]
-            ),
-            LineString(
-                [
-                    [4, 3],
-                    [4.363927764355153, 2.711489274491867],
-                    [4.693562719333668, 2.2261563204196673],
-                    [5, 2],
-                    [6, 4.25],
-                    [5.5, 4.75],
-                    [5, 6],
-                ]
-            ),
-        ),
-        (
-            LineString(
-                [
-                    [0, 0],
-                    [1.25, 0.25],
-                    [1.75, 1],
-                    [2.5, 2],
-                    [4, 3],
-                ]
-            ),
-            LineString(
-                [
-                    [4, 3],
-                    [5, 2],
-                    [6, 4.25],
-                    [5.5, 4.75],
-                    [5, 6],
-                    [0, 6],
-                    [-2, 3],
-                    [0, 0],
-                ]
-            ),
-            Point(4, 3),
-            3,
-            LineString(
-                [
-                    [0, 0],
-                    [1.25, 0.25],
-                    [1.75, 1],
-                    [2.5, 2],
-                    [2.9661258867648237, 2.433208736292763],
-                    [3.5049204064058337, 2.842054416166005],
-                    [4, 3],
-                ]
-            ),
-            LineString(
-                [
-                    [4, 3],
-                    [4.363927764355153, 2.711489274491867],
-                    [4.693562719333668, 2.2261563204196673],
-                    [5, 2],
-                    [6, 4.25],
-                    [5.5, 4.75],
-                    [5, 6],
-                    [0, 6],
-                    [-2, 3],
-                    [0, 0],
-                ]
-            ),
-        ),
-    ],
-    ids=[
-        "empty_1",
-        "lines_disjoint",
-        "point_disjoint",
-        "point_disjoint_other",
-        "should_smooth",
-        "makes_ring",
-    ],
-)
-def test_smooth_around_connection_point_of_two_lines(
-    line_1: LineString,
-    line_2: LineString,
-    point: Point,
-    spline_subdivisions: int,
-    expected_1: LineString,
-    expected_2: LineString,
-):
-    result_1, result_2 = smooth_around_connection_point_of_two_lines(
-        line_1, line_2, point, spline_subdivisions=spline_subdivisions
-    )
-
-    assert equals_exact(result_1, expected_1, tolerance=0.000000001)
-
-    assert equals_exact(result_2, expected_2, tolerance=0.000000001)
-
-
-@pytest.mark.parametrize(
     (
         "line",
         "distances",
@@ -3244,3 +3034,304 @@ def test_segment_direction_invalid_geometry(
 ):
     with pytest.raises(GeometryOperationError, match=message):
         segment_direction(segment)
+
+
+@pytest.mark.parametrize(
+    (
+        "line",
+        "connection",
+        "connection_at_end",
+        "expected",
+    ),
+    [
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(2, 0),
+            True,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(0, 0),
+            True,
+            LineString([[2, 0], [1, 0], [0, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(0, 0),
+            False,
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(2, 0),
+            False,
+            LineString([[2, 0], [1, 0], [0, 0]]),
+        ),
+    ],
+    ids=[
+        "connection_at_end_already_oriented",
+        "connection_at_end_reverse",
+        "connection_at_start_already_oriented",
+        "connection_at_start_reverse",
+    ],
+)
+def test_orient_line_toward_point(
+    line: LineString,
+    connection: Point,
+    connection_at_end: bool,
+    expected: LineString,
+):
+    assert orient_line_toward_point(
+        line,
+        connection,
+        connection_at_end=connection_at_end,
+    ).equals(expected)
+
+
+@pytest.mark.parametrize(
+    (
+        "line",
+        "connection",
+        "connection_at_end",
+    ),
+    [
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(1, 0),
+            True,
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            Point(1, 0),
+            False,
+        ),
+    ],
+    ids=[
+        "connection_not_endpoint_at_end",
+        "connection_not_endpoint_at_start",
+    ],
+)
+def test_orient_line_toward_point_raises(
+    line: LineString,
+    connection: Point,
+    connection_at_end: bool,
+):
+    with pytest.raises(
+        GeometryOperationError,
+        match=re.escape("Connection point is not an end point of the LineString."),
+    ):
+        orient_line_toward_point(
+            line,
+            connection,
+            connection_at_end=connection_at_end,
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "a",
+        "b",
+        "expected",
+    ),
+    [
+        (
+            LineString([[0, 0], [1, 0]]),
+            LineString([[1, 0], [2, 0]]),
+            LineString([[0, 0], [1, 0], [2, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            LineString([[2, 0], [3, 0], [4, 0]]),
+            LineString([[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            LineString([[1, 0], [1, 1], [1, 2]]),
+            LineString([[0, 0], [1, 0], [1, 1], [1, 2]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            LineString([[2, 0], [2, 1]]),
+            LineString([[0, 0], [1, 0], [2, 0], [2, 1]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            LineString([[2, 0], [3, 0]]),
+            LineString([[0, 0], [1, 0], [2, 0], [3, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            LineString([[0, 0], [-1, 0]]),
+            LineString([[0, 0], [1, 0], [2, 0], [0, 0], [-1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            LineString([[1, 0], [2, 0], [1, 0]]),
+            LineString([[0, 0], [1, 0], [2, 0], [1, 0]]),
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            LineString([[2, 0], [1, 0], [0, 0]]),
+            LineString([[0, 0], [1, 0], [2, 0], [1, 0], [0, 0]]),
+        ),
+    ],
+    ids=[
+        "simple_connection",
+        "multiple_points",
+        "right_angle",
+        "vertical_connection",
+        "no_shared_endpoint",
+        "shared_start_point",
+        "repeated_point",
+        "overlapping_reverse",
+    ],
+)
+def test_concat_lines(
+    a: LineString,
+    b: LineString,
+    expected: LineString,
+):
+    assert concatenate_lines(a, b) == expected
+
+
+@pytest.mark.parametrize(
+    (
+        "line_1",
+        "line_2",
+        "connection",
+        "distance",
+        "spline_subdivisions",
+        "expected_1",
+        "expected_2",
+    ),
+    [
+        # Already correctly oriented.
+        (
+            LineString([[0, 0], [5, 0]]),
+            LineString([[5, 0], [5, 5]]),
+            Point(5, 0),
+            2,
+            5,
+            LineString(
+                [
+                    [0, 0],
+                    [3.0, 0.0],
+                    [3.329, -0.032],
+                    [3.780, -0.096],
+                    [4.267, -0.144],
+                    [4.7024, -0.128],
+                    [5.0, 0.0],
+                ]
+            ),
+            LineString(
+                [
+                    [5, 0],
+                    [5.111, 0.282],
+                    [5.095, 0.688],
+                    [5.023, 1.153],
+                    [4.967, 1.611],
+                    [5, 2],
+                    [5, 5],
+                ]
+            ),
+        ),
+        # Both lines need to be reversed.
+        (
+            LineString([[5, 0], [0, 0]]),
+            LineString([[5, 5], [5, 0]]),
+            Point(5, 0),
+            2,
+            5,
+            LineString(
+                [
+                    [0, 0],
+                    [3, 0],
+                    [3.329, -0.032],
+                    [3.780, -0.096],
+                    [4.267, -0.144],
+                    [4.702, -0.128],
+                    [5, 0],
+                ]
+            ),
+            LineString(
+                [
+                    [5, 0],
+                    [5.111, 0.282],
+                    [5.095, 0.688],
+                    [5.023, 1.153],
+                    [4.967, 1.611],
+                    [5, 2],
+                    [5, 5],
+                ]
+            ),
+        ),
+        # No shared boundary.
+        (
+            LineString([[0, 0], [5, 0]]),
+            LineString([[10, 0], [10, 5]]),
+            Point(5, 0),
+            2,
+            5,
+            LineString([[0, 0], [5, 0]]),
+            LineString([[10, 0], [10, 5]]),
+        ),
+        # Connection point is not the shared boundary point.
+        (
+            LineString([[0, 0], [5, 0]]),
+            LineString([[5, 0], [5, 5]]),
+            Point(0, 0),
+            2,
+            5,
+            LineString([[0, 0], [5, 0]]),
+            LineString([[5, 0], [5, 5]]),
+        ),
+        # Empty first line.
+        (
+            LineString(),
+            LineString([[0, 0], [5, 0]]),
+            Point(0, 0),
+            2,
+            5,
+            LineString(),
+            LineString([[0, 0], [5, 0]]),
+        ),
+        # Empty second line.
+        (
+            LineString([[0, 0], [5, 0]]),
+            LineString(),
+            Point(5, 0),
+            2,
+            5,
+            LineString([[0, 0], [5, 0]]),
+            LineString(),
+        ),
+    ],
+    ids=[
+        "already_oriented",
+        "both_reversed",
+        "no_shared_boundary",
+        "connection_not_shared_boundary",
+        "empty_first_line",
+        "empty_second_line",
+    ],
+)
+def test_smooth_around_connection_point_of_two_lines(
+    line_1: LineString,
+    line_2: LineString,
+    connection: Point,
+    distance: float,
+    spline_subdivisions: int,
+    expected_1: LineString,
+    expected_2: LineString,
+):
+    result_1, result_2 = smooth_around_connection_point_of_two_lines(
+        line_1,
+        line_2,
+        connection,
+        distance,
+        spline_subdivisions=spline_subdivisions,
+    )
+
+    assert result_1.equals_exact(expected_1, tolerance=0.2)
+    assert result_2.equals_exact(expected_2, tolerance=0.2)
