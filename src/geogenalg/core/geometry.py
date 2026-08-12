@@ -3,14 +3,14 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from collections.abc import Callable, Iterable
+from __future__ import annotations
+
 from copy import deepcopy
 from enum import Enum
 from itertools import chain, pairwise
 from math import atan2, degrees, isclose
 from statistics import mean
-from typing import Literal, NamedTuple
-from warnings import warn
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import array, column_stack, ndarray, pi, sqrt, vstack  # noqa: SC200
@@ -28,16 +28,15 @@ from shapely import (
     count_coordinates,
     force_2d,
     get_coordinates,
+    get_point,
     length,
     polygonize,
-    remove_repeated_points,
     shortest_line,
 )
 from shapely.affinity import rotate, scale, translate
-from shapely.coords import CoordinateSequence
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
-from shapely.ops import linemerge, nearest_points, split
+from shapely.ops import linemerge, nearest_points, split, substring
 from shapelysmooth import catmull_rom_smooth
 
 from geogenalg.core.exceptions import (
@@ -45,6 +44,11 @@ from geogenalg.core.exceptions import (
     GeometryTypeError,
     InvalidGeometryError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
+    from shapely.coords import CoordinateSequence
 
 
 class LineExtendFrom(Enum):
@@ -56,7 +60,7 @@ class LineExtendFrom(Enum):
     NONE = None
 
     @classmethod
-    def from_bools(cls, *, extend_start: bool, extend_end: bool) -> "LineExtendFrom":
+    def from_bools(cls, *, extend_start: bool, extend_end: bool) -> LineExtendFrom:
         """Construct enum from boolean values.
 
         Returns
@@ -1626,170 +1630,6 @@ def _get_vertex_circular(coords: CoordinateSequence, index: int) -> tuple[float,
     return coords[(index % len(coords)) + 1]
 
 
-def smooth_around_ring_closing_vertex(
-    line: LineString,
-    *,
-    spline_subdivisions: int = 10,
-) -> LineString:
-    """Smooth segments around closing vertex of closed linestring.
-
-    If `line` is invalid or not closed it is returned as is.
-    If line has z coordinates, smoothed vertices will default to 0.0.
-
-    Args:
-    ----
-        line: Line to smooth.
-        spline_subdivisions: How many vertices are added to smoothed segments.
-
-    Returns:
-    -------
-        Smoothed line (provided it was possible to smooth).
-
-    """
-    if not line.is_closed or not line.is_valid:
-        return line
-
-    smoothed_line = catmull_rom_smooth(
-        force_2d(line),
-        0.5,
-        subdivs=spline_subdivisions,
-    )
-
-    before_vertices = [
-        _get_vertex_circular(smoothed_line.coords, i)
-        for i in range(-spline_subdivisions, 1)
-    ]
-    after_vertices = [
-        _get_vertex_circular(smoothed_line.coords, i)
-        for i in range(spline_subdivisions)
-    ]
-    after_vertices.reverse()
-
-    modified_line = line
-
-    for vertex in before_vertices:
-        vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
-        modified_line = insert_vertex(
-            modified_line,
-            vertex_with_z_handled,
-            len(modified_line.coords) - 1,
-        )
-
-    for vertex in after_vertices:
-        vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
-        modified_line = insert_vertex(
-            modified_line,
-            vertex_with_z_handled,
-            1,
-        )
-
-    return remove_repeated_points(modified_line)
-
-
-def smooth_around_connection_point_of_two_lines(  # noqa: C901
-    line_1: LineString,
-    line_2: LineString,
-    point: Point,
-    *,
-    spline_subdivisions: int = 10,
-) -> tuple[LineString, LineString]:
-    """Smooth segments in given lines which are around the given point.
-
-    If line has z coordinates, smoothed vertices will default to 0.0.
-
-    Args:
-    ----
-        line_1: Line to smooth.
-        line_2: Line to smooth.
-        point: Point around which segments are smoothed.
-        spline_subdivisions: How many vertices are added to smoothed segments.
-
-    Returns:
-    -------
-        Smoothed lines (provided they could be smoothed) in this order:
-        (line_1, line_2).
-
-    """
-    if not line_1.touches(line_2.boundary):
-        return line_1, line_2
-
-    if not point.intersects(line_1) or not point.intersects(line_2):
-        return line_1, line_2
-
-    combined_line = linemerge([line_1, line_2])
-
-    cut_index = -1
-    for i, vertex in enumerate(combined_line.coords):
-        if point.coords[0] == vertex:
-            cut_index = i
-
-    if cut_index == -1:
-        warn("Did not find matching vertex in combined line.", stacklevel=2)
-        return line_1, line_2
-
-    vertex_before = _get_vertex_circular(combined_line.coords, cut_index - 1)
-    vertex_after = _get_vertex_circular(combined_line.coords, cut_index + 1)
-
-    cut_index *= spline_subdivisions
-
-    # Use Catmull-Rom spline because it's not going to shift existing
-    # coordinates and is guaranteed to travel through them
-    smoothed_combined_line = catmull_rom_smooth(
-        force_2d(combined_line),
-        0.5,
-        subdivs=spline_subdivisions,
-    )
-
-    before_vertices = [
-        _get_vertex_circular(smoothed_combined_line.coords, i)
-        for i in range(cut_index - spline_subdivisions, cut_index + 1)
-    ]
-    after_vertices = [
-        _get_vertex_circular(smoothed_combined_line.coords, i)
-        for i in range(cut_index, cut_index + spline_subdivisions)
-    ]
-    after_vertices.reverse()
-
-    smoothed_lines = []
-    for line in (line_1, line_2):
-        smooth_start = point.coords[0] == line.coords[0]
-        smooth_end = point.coords[0] == line.coords[-1]
-
-        if not smooth_start and not smooth_end:
-            smoothed_lines.append(line)
-            continue
-
-        before_in_coords = vertex_before in line.coords
-        after_in_coords = vertex_after in line.coords
-        if before_in_coords and not after_in_coords:
-            chosen_vertices = before_vertices
-        elif after_in_coords and not before_in_coords:
-            chosen_vertices = after_vertices
-        else:
-            warn(
-                "Could not determine where from to add vertices, "
-                + "not smoothing line.",
-                stacklevel=2,
-            )
-            smoothed_lines.append(line)
-            continue
-
-        modified_line = line
-        for vertex in chosen_vertices:
-            vertex_with_z_handled = (
-                vertex if not line.has_z else (vertex[0], vertex[1], 0)
-            )
-            modified_line = insert_vertex(
-                modified_line,
-                vertex_with_z_handled,
-                len(modified_line.coords) - 1 if smooth_end else 1,
-            )
-
-        smoothed_lines.append(remove_repeated_points(modified_line))
-
-    return tuple(smoothed_lines)
-
-
 def split_line_at_distances(
     line: LineString,
     distances: list[float],
@@ -1915,7 +1755,7 @@ def line_mean_direction(
 
 
 def angle_difference(a: float, b: float) -> float:
-    """Return the angular difference between two angle.
+    """Return the difference between two angles.
 
     Inputs are in degrees. Angles are treated cyclically, such that
     the difference between 359° and 1° is 2°.
@@ -1927,3 +1767,207 @@ def angle_difference(a: float, b: float) -> float:
 
     """
     return abs((a - b + 180) % 360 - 180)
+
+
+def smooth_around_connection_point_of_two_lines(  # noqa: PLR0914
+    line_1: LineString,
+    line_2: LineString,
+    connection_point: Point,
+    distance: float,
+    *,
+    spline_subdivisions: int = 10,
+) -> tuple[LineString, LineString]:
+    """Smooth vertices in two LineStrings around their shared connection point.
+
+    Both the lines are cut around their shared connection point by the given distance,
+    and a Catmull-Rom spline is added to the end of each line, created from the
+    cut points, travelling through the connection point.
+
+    If either line is empty, or the given connection point is not actually at the
+    lines' boundary, the lines are return unchanged.
+
+    Args:
+    ----
+        line_1: Line A to smooth.
+        line_2: Line B to smooth.
+        connection_point: Shared connection point around which the lines will be
+            smoothed.
+        distance: Distance along each line to replace with the smoothed curve.
+            If a line is shorter than the given distance, a smaller distance is
+            used.
+        spline_subdivisions: Number of subdivisions used when generating the
+            Catmull-Rom spline.
+
+    Returns:
+    -------
+        A tuple containing the smoothed first and second lines.
+
+    Raises:
+    ------
+        ValueError: If distance is not greater than zero or if spline_subdivisions is
+            less than one.
+
+    """
+    if line_1.is_empty or line_2.is_empty:
+        return line_1, line_2
+
+    if distance <= 0:
+        msg = "distance must be greater than zero"
+        raise ValueError(msg)
+
+    if spline_subdivisions < 1:
+        msg = "subdivs must be >= 1"
+        raise ValueError(msg)
+
+    # Check that given connection point can actually be used
+    boundary_intersection = line_1.boundary.intersection(line_2.boundary)
+
+    if boundary_intersection.is_empty:
+        return line_1, line_2
+
+    if not connection_point.intersects(boundary_intersection):
+        return line_1, line_2
+
+    # Force lines' vertex order to be oriented from line_1 -> connection -> line_2
+    line_1 = orient_line_toward_point(
+        line_1,
+        connection_point,
+        connection_at_end=True,
+    )
+
+    line_2 = orient_line_toward_point(
+        line_2,
+        connection_point,
+        connection_at_end=False,
+    )
+
+    # In case either line is shorter than the given distance, adapt the
+    # used distance.
+    length_1 = line_1.length
+    length_2 = line_2.length
+
+    distance_1 = min(distance, length_1 - 0.1)
+    distance_2 = min(distance, length_2 - 0.1)
+
+    interpolated_1 = line_1.interpolate(length_1 - distance_1)
+    interpolated_2 = line_2.interpolate(distance_2)
+
+    # Cut off the portions of the lines which we're going to replace with a
+    # smoothed curve.
+    line_1_prefix = substring(
+        line_1,
+        0.0,
+        length_1 - distance_1,
+    )
+
+    line_2_suffix = substring(
+        line_2,
+        distance_2,
+        length_2,
+    )
+
+    # Create smoothed curve between the interpolated points and the connection
+    local_curve = LineString(
+        [
+            interpolated_1.coords[0],
+            connection_point.coords[0],
+            interpolated_2.coords[0],
+        ]
+    )
+
+    curve = catmull_rom_smooth(
+        local_curve,
+        alpha=1.0,
+        subdivs=spline_subdivisions,
+    )
+
+    # The smoothing retains existing vertices and adds new vertices equal to
+    # spline_subdivisions. We can use spline_subdivisions to "split" the
+    # smoothed curve and then add the split sections to the cut lines.
+    connection_index = spline_subdivisions
+    curve_coords = list(curve.coords)
+
+    curve_to_connection = LineString(curve_coords[: connection_index + 1])
+    curve_from_connection = LineString(curve_coords[connection_index:])
+
+    result_1 = concatenate_lines(
+        line_1_prefix,
+        curve_to_connection,
+    )
+
+    result_2 = concatenate_lines(
+        curve_from_connection,
+        line_2_suffix,
+    )
+
+    return result_1, result_2
+
+
+def orient_line_toward_point(
+    line: LineString,
+    connection: Point,
+    *,
+    connection_at_end: bool,
+) -> LineString:
+    """Change line vertex order such that the given point is at the given end.
+
+    If line is already oriented as correctly, it'll be unchanged.
+
+    Args:
+    ----
+        line: LineString to orient.
+        connection: Point towards which to orient the line to. Has to be either
+            the start or end point of the given line.
+        connection_at_end: If true, line will be oriented so that the connection
+            point is the end point of the line, if false it'll be the start point.
+
+    Returns:
+    -------
+        Oriented line.
+
+    Raises:
+    ------
+        GeometryOperationError: If given connection point is not a boundary point
+            of the line.
+
+    """
+    start = get_point(line, 0)
+    end = get_point(line, -1)
+
+    case_a = end if connection_at_end else start
+    case_b = start if connection_at_end else end
+
+    if connection == case_a:
+        return line
+
+    if connection == case_b:
+        return line.reverse()
+
+    msg = "Connection point is not an end point of the LineString."
+    raise GeometryOperationError(msg)
+
+
+def concatenate_lines(
+    a: LineString,
+    b: LineString,
+) -> LineString:
+    """Concatenate two LineStrings into a single LineString.
+
+    Args:
+    ----
+        a: First LineString.
+        b: Second LineString.
+
+    Returns:
+    -------
+        Concatenated LineString.
+
+    """
+    a_coords = list(a.coords)
+    b_coords = list(b.coords)
+
+    # If lines are already connected, avoid adding duplicate vertex
+    if a_coords[-1] == b_coords[0]:
+        return LineString(a_coords + b_coords[1:])
+
+    return LineString(a_coords + b_coords)
