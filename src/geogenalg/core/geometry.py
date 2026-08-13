@@ -1849,6 +1849,11 @@ def smooth_around_connection_point_of_two_lines(  # noqa: PLR0914
     distance_1 = min(distance, length_1 - 0.1)
     distance_2 = min(distance, length_2 - 0.1)
 
+    if distance_1 <= 0.0 or distance_2 <= 0.0:
+        # TODO: we could still smooth the other line even if one distance is
+        # negative
+        return line_1, line_2
+
     interpolated_1 = line_1.interpolate(length_1 - distance_1)
     interpolated_2 = line_2.interpolate(distance_2)
 
