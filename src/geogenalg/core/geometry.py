@@ -1967,6 +1967,11 @@ def concatenate_lines(
     -------
         Concatenated LineString.
 
+    Note:
+    ----
+        This function can produce self-intersecting lines, f.e. if the lines
+        are connected but have reverse orientation.
+
     """
     a_coords = list(a.coords)
     b_coords = list(b.coords)
