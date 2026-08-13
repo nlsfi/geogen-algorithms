@@ -3306,6 +3306,16 @@ def test_concat_lines(
             LineString([[0, 0], [5, 0]]),
             LineString(),
         ),
+        # Second line is too short.
+        (
+            LineString([[0, 0], [5, 0]]),
+            LineString([[5, 0], [5.01, 0]]),
+            Point(5, 0),
+            2,
+            5,
+            LineString([[0, 0], [5, 0]]),
+            LineString([[5, 0], [5.01, 0]]),
+        ),
     ],
     ids=[
         "already_oriented",
@@ -3314,6 +3324,7 @@ def test_concat_lines(
         "connection_not_shared_boundary",
         "empty_first_line",
         "empty_second_line",
+        "second_line_too_short",
     ],
 )
 def test_smooth_around_connection_point_of_two_lines(
