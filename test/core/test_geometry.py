@@ -161,7 +161,7 @@ def test_chaikin_smooth_keep_topology(
                     [1, 2],
                 ]
             ),
-            [],
+            set(),
             1,
             LineString(
                 [
@@ -182,7 +182,7 @@ def test_chaikin_smooth_keep_topology(
                     [1, 2],
                 ]
             ),
-            [Point(1, 1)],
+            {(1.0, 1.0)},
             1,
             LineString(
                 [
@@ -202,7 +202,7 @@ def test_chaikin_smooth_keep_topology(
                     [1, 2],
                 ]
             ),
-            [Point(1, 1)],
+            {(1.0, 1.0)},
             2,
             LineString(
                 [
@@ -220,7 +220,7 @@ def test_chaikin_smooth_keep_topology(
         ),
         (
             box(0, 0, 1, 1),
-            [],
+            set(),
             1,
             Polygon(
                 [
@@ -238,7 +238,7 @@ def test_chaikin_smooth_keep_topology(
         ),
         (
             box(0, 0, 1, 1),
-            [Point(0, 0)],
+            {(0.0, 0.0), (0.0, 0.0)},
             1,
             Polygon(
                 [
@@ -255,7 +255,7 @@ def test_chaikin_smooth_keep_topology(
         ),
         (
             box(0, 0, 1, 1),
-            MultiPoint([Point(0, 0), Point(1, 1)]),
+            {(0.0, 0.0), (1.0, 1.0)},
             1,
             Polygon(
                 [
