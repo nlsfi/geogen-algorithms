@@ -126,7 +126,7 @@ def _modify_geometry_and_handle_multigeometries(
 
 def chaikin_smooth_skip_coords(
     geom: LineString | Polygon,
-    skip_coords: list[Point] | MultiPoint,
+    skip_coords: set[tuple[float, float]],
     *,
     iterations: int = 1,
 ) -> LineString | Polygon:
@@ -156,11 +156,6 @@ def chaikin_smooth_skip_coords(
 
 
     """
-    if isinstance(skip_coords, MultiPoint):
-        skip_coords_ = [point.coords[0] for point in skip_coords.geoms]
-    else:
-        skip_coords_ = [point.coords[0] for point in skip_coords]
-
     # TODO: allow processing 2.5D geometries and multigeometries?
 
     def _process_coord_sequence(
@@ -179,15 +174,15 @@ def chaikin_smooth_skip_coords(
             q = ((0.75 * current_x + 0.25 * next_x), (0.75 * current_y + 0.25 * next_y))
             r = ((0.25 * current_x + 0.75 * next_x), (0.25 * current_y + 0.75 * next_y))
 
-            if current_coord in skip_coords_:
+            if current_coord in skip_coords:
                 output.append(current_coord)
-                if next_coord not in skip_coords_:
+                if next_coord not in skip_coords:
                     output.append(r)
                 continue
 
             output.append(q)
 
-            if next_coord not in skip_coords_:
+            if next_coord not in skip_coords:
                 output.append(r)
 
         return output
@@ -302,13 +297,13 @@ def chaikin_smooth_keep_topology(
     """
     copy = geoseries.copy()
 
-    skipped_coords = get_topological_points(copy)
+    skipped_coords = {(point.x, point.y) for point in get_topological_points(copy)}
 
     if isinstance(extra_skip_coords, MultiPoint):
         extra_skip_coords = list(extra_skip_coords.geoms)
 
     if extra_skip_coords is not None:
-        skipped_coords += extra_skip_coords
+        skipped_coords.update((point.x, point.y) for point in extra_skip_coords)
 
     return copy.apply(
         lambda geom: chaikin_smooth_skip_coords(
