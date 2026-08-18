@@ -4,6 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 from typing import Literal
+from warnings import warn
 
 from geopandas import GeoDataFrame
 
@@ -132,3 +133,67 @@ def inherit_attributes_from_largest(
     output.geometry.name = source_gdf.geometry.name
 
     return output
+
+
+def inherit_attributes_for_lines_by_buffer(
+    original: GeoDataFrame,
+    new: GeoDataFrame,
+    *,
+    buffer_distance: float = 10,
+) -> GeoDataFrame:
+    """Inherit attributes from the best-matching original line.
+
+    Each new line is buffered to find nearby original lines, then the one with
+    the greatest intersection with the buffer is selected.
+
+    Args:
+    ----
+        original: Original line features.
+        new: Modified line features.
+        buffer_distance: Distance used to find matching lines.
+
+    Returns:
+    -------
+        Modified lines with inherited attributes and index.
+
+    Warns:
+    -----
+        UserWarning: If no matching line is found.
+
+    """
+    rows = []
+    indices = []
+
+    for modified_geom in new.geometry:
+        buffer = modified_geom.buffer(buffer_distance)
+
+        candidate_positions = original.sindex.query(
+            buffer,
+            predicate="intersects",
+        )
+
+        if len(candidate_positions) == 0:
+            warn(
+                f"Did not find match for line at around {modified_geom.centroid}",
+                UserWarning,
+                stacklevel=2,
+            )
+            continue
+
+        candidates = original.iloc[candidate_positions]
+
+        lengths = candidates.geometry.intersection(buffer).length
+        best_idx = lengths.idxmax()
+
+        feature = original.loc[best_idx].copy()
+        feature[original.geometry.name] = modified_geom
+
+        rows.append(feature)
+        indices.append(best_idx)
+
+    return GeoDataFrame(
+        rows,
+        index=indices,
+        columns=original.columns,
+        crs=new.crs,
+    )
