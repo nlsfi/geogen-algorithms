@@ -48,7 +48,6 @@ from geogenalg.application.generalize_polygons_to_points import (
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
-from geogenalg.application.generalize_shoreline import GeneralizeShoreline
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.application.generalize_watercourse_areas import (
     GeneralizeWaterCourseAreas,
@@ -442,7 +441,6 @@ def build_app() -> None:
         "polygons_to_points": GeneralizePolygonsToPoints,
         "fences": GeneralizeFences,
         "landcover": GeneralizeLandcover,
-        "shoreline": GeneralizeShoreline,
         "points": GeneralizePoints,
         "water_areas": GeneralizeWaterAreas,
         "remove_overlap": RemoveOverlap,
