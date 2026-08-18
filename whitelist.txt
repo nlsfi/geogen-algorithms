@@ -92,6 +92,7 @@ sindex
 sjoin
 sklearn
 slopelines
+splitter
 splitters
 sqrt
 stacklevel
@@ -105,6 +106,7 @@ tolist
 topo
 typer
 unary
+unsplit
 utils
 visvalingam
 wkb

@@ -191,9 +191,13 @@ def inherit_attributes_for_lines_by_buffer(
         rows.append(feature)
         indices.append(best_idx)
 
+    if not rows:
+        return copy_gdf_as_empty(new)
+
     return GeoDataFrame(
         rows,
         index=indices,
         columns=original.columns,
+        geometry=original.geometry.name,
         crs=new.crs,
     )
