@@ -71,6 +71,9 @@ class IntegrationTest:
     """Any arguments to pass to geopandas.testing.assert_geodataframe_equal."""
     dummy_data_mandatory_columns: list[str] = field(default_factory=list)
     """For defining columns which are required for algorithm to pass."""
+    dummy_reference_data_mandatory_columns: list[str] = field(default_factory=list)
+    """For defining columns for reference data which are required for algorithm
+    to pass."""
 
     def get_test_gdfs(self, *, geometry_column: str | None = None) -> TestGeoDataFrames:
         """Get GeoDataFrames used in test.
@@ -349,10 +352,12 @@ class IntegrationTest:
 
         reference_data = {}
         for key, ref in self.algorithm.reference_data_schema.items():
+            reference_attributes = {
+                column: [1] for column in self.dummy_reference_data_mandatory_columns
+            }
+            reference_attributes["field_1"] = [1]
             reference_data[getattr(self.algorithm, key)] = GeoDataFrame(
-                {
-                    "field_1": [1],
-                },
+                reference_attributes,
                 index=[str(uuid4())],
                 geometry=[dummy_geometry(next(iter(ref.valid_geometry_types)))],
                 crs="EPSG:3857",
