@@ -379,16 +379,23 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
             args.pop("input_geopackages"),
         )
         output_geopackage = cast("GeoPackageArgument", args.pop("output_geopackage"))
-        unique_id_column = cast("str", args.pop("unique_id_column"))
+        unique_id_column = cast("str | None", args.pop("unique_id_column"))
 
         reference_options = cast("list[NamedGeoPackageURI]", args.pop("ref"))
 
         reference_data: dict[str, GeoDataFrame] = {}
         for reference in reference_options:
-            reference_gdf = read_file(
-                reference.uri.file,
-                layer=reference.uri.layer_name,
-            )
+            if unique_id_column is not None:
+                reference_gdf = read_gdf_from_file_and_set_index(
+                    reference.uri.file,
+                    unique_id_column,
+                    layer=reference.uri.layer_name,
+                )
+            else:
+                reference_gdf = read_file(
+                    reference.uri.file,
+                    layer=reference.uri.layer_name,
+                )
 
             if reference.name not in reference_data:
                 reference_data[reference.name] = reference_gdf
