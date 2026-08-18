@@ -30,7 +30,7 @@ from geogenalg.continuity import (
     flag_polygon_centerline_connections,
     gdf_to_networkx_graph,
     get_lines_along_reference_lines,
-    get_segments_in_polygon_exteriors_but_not_in_lines,
+    get_segments_in_polygon_boundary_but_not_in_lines,
     inspect_dead_end_candidates,
     process_lines_and_reconnect,
     smooth_linestring_connections,
@@ -1645,18 +1645,18 @@ def test_add_contiguous_lines_information(
         "empty_lines",
     ],
 )
-def test_get_segments_in_polygon_exteriors_but_not_in_lines(
+def test_get_segments_in_polygon_boundary_but_not_in_lines(
     polygons: GeoDataFrame,
     lines: GeoDataFrame,
     expected_gdf: GeoDataFrame,
 ):
-    get_segments_in_polygon_exteriors_but_not_in_lines(
+    get_segments_in_polygon_boundary_but_not_in_lines(
         polygons,
         lines,
     )
 
     assert_geodataframe_equal(
-        get_segments_in_polygon_exteriors_but_not_in_lines(
+        get_segments_in_polygon_boundary_but_not_in_lines(
             polygons,
             lines,
         ),
