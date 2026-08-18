@@ -317,6 +317,7 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "shapely" },
     { name = "shapelysmooth" },
+    { name = "simplification" },
 ]
 
 [package.optional-dependencies]
@@ -354,6 +355,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = "==1.6.1" },
     { name = "shapely", specifier = "==2.1.2" },
     { name = "shapelysmooth", specifier = "==0.2.1" },
+    { name = "simplification", specifier = ">=1.0.0" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.19.2" },
 ]
 provides-extras = ["cli"]
@@ -1472,6 +1474,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
+]
+
+[[package]]
+name = "simplification"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/e4/acaf8400d85ced98c4a371818fcde69c202fdbd3942666e374989cb370be/simplification-1.0.0.tar.gz", hash = "sha256:c1e33379455f5da02462b2d674b816a5f385bbbde216652101465fd33e4a2e3c", size = 1451089, upload-time = "2026-06-08T12:00:07.849Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/a4/38cfcf4d209748ad543b8fde594f66513227fb74b0840cceba0192ef3ded/simplification-1.0.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:8def6393614096bfcb69e889f0da371a58009de8fc3d6660e31dfda3d0f35e61", size = 243223, upload-time = "2026-06-08T12:00:00.562Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/2e/b0a647c7757b432dbc2a5b84ae49c8e01a8a78380442d3d67b1352e2f141/simplification-1.0.0-cp311-abi3-macosx_11_0_x86_64.whl", hash = "sha256:4e0fa16ea12cdce014d0cf649a36bf91733bddbfab8e6fd7bab7251bbd5c28f1", size = 261130, upload-time = "2026-06-08T12:00:01.84Z" },
+    { url = "https://files.pythonhosted.org/packages/09/7a/55f40b9a903bf45ac24da8bb4f2fbc3419c80462e6c43dd6b5713d53383c/simplification-1.0.0-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:249ec6b7bbf2baed3655246dde003a9607ae7cb182e7c7053ada52c01ceef808", size = 274461, upload-time = "2026-06-08T12:00:03.918Z" },
+    { url = "https://files.pythonhosted.org/packages/69/1c/083b6a0d5909741620581f6730f23357ca308bc6fb33823d35b9be9587cb/simplification-1.0.0-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:e533dd74ee873728de1eda7a456c2ebd021243137c59c5c674e5d9665b930d22", size = 290118, upload-time = "2026-06-08T12:00:05.333Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/67/08db7eabb5f2fb74702ec5b478a0c206177d68d9875a7b13c3b8bbda15b9/simplification-1.0.0-cp311-abi3-win_amd64.whl", hash = "sha256:e114c5feaa44fa6272dbf2a455f901b9c6196fb653b45652db0741c0770fe154", size = 333377, upload-time = "2026-06-08T12:00:06.486Z" },
 ]
 
 [[package]]
