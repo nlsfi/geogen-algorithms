@@ -2356,8 +2356,8 @@ def test_add_topological_points(
     ("point", "snap_to", "tolerance", "z_behavior", "expected"),
     [
         (Point(0, 0.01), LineString([[0, 0], [1, 0]]), 0, "inherit", Point(0, 0)),
-        (Point(0, 2), LineString([[0, 0], [1, 0]]), 1, "inherit", Point(0, 0)),
-        (Point(0, 2), LineString([[0, 0], [1, 0]]), 3, "inherit", Point(0, 2)),
+        (Point(0, 2), LineString([[0, 0], [1, 0]]), 1, "inherit", Point(0, 2)),
+        (Point(0, 2), LineString([[0, 0], [1, 0]]), 3, "inherit", Point(0, 0)),
         (Point(0, 0.01), box(0, 0, 1, -1), 0, "inherit", Point(0, 0)),
         (Point(0, 0), Point(1, 1), 0, "inherit", Point(1, 1)),
         (Point(0, 0, 5), Point(1, 1), 0, "inherit", Point(1, 1, 5)),

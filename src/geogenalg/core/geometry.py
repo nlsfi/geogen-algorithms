@@ -1599,7 +1599,7 @@ def snap_to_closest_vertex_or_segment(
 
     """
     _, snap_point = nearest_points(point, snap_to)
-    if point.distance(snap_point) < tolerance:
+    if tolerance > 0.0 and point.distance(snap_point) > tolerance:
         return point
 
     if z_behavior == "inherit" and point.has_z:
@@ -1882,8 +1882,9 @@ def smooth_around_connection_point_of_two_lines(  # noqa: PLR0914
     )
 
     # The smoothing retains existing vertices and adds new vertices equal to
-    # spline_subdivisions. We can use spline_subdivisions to "split" the
-    # smoothed curve and then add the split sections to the cut lines.
+    # spline_subdivisions * 2. We can use spline_subdivisions as an index to
+    # "split" the smoothed curve in half and then add the split parts to the
+    # cut lines.
     connection_index = spline_subdivisions
     curve_coords = list(curve.coords)
 
