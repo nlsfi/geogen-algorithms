@@ -91,6 +91,7 @@ simplifytolerance
 sindex
 sjoin
 sklearn
+slopelines
 splitters
 sqrt
 stacklevel
