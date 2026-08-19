@@ -18,7 +18,9 @@ from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
 from geogenalg.application.generalize_conservation_areas import (
     GeneralizeConservationAreas,
 )
+from geogenalg.application.generalize_contours import GeneralizeContours
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
+from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
 
 try:
     import typer
@@ -455,6 +457,8 @@ def build_app() -> None:
         "dissolve_polygons": DissolvePolygons,
         "conservation_areas": GeneralizeConservationAreas,
         "railroads": GeneralizeRailroads,
+        "contours": GeneralizeContours,
+        "slope_lines": GeneralizeSlopeLines,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
