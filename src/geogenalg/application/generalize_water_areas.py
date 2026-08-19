@@ -6,6 +6,7 @@
 from typing import ClassVar, cast, override
 
 from geopandas import GeoDataFrame, GeoSeries
+from pandas.api.types import is_string_dtype
 from pydantic import Field
 from pygeoops import simplify
 from shapely import MultiPoint, Polygon, force_2d, shortest_line, union_all
@@ -228,13 +229,83 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
         return result
 
+    def _build_generalized_shoreline(
+        self,
+        gdf: GeoDataFrame,
+        original_shoreline: GeoDataFrame,
+        non_shoreline_segments: GeoDataFrame,
+    ) -> GeoDataFrame:
+        shoreline = cast("GeoDataFrame", gdf.copy())
+        shoreline.geometry = shoreline.geometry.boundary
+
+        # Remove segments which were originally identified to be present in
+        # the unmodified water area boundaries but not in unmodified
+        # shoreline. More simply, this removes segments which are not part
+        # of an actual shoreline.
+        shoreline = shoreline.overlay(
+            GeoDataFrame(geometry=[non_shoreline_segments.union_all()], crs=gdf.crs),
+            how="difference",
+        ).explode()
+
+        splitters = GeneralizeWaterAreas._get_shoreline_splitters(
+            original_shoreline,
+            shoreline.union_all(),
+        )
+
+        shoreline.geometry = shoreline.geometry.apply(
+            lambda geom: split_linear_geometry(geom, splitters)
+        )
+        shoreline = shoreline.explode().reset_index(drop=True)
+
+        return inherit_attributes_for_lines_by_buffer(
+            original_shoreline,
+            shoreline,
+            buffer_distance=max(
+                self.island_exaggerate_by,
+                self.thin_section_exaggerate_by,
+            )
+            + 1,
+        )
+
+    def _post_process(
+        self,
+        gdf: GeoDataFrame,
+        original_data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+        non_shoreline_segments: GeoDataFrame,
+        skip_coords: MultiPoint,
+    ) -> GeoDataFrame:
+        gdf.geometry = chaikin_smooth_keep_topology(
+            gdf.geometry,
+            iterations=self.smoothing_passes,
+            extra_skip_coords=skip_coords,
+        )
+
+        if self.include_new_shoreline and not gdf.empty:
+            shoreline = self._build_generalized_shoreline(
+                gdf,
+                reference_data[self.reference_key],
+                non_shoreline_segments,
+            )
+
+            if not is_string_dtype(shoreline.index.dtype):
+                shoreline = shoreline.set_index(shoreline.index.astype("string"))
+
+            gdf = combine_gdfs([gdf, shoreline])
+
+        gdf = hash_duplicate_indexes(gdf, "water_areas")
+        return assign_nearest_z(original_data, gdf)
+
     @override
     def _execute(
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        segments, skip_coords = self._get_segments_and_skip_coords(data, reference_data)
+        non_shoreline_segments, skip_coords = self._get_segments_and_skip_coords(
+            data,
+            reference_data,
+        )
 
         gdf = data.copy()
 
@@ -317,46 +388,10 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         # the largest part.
         gdf.geometry = gdf.geometry.apply(largest_part)
 
-        gdf.geometry = chaikin_smooth_keep_topology(
-            gdf.geometry,
-            iterations=self.smoothing_passes,
-            extra_skip_coords=skip_coords,
+        return self._post_process(
+            gdf,
+            data,
+            reference_data,
+            non_shoreline_segments,
+            skip_coords,
         )
-
-        if self.include_new_shoreline and not gdf.empty:
-            shoreline = cast("GeoDataFrame", gdf.copy())
-            shoreline.geometry = shoreline.geometry.boundary
-
-            # Remove segments which were originally identified to be present in
-            # the unmodified water area boundaries but not in unmodified
-            # shoreline. More simply, this removes segments which are not part
-            # of an actual shoreline.
-            shoreline = shoreline.overlay(
-                GeoDataFrame(geometry=[segments.union_all()], crs=data.crs),
-                how="difference",
-            ).explode()
-
-            splitters = GeneralizeWaterAreas._get_shoreline_splitters(
-                reference_data[self.reference_key],
-                shoreline.union_all(),
-            )
-
-            shoreline.geometry = shoreline.geometry.apply(
-                lambda geom: split_linear_geometry(geom, splitters)
-            )
-            shoreline = shoreline.explode().reset_index(drop=True)
-
-            shoreline = inherit_attributes_for_lines_by_buffer(
-                reference_data[self.reference_key],
-                shoreline,
-                buffer_distance=max(
-                    self.island_exaggerate_by,
-                    self.thin_section_exaggerate_by,
-                )
-                + 1,
-            )
-
-            gdf = combine_gdfs([gdf, shoreline])
-
-        gdf = hash_duplicate_indexes(gdf, "water_areas")
-        return assign_nearest_z(data, gdf)
