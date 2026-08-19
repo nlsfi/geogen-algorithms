@@ -38,7 +38,11 @@ def test_generalize_watercourse_areas(testdata_path: Path):
             line_min_length=200.0,
             min_new_section_length=200.0,
             width_check_distance=10.0,
+            include_new_shoreline=True,
         ),
+        reference_uris={
+            "shoreline": gpkg.to_input("shoreline"),
+        },
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
     ).run()
