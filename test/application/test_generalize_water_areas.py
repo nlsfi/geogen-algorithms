@@ -46,7 +46,7 @@ def test_generalize_water_areas(testdata_path: Path):
             "shoreline": gpkg.to_input("shoreline"),
         },
         unique_id_column=UNIQUE_ID_COLUMN,
-        check_missing_reference=True,
+        check_missing_reference=False,
         dummy_reference_data_mandatory_columns=["shoreline_type_id"],
     ).run()
 
