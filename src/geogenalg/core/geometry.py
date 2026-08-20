@@ -26,6 +26,7 @@ from shapely import (
     Polygon,
     area,
     count_coordinates,
+    distance,
     force_2d,
     get_coordinates,
     get_point,
@@ -1711,16 +1712,21 @@ def remove_holes(
     if geom.is_empty:
         return type(geom)()
 
-    return _modify_geometry_and_handle_multigeometries(
-        geom,
-        lambda poly: Polygon(
-            shell=poly.exterior,
-            holes=[
+    def _remove(poly: Polygon) -> Polygon:
+        if area_threshold == 0.0:
+            holes = []
+        else:
+            holes = [
                 interior
                 for interior in poly.interiors
                 if Polygon(interior).area > area_threshold
-            ],
-        ),
+            ]
+
+        return Polygon(shell=poly.exterior, holes=holes)
+
+    return _modify_geometry_and_handle_multigeometries(
+        geom,
+        _remove,
     )
 
 
@@ -1977,3 +1983,33 @@ def concatenate_lines(
         return LineString(a_coords + b_coords[1:])
 
     return LineString(a_coords + b_coords)
+
+
+def sinuosity(line: LineString) -> float:
+    """Calculate sinuosity of linestring.
+
+    Sinuosity is the ratio of the total length of the linestring to
+    the distance between its endpoints.
+
+    Larger value represents a more winding path.
+
+    1.0 represents a perfectly straight line.
+
+    Returns
+    -------
+        Calculated sinuosity value.
+
+    """
+    length = line.length
+    if length == 0:
+        return 0.0
+
+    straight_distance = distance(
+        get_point(line, 0),
+        get_point(line, -1),
+    )
+
+    if straight_distance == 0:
+        return float("inf")
+
+    return length / straight_distance

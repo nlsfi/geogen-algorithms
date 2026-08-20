@@ -77,6 +77,7 @@ from geogenalg.core.geometry import (
     scale_line_to_length,
     segment_bearing,
     segment_direction,
+    sinuosity,
     smooth_around_connection_point_of_two_lines,
     snap_to_closest_vertex_or_segment,
     split_line_at_distances,
@@ -3346,3 +3347,40 @@ def test_smooth_around_connection_point_of_two_lines(
 
     assert result_1.equals_exact(expected_1, tolerance=0.2)
     assert result_2.equals_exact(expected_2, tolerance=0.2)
+
+
+@pytest.mark.parametrize(
+    (
+        "line",
+        "expected",
+    ),
+    [
+        (
+            LineString(),
+            0.0,
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            1.0,
+        ),
+        (
+            LineString([[0, 0], [1, 1], [2, 2], [3, 3]]),
+            1.0,
+        ),
+        (
+            LineString([[0, 0], [1, 0], [1, 1]]),
+            1.41421,
+        ),
+    ],
+    ids=[
+        "empty",
+        "straight_line",
+        "straight_line_multiple_segments",
+        "right_angle",
+    ],
+)
+def test_sinuosity(
+    line: LineString,
+    expected: float,
+):
+    assert isclose(sinuosity(line), expected)
