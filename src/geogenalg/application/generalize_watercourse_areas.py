@@ -96,7 +96,7 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
             self.OutputFeatureType.WATERCOURSE_LINE
         )
 
-        if self.include_new_shoreline and not generalized_areas.empty:
+        if self.reference_key in reference_data and not generalized_areas.empty:
             shoreline = self._build_generalized_shoreline(
                 generalized_areas,
                 reference_data[self.reference_key],

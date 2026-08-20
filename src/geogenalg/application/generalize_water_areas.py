@@ -22,7 +22,7 @@ from geogenalg.attributes import inherit_attributes_for_lines_by_buffer
 from geogenalg.continuity import (
     get_segments_in_polygon_boundary_but_not_in_lines,
 )
-from geogenalg.core.exceptions import GeometryOperationError, MissingReferenceError
+from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
     assign_nearest_z,
@@ -83,14 +83,14 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     smoothing_passes: int = Field(3, ge=0)
     """How many smoothing passes will be performed. Each smoothing passes
     (nearly) doubles the vertex count."""
-    include_new_shoreline: bool = False
-    """If true, new shoreline will be created and included in the output.
-    If set true, the reference shoreline data is mandatory."""
     preserve_shoreline_sections_column: str | None = None
     """Name of column used to select shoreline features whose vertices
-    are preserved as is."""
+    are preserved as is. This affects results only if shoreline reference
+    data and preserve_shoreline_sections_values are provided."""
     preserve_shoreline_sections_values: frozenset[int | str] = frozenset()
-    """Types of shoreline whose vertices are preserved as is."""
+    """Types of shoreline whose vertices are preserved as is. This affects
+    results only if shoreline reference data and
+    preserve_shoreline_sections_column are provided."""
     reference_key: str = "shoreline"
     """Reference data key for shoreline data. This optional reference data is
     intended to be a linestring dataset which (mostly) follows the input data
@@ -98,7 +98,9 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     water area polygons which are not present in the shoreline, f.e. shared
     segments between water area features, or territorial sea borders. These
     segments are prevented from being smoothed. The shoreline data has to be of
-    the previous scale and has to match the input data."""
+    the previous scale and has to match the input data. If the shoreline data
+    is included, a new shoreline matching the generalized water areas will be
+    created and included in the output."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
     reference_data_schema: ClassVar = {
@@ -155,8 +157,6 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
             skip_coords = force_2d(skip_coords)
         else:
-            if self.include_new_shoreline:
-                raise MissingReferenceError
             skip_coords = MultiPoint()
             segments = GeoDataFrame(geometry=[], crs=data.crs)
 
@@ -281,7 +281,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             extra_skip_coords=skip_coords,
         )
 
-        if self.include_new_shoreline and not gdf.empty:
+        if self.reference_key in reference_data and not gdf.empty:
             shoreline = self._build_generalized_shoreline(
                 gdf,
                 reference_data[self.reference_key],
