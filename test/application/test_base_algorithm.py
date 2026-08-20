@@ -339,3 +339,18 @@ def test_limit_int_value():
         MockAlg(parameter=-1000)
     with pytest.raises(ValidationError, match=r"1 validation error for MockAlg"):
         MockAlg(parameter=1000)
+
+
+def test_algorithm_raises_on_extra_input():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(
+        ValidationError,
+        match="Extra inputs are not permitted",
+    ):
+        MockAlg(extra_argument=10)
