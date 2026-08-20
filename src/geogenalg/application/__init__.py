@@ -50,6 +50,7 @@ class BaseAlgorithm(ABC, BaseModel):
 
     model_config = ConfigDict(
         frozen=True,
+        extra="forbid",
     )
 
     @final
