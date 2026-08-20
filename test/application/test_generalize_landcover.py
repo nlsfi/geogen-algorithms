@@ -28,7 +28,6 @@ def test_generalize_landcover(
             area_threshold=5000,
             hole_threshold=5000,
             smoothing=True,
-            buffer_cap_style="square",
             buffer_join_style="bevel",
             group_by=frozenset(),
         ),
