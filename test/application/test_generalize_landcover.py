@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.testing import GeoPackagePath
@@ -28,10 +28,12 @@ def test_generalize_landcover(
             area_threshold=5000,
             hole_threshold=5000,
             smoothing=True,
-            buffer_cap_style="square",
             buffer_join_style="bevel",
             group_by=frozenset(),
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

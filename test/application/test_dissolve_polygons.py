@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.dissolve_polygons import DissolvePolygons
 from geogenalg.testing import GeoPackagePath
@@ -28,4 +28,7 @@ def test_dissolve_polygons(
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_cliffs import GeneralizeCliffs
 from geogenalg.testing import GeoPackagePath
@@ -30,4 +30,7 @@ def test_generalize_cliffs(testdata_path: Path) -> None:
         reference_uris={
             "roads": gpkg.to_input("roads"),
         },
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

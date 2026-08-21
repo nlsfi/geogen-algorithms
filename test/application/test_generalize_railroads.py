@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
 from geogenalg.testing import GeoPackagePath
@@ -31,4 +31,7 @@ def test_generalize_railroads(
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={},
         check_missing_reference=False,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

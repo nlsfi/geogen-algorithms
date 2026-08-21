@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import pytest
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_points import GeneralizePoints
 from geogenalg.testing import GeoPackagePath
@@ -83,5 +83,9 @@ def test_generalize_points(
         algorithm=algorithm,
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["boulder_in_water_type_id"],
+        dummy_data_mandatory_columns=frozenset(["boulder_in_water_type_id"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+            acceptable_extra_colums=frozenset(["is_cluster"]),
+        ),
     ).run()

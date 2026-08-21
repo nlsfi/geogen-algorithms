@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_contours import GeneralizeContours
 from geogenalg.testing import GeoPackagePath
@@ -38,5 +38,8 @@ def test_generalize_contours(
         assert_function_arguments={
             "check_less_precise": True,
         },
-        dummy_data_mandatory_columns=["n60_elevation_value"],
+        dummy_data_mandatory_columns=frozenset(["n60_elevation_value"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

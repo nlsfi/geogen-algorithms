@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_polygons_to_points import (
     GeneralizePolygonsToPoints,
@@ -25,4 +25,7 @@ def test_generalize_polygons_to_points(testdata_path: Path) -> None:
         algorithm=GeneralizePolygonsToPoints(polygon_min_area=1000.0),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()
