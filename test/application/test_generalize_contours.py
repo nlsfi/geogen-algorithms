@@ -38,5 +38,5 @@ def test_generalize_contours(
         assert_function_arguments={
             "check_less_precise": True,
         },
-        dummy_data_mandatory_columns=["n60_elevation_value"],
+        dummy_data_mandatory_columns=frozenset(["n60_elevation_value"]),
     ).run()
