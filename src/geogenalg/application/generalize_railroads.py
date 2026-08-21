@@ -251,6 +251,10 @@ class GeneralizeRailroads(BaseAlgorithm):
         both_disconnected = (~tracks["_start_connected"]) & (~tracks["_end_connected"])
         tracks = tracks.loc[~(both_disconnected)]
 
+        tracks = tracks.drop(
+            [column for column in tracks.columns if column not in data.columns], axis=1
+        )
+
         tracks = tracks.set_index(tracks.index.astype("string"))
         tracks = inherit_attributes_from_largest(data, tracks)
         return hash_duplicate_indexes(tracks, "railroads")

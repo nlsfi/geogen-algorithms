@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 from geopandas import GeoDataFrame
 from pandas import isna
 from pandas.testing import assert_frame_equal
@@ -51,7 +51,11 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["kayttotarkoitus"],
+        dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+            acceptable_extra_colums=frozenset(["main_angle"]),
+        ),
     ).run()
 
 
@@ -76,7 +80,11 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["kayttotarkoitus"],
+        dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+            acceptable_extra_colums=frozenset(["main_angle"]),
+        ),
     ).run()
 
 

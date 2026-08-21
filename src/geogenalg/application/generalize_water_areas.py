@@ -39,7 +39,7 @@ from geogenalg.exaggeration import (
     extract_narrow_polygon_parts,
 )
 from geogenalg.identity import hash_duplicate_indexes
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
 
 @supports_identity
@@ -387,6 +387,17 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         # this by transforming any MultiPolygons to Polygons, retaining only
         # the largest part.
         gdf.geometry = gdf.geometry.apply(largest_part)
+
+        if gdf.empty:
+            return copy_gdf_as_empty(
+                gdf,
+                add_columns={
+                    str(name): str(dtype)
+                    for name, dtype in reference_data[self.reference_key].dtypes.items()
+                }
+                if self.reference_key in reference_data
+                else None,
+            )
 
         return self._post_process(
             gdf,

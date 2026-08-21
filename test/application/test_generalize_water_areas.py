@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import pytest
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 from shapely import equals_exact
@@ -38,7 +38,6 @@ def test_generalize_water_areas(testdata_path: Path):
             island_simplification_tolerance=10.0,
             smoothing_passes=3,
             reference_key="shoreline",
-            include_new_shoreline=True,
             preserve_shoreline_sections_column="shoreline_type_id",
             preserve_shoreline_sections_values=frozenset([3]),
         ),
@@ -47,7 +46,12 @@ def test_generalize_water_areas(testdata_path: Path):
         },
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
-        dummy_reference_data_mandatory_columns=["shoreline_type_id"],
+        dummy_reference_data_mandatory_columns=frozenset(["shoreline_type_id"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+            inherit_from_reference_key="shoreline",
+            acceptable_extra_colums=frozenset(["feature_type"]),
+        ),
     ).run()
 
 
