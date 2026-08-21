@@ -342,13 +342,10 @@ class IntegrationTest:
             attribute_data,
             index=[str(uuid4())],
             geometry=[
-                dummy_geometry(next(iter(self.algorithm.valid_input_geometry_types)))
+                dummy_geometry(min(self.algorithm.valid_input_geometry_types)),
             ],
             crs="EPSG:3857",
         )
-
-        # TODO: selecting next from a set is non-deterministic potentially
-        # resulting in flaky tests?
 
         reference_data = {}
         for key, ref in self.algorithm.reference_data_schema.items():
@@ -359,7 +356,7 @@ class IntegrationTest:
             reference_data[getattr(self.algorithm, key)] = GeoDataFrame(
                 reference_attributes,
                 index=[str(uuid4())],
-                geometry=[dummy_geometry(next(iter(ref.valid_geometry_types)))],
+                geometry=[dummy_geometry(min(ref.valid_geometry_types))],
                 crs="EPSG:3857",
             )
 
