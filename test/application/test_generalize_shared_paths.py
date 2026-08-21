@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.testing import GeoPackagePath
@@ -34,4 +34,7 @@ def test_generalize_shared_paths(
             "roads": gpkg.to_input("control"),
         },
         check_missing_reference=True,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

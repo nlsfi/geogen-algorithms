@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import pytest
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.remove_overlap import RemoveOverlap
 from geogenalg.testing import GeoPackagePath
@@ -45,4 +45,5 @@ def test_remove_overlap(
             "mask": gpkg.to_input("mask"),
         },
         check_missing_reference=True,
+        expected_result_columns=ExpectedResultColumns(inherit="input"),
     ).run()

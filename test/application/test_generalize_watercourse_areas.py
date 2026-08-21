@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_watercourse_areas import (
     GeneralizeWaterCourseAreas,
@@ -38,11 +38,16 @@ def test_generalize_watercourse_areas(testdata_path: Path):
             line_min_length=200.0,
             min_new_section_length=200.0,
             width_check_distance=10.0,
-            include_new_shoreline=True,
+            feature_type_column="feature_type",
         ),
         reference_uris={
             "shoreline": gpkg.to_input("shoreline"),
         },
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input_and_ref",
+            inherit_from_reference_key="shoreline",
+            acceptable_extra_colums=frozenset(["feature_type"]),
+        ),
     ).run()

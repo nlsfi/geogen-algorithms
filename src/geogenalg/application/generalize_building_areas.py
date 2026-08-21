@@ -188,7 +188,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         if gdf.empty:
             # GeneralizeLandCover may have eroded all areas away, which
             # will cause overlay() to fail later -> return early
-            return gdf
+            return GeoDataFrame(geometry=[], crs=gdf.crs)
 
         # Remove sections from building areas which are too close to the
         # reference roads

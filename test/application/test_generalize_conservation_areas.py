@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_conservation_areas import (
     GeneralizeConservationAreas,
@@ -41,5 +41,8 @@ def test_generalize_conservation_areas(
             "water_areas": gpkg.to_input("water_areas"),
         },
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["layer"],
+        dummy_data_mandatory_columns=frozenset(["layer"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

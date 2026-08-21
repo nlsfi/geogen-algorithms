@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
 from geogenalg.testing import GeoPackagePath
@@ -35,4 +35,7 @@ def test_generalize_slopelines(
         assert_function_arguments={
             "check_less_precise": False,
         },
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

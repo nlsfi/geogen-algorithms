@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.testing import (
@@ -34,4 +34,7 @@ def test_generalize_roads(
             "path": gpkg.to_input("path"),
         },
         check_missing_reference=False,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

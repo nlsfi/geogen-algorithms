@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.testing import GeoPackagePath
@@ -43,5 +43,8 @@ def test_generalize_building_areas(testdata_path: Path) -> None:
             "roads": gpkg.to_input("roads"),
         },
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["building_function_id"],
+        dummy_data_mandatory_columns=frozenset(["building_function_id"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="none",
+        ),
     ).run()

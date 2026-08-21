@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from pathlib import Path
 
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.testing import GeoPackagePath
@@ -37,5 +37,8 @@ def test_generalize_power_lines(
             "fences": gpkg.to_input("fences"),
         },
         check_missing_reference=True,
-        dummy_data_mandatory_columns=["kohdeluokka"],
+        dummy_data_mandatory_columns=frozenset(["kohdeluokka"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()

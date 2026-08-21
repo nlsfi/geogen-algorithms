@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import pytest
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 
 from geogenalg.application.keep_intersection import KeepIntersection
 from geogenalg.testing import GeoPackagePath
@@ -45,4 +45,7 @@ def test_keep_intersection(
             "mask": gpkg.to_input("mask"),
         },
         check_missing_reference=True,
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+        ),
     ).run()
