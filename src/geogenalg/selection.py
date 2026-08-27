@@ -3,6 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+
 from collections import defaultdict
 from math import hypot
 from typing import Any
@@ -16,6 +17,7 @@ from shapely.geometry import LineString, Point
 from geogenalg.continuity import find_all_endpoints
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import line_mean_direction, remove_holes
+from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -350,10 +352,7 @@ def remove_short_lines(lines: GeoDataFrame, length_threshold: float) -> GeoDataF
 
 def rank_parallel_lines(
     input_gdf: GeoDataFrame,
-) -> tuple[
-    Series,
-    list[Any],
-]:
+) -> tuple[Series, list[Any]]:
     """Rank parallel lines by their position along a perpendicular axis.
 
     Creates a line perpendicular to the mean direction of the input geometries
@@ -418,3 +417,47 @@ def rank_parallel_lines(
         distances.rank(),
         disjoint.index.tolist(),
     )
+
+
+def remove_nth_ranks(
+    gdf: GeoDataFrame,
+    rank_column: str,
+    n: int,
+    *,
+    remove_extremes: bool = True,
+) -> GeoDataFrame:
+    """Remove rows at every nth rank.
+
+    The minimum and maximum ranks can be optionally forcibly removed.
+
+    Args:
+    ----
+        gdf: GeoDataFrame containing features to remove.
+        rank_column: Name of a integer column containing rank values.
+        n: Interval between ranks selected for removal.
+        remove_extremes: Whether to remove the minimum and maximum rank rows.
+
+    Returns:
+    -------
+        A GeoDataFrame with rows at the selected ranks removed.
+
+    """
+    if gdf.empty:
+        return gdf
+
+    if gdf[rank_column].unique().shape[0] <= 2:  # noqa: PLR2004
+        if remove_extremes:
+            return copy_gdf_as_empty(gdf)
+        return gdf
+
+    min_rank = int(gdf[rank_column].min())
+    max_rank = int(gdf[rank_column].max())
+
+    start = min_rank if remove_extremes else n
+    ranks_to_remove = set(range(start, max_rank + 1, n))
+
+    if remove_extremes:
+        ranks_to_remove.add(min_rank)
+        ranks_to_remove.add(max_rank)
+
+    return GeoDataFrame(gdf.loc[~gdf[rank_column].isin(ranks_to_remove)])

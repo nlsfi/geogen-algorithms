@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
 from pandas import Series
 from pandas.testing import assert_frame_equal, assert_series_equal
 from shapely import MultiLineString
@@ -21,12 +22,14 @@ from geogenalg.selection import (
     remove_close_line_segments,
     remove_disconnected_short_lines,
     remove_large_polygons,
+    remove_nth_ranks,
     remove_parts_of_lines_on_polygon_edges,
     remove_short_lines,
     remove_small_holes,
     remove_small_polygons,
     split_polygons_by_point_intersection,
 )
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf
 
 
 @pytest.mark.parametrize(
@@ -843,3 +846,126 @@ def test_rank_parallel_lines(
     result = rank_parallel_lines(input_gdf)
     assert_series_equal(result[0], expected[0])
     assert result[1] == expected[1]
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "rank_column",
+        "n",
+        "remove_extremes",
+        "expected",
+    ),
+    [
+        (  # empty
+            GeoDataFrame(),
+            "rank",
+            2,
+            True,
+            GeoDataFrame(),
+        ),
+        (  # one_row
+            GeoDataFrame({"rank": [1]}),
+            "rank",
+            2,
+            True,
+            add_columns_to_gdf(
+                GeoDataFrame(),
+                {"rank": "int64"},
+            ),
+        ),
+        (  # two_rows_remove_extremes
+            GeoDataFrame({"rank": [1, 2]}),
+            "rank",
+            2,
+            True,
+            add_columns_to_gdf(
+                GeoDataFrame(),
+                {"rank": "int64"},
+            ),
+        ),
+        (  # two_rows_keep_extremes
+            GeoDataFrame({"rank": [1, 2]}),
+            "rank",
+            2,
+            False,
+            GeoDataFrame({"rank": [1, 2]}),
+        ),
+        (  # remove_every_second_rank_remove_extremes
+            GeoDataFrame({"rank": [1, 2, 3, 4, 5]}),
+            "rank",
+            2,
+            True,
+            GeoDataFrame({"rank": [2, 4]}, index=[1, 3]),
+        ),
+        (  # remove_every_second_rank
+            GeoDataFrame({"rank": [1, 2, 3, 4, 5]}),
+            "rank",
+            2,
+            False,
+            GeoDataFrame({"rank": [1, 3, 5]}, index=[0, 2, 4]),
+        ),
+        (  # reverse_order
+            GeoDataFrame({"rank": [5, 4, 3, 2, 1]}),
+            "rank",
+            2,
+            False,
+            GeoDataFrame({"rank": [5, 3, 1]}, index=[0, 2, 4]),
+        ),
+        (  # remove_every_third_rank_remove_extremes
+            GeoDataFrame({"rank": [1, 2, 3, 4, 5, 6]}),
+            "rank",
+            3,
+            True,
+            GeoDataFrame({"rank": [2, 3, 5]}, index=[1, 2, 4]),
+        ),
+        (  # remove_every_third_rank
+            GeoDataFrame({"rank": [1, 2, 3, 4, 5, 6]}),
+            "rank",
+            3,
+            False,
+            GeoDataFrame({"rank": [1, 2, 4, 5]}, index=[0, 1, 3, 4]),
+        ),
+        (  # non_consecutive_ranks_remove_extremes
+            GeoDataFrame({"rank": [10, 21, 31, 40]}),
+            "rank",
+            2,
+            True,
+            GeoDataFrame({"rank": [21, 31]}, index=[1, 2]),
+        ),
+        (  # non_consecutive_ranks_keep_extremes
+            GeoDataFrame({"rank": [11, 21, 31, 39]}),
+            "rank",
+            2,
+            False,
+            GeoDataFrame({"rank": [11, 21, 31, 39]}),
+        ),
+    ],
+    ids=[
+        "empty",
+        "one_row",
+        "two_rows_remove_extremes",
+        "two_rows_keep_extremes",
+        "remove_every_second_rank_remove_extremes",
+        "remove_every_second_rank",
+        "reverse_order",
+        "remove_every_third_rank_remove_extremes",
+        "remove_every_third_rank",
+        "non_consecutive_ranks_remove_extremes",
+        "non_consecutive_ranks_keep_extremes",
+    ],
+)
+def test_remove_nth_ranks(
+    input_gdf: GeoDataFrame,
+    rank_column: str,
+    n: int,
+    remove_extremes: bool,
+    expected: GeoDataFrame,
+):
+    result = remove_nth_ranks(
+        input_gdf,
+        rank_column,
+        n,
+        remove_extremes=remove_extremes,
+    )
+    assert_geodataframe_equal(result, expected)
