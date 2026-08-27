@@ -21,6 +21,9 @@ from geogenalg.application.generalize_conservation_areas import (
 from geogenalg.application.generalize_contours import GeneralizeContours
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
+from geogenalg.application.generalize_watercourse_lines import (
+    GeneralizeWatercourseLines,
+)
 
 try:
     import typer
@@ -445,25 +448,26 @@ def build_app() -> None:
 
     """
     commands_and_algs = {
-        "polygons_to_points": GeneralizePolygonsToPoints,
+        "buildings": GeneralizeBuildings,
+        "building_areas": GeneralizeBuildingAreas,
+        "cliffs": GeneralizeCliffs,
+        "conservation_areas": GeneralizeConservationAreas,
+        "contours": GeneralizeContours,
+        "dissolve_polygons": DissolvePolygons,
         "fences": GeneralizeFences,
+        "keep_intersection": KeepIntersection,
         "landcover": GeneralizeLandcover,
         "points": GeneralizePoints,
-        "water_areas": GeneralizeWaterAreas,
-        "remove_overlap": RemoveOverlap,
-        "keep_intersection": KeepIntersection,
-        "watercourse_areas": GeneralizeWaterCourseAreas,
-        "cliffs": GeneralizeCliffs,
-        "roads": GeneralizeRoads,
-        "buildings": GeneralizeBuildings,
-        "shared_paths": GeneralizeSharedPaths,
+        "polygons_to_points": GeneralizePolygonsToPoints,
         "power_lines": GeneralizePowerLines,
-        "building_areas": GeneralizeBuildingAreas,
-        "dissolve_polygons": DissolvePolygons,
-        "conservation_areas": GeneralizeConservationAreas,
         "railroads": GeneralizeRailroads,
-        "contours": GeneralizeContours,
+        "remove_overlap": RemoveOverlap,
+        "roads": GeneralizeRoads,
+        "shared_paths": GeneralizeSharedPaths,
         "slope_lines": GeneralizeSlopeLines,
+        "watercourse_areas": GeneralizeWaterCourseAreas,
+        "watercourse_lines": GeneralizeWatercourseLines,
+        "water_areas": GeneralizeWaterAreas,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
