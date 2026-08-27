@@ -2013,3 +2013,15 @@ def sinuosity(line: LineString) -> float:
         return float("inf")
 
     return length / straight_distance
+
+
+def mean_segment_length(line: LineString) -> float:
+    """Calculate the mean length of the line's segments.
+
+    Returns
+    -------
+        Calculated mean segment length.
+
+    """
+    total_segments = len(line.coords) - 1
+    return (line.length / total_segments) if total_segments > 0 else 0

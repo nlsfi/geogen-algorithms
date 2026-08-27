@@ -63,6 +63,7 @@ from geogenalg.core.geometry import (
     largest_part,
     line_mean_direction,
     lines_to_segments,
+    mean_segment_length,
     mean_z,
     move_to_point,
     orient_line_toward_point,
@@ -3384,3 +3385,45 @@ def test_sinuosity(
     expected: float,
 ):
     assert isclose(sinuosity(line), expected)
+
+
+@pytest.mark.parametrize(
+    (
+        "line",
+        "expected",
+    ),
+    [
+        (
+            LineString(),
+            0.0,
+        ),
+        (
+            LineString([[0, 0], [1, 0]]),
+            1.0,
+        ),
+        (
+            LineString([[0, 0], [1, 0], [2, 0]]),
+            1.0,
+        ),
+        (
+            LineString([[0, 0], [1, 0], [1, 1]]),
+            1.0,
+        ),
+        (
+            LineString([[0, 0], [3, 0], [3, 4]]),
+            3.5,
+        ),
+    ],
+    ids=[
+        "empty",
+        "single_segment",
+        "multiple_equal_segments",
+        "right_angle",
+        "multiple_different_segments",
+    ],
+)
+def test_mean_segment_length(
+    line: LineString,
+    expected: float,
+):
+    assert isclose(mean_segment_length(line), expected)
