@@ -26,10 +26,6 @@ class GeneralizeRoads(BaseAlgorithm):
     linestrings in the reference data, if provided.
     """
 
-    threshold_distance: float = Field(10.0, gt=0)
-    """Size of the buffer at the end vertices of the road linestrings. If the buffer
-    does not intersect with any other linestrings, the line will be considered
-    unconnected on that end."""
     threshold_length: float = Field(75.0, gt=0)
     """Unconnected/dead-end linestring shorter than this will be removed."""
     reference_key: str = "network"
