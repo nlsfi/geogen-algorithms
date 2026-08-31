@@ -385,7 +385,7 @@ def test_simplify_buildings_calls_cartagen_function_correctly(mocker: "MockerFix
     # directly, instead requiring to import the buildings module in
     # generalize_buildings.py. Ideally this test should be refactored so that
     # the direct import can be used.
-    spy_simplify_building = mocker.spy(buildings, "simplify_building")
+    spy_simplify_building = mocker.spy(buildings, "simplify_building_ruas")
     GeneralizeBuildings._simplify_buildings(input_gdf, 3)
 
     assert spy_simplify_building.call_count == 2

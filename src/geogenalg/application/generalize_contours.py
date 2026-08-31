@@ -6,7 +6,7 @@
 
 from typing import ClassVar
 
-from cartagen.utils import gaussian_smoothing
+from cartagen.utils import smooth_gaussian
 from geopandas import GeoDataFrame
 from pydantic import Field
 from shapely.geometry import LineString, Polygon
@@ -90,13 +90,13 @@ class GeneralizeContours(BaseAlgorithm):
         def _smooth(line: LineString) -> LineString:
             if line.is_closed:
                 temp_poly = Polygon(line.coords)
-                smoothed = gaussian_smoothing(
+                smoothed = smooth_gaussian(
                     temp_poly,
                     sigma=self.gaussian_filter_strength,
                 )
                 return LineString(smoothed.exterior.coords)
 
-            return gaussian_smoothing(line, sigma=self.gaussian_filter_strength)
+            return smooth_gaussian(line, sigma=self.gaussian_filter_strength)
 
         gdf.geometry = gdf.geometry.apply(_smooth)
 

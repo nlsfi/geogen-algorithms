@@ -28,15 +28,15 @@ dynamic = [
     "version",
 ]
 dependencies = [
-    "cartagen>=1.0.2",
+    "cartagen==1.3.0",
     "geopandas==1.1.2",
     "networkx==3.4.2",
-    "pydantic>=2.13.3",
+    "pydantic==2.13.3",
     "pygeoops==0.6.0",
     "scikit-learn==1.6.1",
     "shapely==2.1.2",
     "shapelysmooth==0.2.1",
-    "simplification>=1.0.0",
+    "simplification==1.0.0",
 ]
 
 [project.optional-dependencies]
