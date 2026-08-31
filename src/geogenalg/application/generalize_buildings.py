@@ -506,7 +506,7 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         result_gdf = input_gdf.copy().explode()
         result_gdf.geometry = result_gdf.geometry.apply(
-            lambda geom: buildings.simplify_building(geom, edge_threshold),
+            lambda geom: buildings.simplify_building_ruas(geom, edge_threshold),
         )
 
         return result_gdf

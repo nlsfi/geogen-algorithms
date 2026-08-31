@@ -83,6 +83,7 @@ rdp
 rect
 rglob
 rtol
+ruas
 segmentize
 segmentized
 shapelysmooth
