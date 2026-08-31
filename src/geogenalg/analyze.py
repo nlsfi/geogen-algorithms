@@ -720,3 +720,85 @@ def polygonize_parallel_lines(
         .explode()
         .reset_index(drop=True)
     )
+
+
+def flag_parallel_lines2(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    allowed_direction_difference: float,
+) -> GeoDataFrame:
+    gdf = input_gdf.copy().reset_index(drop=True)
+
+    column_direction = "parallel_direction"
+    column_group = "parallel_group"
+    column_parallel_with = "parallel_with"
+    column_id = "parallel_id"
+    column_parallel_check = "_parallel_check"
+
+    def _empty_gdf() -> GeoDataFrame:
+        return copy_gdf_as_empty(
+            gdf,
+            add_columns={
+                column_direction: "float64",
+                column_group: "int64",
+                column_parallel_with: "object",
+                column_id: "int64",
+            },
+        )
+
+    if input_gdf.empty:
+        return _empty_gdf()
+
+    gdf[column_direction] = gdf.geometry.apply(line_mean_direction)
+    gdf[column_parallel_check] = gdf.geometry.buffer(
+        parallel_distance, cap_style="flat"
+    ).buffer(0.01, cap_style="square")
+    gdf[column_parallel_with] = None
+    gdf[column_id] = gdf.index
+
+    for index, row in gdf.iterrows():
+        parallel_geom = row[column_parallel_check]
+        parallel_geom_direction = row[column_direction]
+        row_geom = row[gdf.geometry.name]
+
+        # This locates lines which a) are not the line we're iterating over
+        # b) intersects the buffered area used to check for parallel lines and
+        # c) are within the given direction bounds.
+        crossing_lines = gdf.loc[
+            (gdf.geometry.intersects(parallel_geom))
+            & ~gdf.geometry.intersects(row_geom)
+            & (
+                (
+                    gdf[column_direction].apply(
+                        angle_difference,
+                        b=parallel_geom_direction,
+                        )
+                ) < allowed_direction_difference
+            )
+        ]
+
+        if crossing_lines.empty:
+            continue
+
+        print()
+        print(crossing_lines)
+        print(index)
+        print(gdf[column_parallel_with].to_numpy()[index])
+
+        gdf[column_parallel_with].to_numpy()[index] = set(crossing_lines.index)
+
+    gdf = gdf.loc[gdf[column_parallel_with].notna()]
+
+    _group_parallel_lines(
+        gdf,
+        column_id,
+        column_parallel_with,
+        column_group,
+    )
+
+    gdf = gdf.drop(column_parallel_check, axis=1)
+
+    if gdf.empty:
+        return _empty_gdf()
+
+    return gdf

@@ -13,7 +13,7 @@ from statistics import mean
 from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import array, column_stack, ndarray, pi, sqrt, vstack  # noqa: SC200
+from numpy import array, column_stack, ndarray, pi, sqrt, vstack, std  # noqa: SC200
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -2025,3 +2025,80 @@ def mean_segment_length(line: LineString) -> float:
     """
     total_segments = len(line.coords) - 1
     return (line.length / total_segments) if total_segments > 0 else 0
+
+
+def line_segment_direction_std_dev(
+    geom: LineString | MultiLineString,
+    *,
+    unit: Literal["degrees", "radians"] = "degrees",
+) -> float:
+    """Calculate standard deviation of line segments' direction in a linestring.
+
+    Args:
+    ----
+        geom: (Multi)LineString to calculate standard deviation from.
+        unit: Whether to return value in degrees or radians.
+
+    Returns:
+    -------
+        Calculated value.
+
+    """
+    segments = explode_line(geom).geoms
+    return (
+        std([segment_direction(segment, unit=unit) for segment in segments])
+        if len(segments) > 0
+        else 0.0
+    )
+
+
+def split_at_direction_changes(
+    line: LineString,
+    threshold: float = 30,
+    min_segments: int = 1,
+):
+    def angular_difference(a, b):
+        diff = abs(a - b)
+        return min(diff, 180 - diff)
+
+    coords = list(line.coords)
+
+    if len(coords) < 3:
+        return MultiLineString([line])
+
+    directions = [
+        segment_direction(seg)
+        for seg in explode_line(line).geoms
+    ]
+
+    split_indices = []
+
+    for i in range(1, len(directions)):
+        change = angular_difference(
+            directions[i - 1],
+            directions[i]
+        )
+
+        if change > threshold and (
+            not split_indices
+            or i - split_indices[-1] >= min_segments
+        ):
+            split_indices.append(i)
+
+    parts = []
+    start = 0
+
+    for split_idx in split_indices:
+        end = split_idx + 1
+        part = LineString(coords[start:end])
+
+        if len(part.coords) >= 2:
+            parts.append(part)
+
+        start = split_idx
+
+    part = LineString(coords[start:])
+    if len(part.coords) >= 2:
+        parts.append(part)
+
+    return MultiLineString(parts)
