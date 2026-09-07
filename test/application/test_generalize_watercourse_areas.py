@@ -19,7 +19,10 @@ UNIQUE_ID_COLUMN = "kmtk_id"
 def test_generalize_watercourse_areas(testdata_path: Path):
     gpkg = GeoPackagePath(testdata_path / "watercourse_areas.gpkg")
     IntegrationTest(
-        input_uri=gpkg.to_input("watercourse_part_area"),
+        input_uri=[
+            gpkg.to_input("watercourse_part_area"),
+            gpkg.to_input("shoreline"),
+        ],
         control_uri=gpkg.to_input("control"),
         algorithm=GeneralizeWaterCourseAreas(
             min_area=4000.0,
@@ -33,21 +36,17 @@ def test_generalize_watercourse_areas(testdata_path: Path):
             island_exaggerate_by=3.0,
             island_simplification_tolerance=10.0,
             smoothing_passes=3,
-            reference_key="shoreline",
             line_transform_width=30.0,
             line_min_length=200.0,
             min_new_section_length=200.0,
             width_check_distance=10.0,
             feature_type_column="feature_type",
         ),
-        reference_uris={
-            "shoreline": gpkg.to_input("shoreline"),
-        },
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
+        dummy_data_mandatory_columns=frozenset(["shoreline_type_id"]),
         expected_result_columns=ExpectedResultColumns(
             inherit="input",
-            inherit_from_reference_key="shoreline",
             acceptable_extra_colums=frozenset(["feature_type"]),
         ),
     ).run()

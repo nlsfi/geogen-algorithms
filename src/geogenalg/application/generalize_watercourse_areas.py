@@ -4,7 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 from enum import IntEnum
-from typing import ClassVar, override
+from typing import override
 
 from geopandas import GeoDataFrame
 from pandas.api.types import is_string_dtype
@@ -54,14 +54,12 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     # Inherited from GeneralizeWaterAreas, override default
     thin_section_exaggerate_by: float = Field(0.0, ge=0)
 
-    valid_input_geometry_types: ClassVar = {"Polygon"}
-
     @override
     def _post_process(
         self,
         gdf: GeoDataFrame,
         original_data: GeoDataFrame,
-        reference_data: dict[str, GeoDataFrame],
+        shoreline_gdf: GeoDataFrame,
         non_shoreline_segments: GeoDataFrame,
         skip_coords: MultiPoint,
     ) -> GeoDataFrame:
@@ -96,10 +94,10 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
             self.OutputFeatureType.WATERCOURSE_LINE
         )
 
-        if self.reference_key in reference_data and not generalized_areas.empty:
+        if not shoreline_gdf.empty and not generalized_areas.empty:
             shoreline = self._build_generalized_shoreline(
                 generalized_areas,
-                reference_data[self.reference_key],
+                shoreline_gdf,
                 non_shoreline_segments,
             )
 

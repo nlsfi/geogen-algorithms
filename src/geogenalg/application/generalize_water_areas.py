@@ -15,7 +15,6 @@ from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application import (
     BaseAlgorithm,
-    ReferenceDataInformation,
     supports_identity,
 )
 from geogenalg.attributes import inherit_attributes_for_lines_by_buffer
@@ -54,10 +53,19 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     - Simplifies the areas
     - Smooths the simplified areas, while retaining topology between areas
 
-    A shoreline reference data may optionally be entered. This affects the
-    algorithm so that any vertices not present in the shoreline data will not
-    be modified while smoothing. This makes sense to use with sea part
-    features, so that territorial water borders are not modified.
+    Optionally linestring features may be entered in the input data. These are
+    meant to represent shoreline features which (mostly) follows the exteriors
+    of the polygonal water areas. These features are used to identify vertices
+    which are not present in the shoreline f.e. shared segments between area
+    features or territorial sea borders. These segments are prevented from
+    being smoothed or simplified. Additionally you may define an attribute
+    which selects specific shoreline features which will be not smoothed or
+    simplified, which may be useful for preserving built up dock areas etc.
+
+    If shoreline features are included in the input data, new shoreline
+    features will be created from the generalized areas and included in the
+    output.
+
     """
 
     min_area: float = Field(4000.0, gt=0)
@@ -84,42 +92,23 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     """How many smoothing passes will be performed. Each smoothing passes
     (nearly) doubles the vertex count."""
     preserve_shoreline_sections_column: str | None = None
-    """Name of column used to select shoreline features whose vertices
-    are preserved as is. This affects results only if shoreline reference
-    data and preserve_shoreline_sections_values are provided."""
+    """Name of column used to select shoreline features whose vertices are
+    preserved as is. This affects results only if shoreline features are
+    present in input data and preserve_shoreline_sections_values are
+    provided."""
     preserve_shoreline_sections_values: frozenset[int | str] = frozenset()
     """Types of shoreline whose vertices are preserved as is. This affects
-    results only if shoreline reference data and
+    results only if shoreline features are present in input data and
     preserve_shoreline_sections_column are provided."""
-    reference_key: str = "shoreline"
-    """Reference data key for shoreline data. This optional reference data is
-    intended to be a linestring dataset which (mostly) follows the input data
-    exterior and shares its vertices. It is used to identify segments in the
-    water area polygons which are not present in the shoreline, f.e. shared
-    segments between water area features, or territorial sea borders. These
-    segments are prevented from being smoothed. The shoreline data has to be of
-    the previous scale and has to match the input data. If the shoreline data
-    is included, a new shoreline matching the generalized water areas will be
-    created and included in the output."""
 
-    valid_input_geometry_types: ClassVar = {"Polygon"}
-    reference_data_schema: ClassVar = {
-        "reference_key": ReferenceDataInformation(
-            required=False,
-            valid_geometry_types={
-                "LineString",
-            },
-        ),
-    }
+    valid_input_geometry_types: ClassVar = {"Polygon", "LineString"}
 
-    def _get_segments_and_skip_coords(
+    def _get_shoreline_gdf_segments_and_skip_coords(
         self,
         data: GeoDataFrame,
-        reference_data: dict[str, GeoDataFrame],
-    ) -> tuple[GeoDataFrame, MultiPoint]:
-        if self.reference_key in reference_data:
-            shoreline_gdf = reference_data[self.reference_key]
-
+    ) -> tuple[GeoDataFrame, GeoDataFrame, MultiPoint]:
+        shoreline_gdf = data.loc[data.geometry.geom_type == "LineString"].copy()
+        if not shoreline_gdf.empty:
             # Extract out any points which are found in the input (Polygon)
             # data, but not the shoreline LineString data. This allows to
             # determine non-shoreline vertices (e.g. territorial water borders
@@ -160,7 +149,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             skip_coords = MultiPoint()
             segments = GeoDataFrame(geometry=[], crs=data.crs)
 
-        return segments, skip_coords
+        return shoreline_gdf, segments, skip_coords
 
     @staticmethod
     def _get_shoreline_splitters(
@@ -271,7 +260,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         self,
         gdf: GeoDataFrame,
         original_data: GeoDataFrame,
-        reference_data: dict[str, GeoDataFrame],
+        shoreline_gdf: GeoDataFrame,
         non_shoreline_segments: GeoDataFrame,
         skip_coords: MultiPoint,
     ) -> GeoDataFrame:
@@ -281,10 +270,10 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             extra_skip_coords=skip_coords,
         )
 
-        if self.reference_key in reference_data and not gdf.empty:
+        if not shoreline_gdf.empty and not gdf.empty:
             shoreline = self._build_generalized_shoreline(
                 gdf,
-                reference_data[self.reference_key],
+                shoreline_gdf,
                 non_shoreline_segments,
             )
 
@@ -302,12 +291,13 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        non_shoreline_segments, skip_coords = self._get_segments_and_skip_coords(
-            data,
-            reference_data,
+        shoreline_gdf, non_shoreline_segments, skip_coords = (
+            self._get_shoreline_gdf_segments_and_skip_coords(
+                data,
+            )
         )
 
-        gdf = data.copy()
+        gdf = data.loc[data.geometry.geom_type == "Polygon"].copy()
 
         if self.thin_section_exaggerate_by != 0.0:
             thin_sections = (
@@ -389,20 +379,12 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         gdf.geometry = gdf.geometry.apply(largest_part)
 
         if gdf.empty:
-            return copy_gdf_as_empty(
-                gdf,
-                add_columns={
-                    str(name): str(dtype)
-                    for name, dtype in reference_data[self.reference_key].dtypes.items()
-                }
-                if self.reference_key in reference_data
-                else None,
-            )
+            return copy_gdf_as_empty(gdf)
 
         return self._post_process(
             gdf,
             data,
-            reference_data,
+            shoreline_gdf,
             non_shoreline_segments,
             skip_coords,
         )

@@ -23,7 +23,10 @@ UNIQUE_ID_COLUMN = "kmtk_id"
 def test_generalize_water_areas(testdata_path: Path):
     gpkg = GeoPackagePath(testdata_path / "water_areas.gpkg")
     IntegrationTest(
-        input_uri=gpkg.to_input("areas"),
+        input_uri=[
+            gpkg.to_input("areas"),
+            gpkg.to_input("shoreline"),
+        ],
         control_uri=gpkg.to_input("control"),
         algorithm=GeneralizeWaterAreas(
             min_area=4000.0,
@@ -37,19 +40,14 @@ def test_generalize_water_areas(testdata_path: Path):
             island_exaggerate_by=3.0,
             island_simplification_tolerance=10.0,
             smoothing_passes=3,
-            reference_key="shoreline",
             preserve_shoreline_sections_column="shoreline_type_id",
             preserve_shoreline_sections_values=frozenset([3]),
         ),
-        reference_uris={
-            "shoreline": gpkg.to_input("shoreline"),
-        },
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
-        dummy_reference_data_mandatory_columns=frozenset(["shoreline_type_id"]),
+        dummy_data_mandatory_columns=frozenset(["shoreline_type_id"]),
         expected_result_columns=ExpectedResultColumns(
             inherit="input",
-            inherit_from_reference_key="shoreline",
             acceptable_extra_colums=frozenset(["feature_type"]),
         ),
     ).run()
@@ -206,15 +204,13 @@ def test_get_shoreline_splitters(
     (
         "algorithm",
         "data",
-        "reference_data",
+        "expected_shoreline_gdf",
         "expected_segments",
         "expected_skip_coords",
     ),
     [
         (
-            GeneralizeWaterAreas(
-                reference_key="shoreline",
-            ),
+            GeneralizeWaterAreas(),
             GeoDataFrame(
                 geometry=[
                     Polygon(
@@ -226,26 +222,37 @@ def test_get_shoreline_splitters(
                             [0, 0],
                         ]
                     ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [10, 10],
+                        ]
+                    ),
                 ],
             ),
-            {
-                "shoreline": GeoDataFrame(
-                    geometry=[
-                        LineString(
-                            [
-                                [0, 0],
-                                [10, 0],
-                            ]
-                        ),
-                        LineString(
-                            [
-                                [0, 10],
-                                [10, 10],
-                            ]
-                        ),
-                    ],
-                ),
-            },
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [10, 10],
+                        ]
+                    ),
+                ],
+                index=[1, 2],
+            ),
             GeoDataFrame(
                 geometry=[
                     LineString(
@@ -272,9 +279,7 @@ def test_get_shoreline_splitters(
             ),
         ),
         (
-            GeneralizeWaterAreas(
-                reference_key="shoreline",
-            ),
+            GeneralizeWaterAreas(),
             GeoDataFrame(
                 geometry=[
                     Polygon(
@@ -284,40 +289,63 @@ def test_get_shoreline_splitters(
                             [10, 10],
                             [0, 10],
                             [0, 0],
+                        ],
+                    ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
                         ]
                     ),
                 ],
             ),
-            {
-                "shoreline": GeoDataFrame(
-                    geometry=[
-                        LineString(
-                            [
-                                [0, 0],
-                                [10, 0],
-                            ]
-                        ),
-                        LineString(
-                            [
-                                [10, 0],
-                                [10, 10],
-                            ]
-                        ),
-                        LineString(
-                            [
-                                [10, 10],
-                                [0, 10],
-                            ]
-                        ),
-                        LineString(
-                            [
-                                [0, 10],
-                                [0, 0],
-                            ]
-                        ),
-                    ],
-                ),
-            },
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+                index=[1, 2, 3, 4],
+            ),
             GeoDataFrame(
                 geometry=[],
             ),
@@ -325,11 +353,11 @@ def test_get_shoreline_splitters(
         ),
         (
             GeneralizeWaterAreas(
-                reference_key="shoreline",
                 preserve_shoreline_sections_column="preserve",
                 preserve_shoreline_sections_values=frozenset([1]),
             ),
             GeoDataFrame(
+                {"preserve": [None, 1.0, 0, 0, 0]},
                 geometry=[
                     Polygon(
                         [
@@ -340,39 +368,62 @@ def test_get_shoreline_splitters(
                             [0, 0],
                         ]
                     ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
                 ],
             ),
-            {
-                "shoreline": GeoDataFrame(
-                    {"preserve": [1, 0, 0, 0]},
-                    geometry=[
-                        LineString(
-                            [
-                                [0, 0],
-                                [10, 0],
-                            ]
-                        ),
-                        LineString(
-                            [
-                                [10, 0],
-                                [10, 10],
-                            ]
-                        ),
-                        LineString(
-                            [
-                                [10, 10],
-                                [0, 10],
-                            ]
-                        ),
-                        LineString(
-                            [
-                                [0, 10],
-                                [0, 0],
-                            ]
-                        ),
-                    ],
-                ),
-            },
+            GeoDataFrame(
+                {"preserve": [1.0, 0, 0, 0]},
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+                index=[1, 2, 3, 4],
+            ),
             GeoDataFrame(
                 geometry=[],
             ),
@@ -385,22 +436,24 @@ def test_get_shoreline_splitters(
         ),
     ],
     ids=[
-        "only_reference_data",
+        "only_shoreline",
         "no_segments_found",
         "preserve_column",
     ],
 )
-def test_get_segments_and_skip_coords(
+def test_get_shoreline_gdf_segments_and_skip_coords(
     algorithm: GeneralizeWaterAreas,
     data: GeoDataFrame,
-    reference_data: dict[str, GeoDataFrame],
+    expected_shoreline_gdf: GeoDataFrame,
     expected_segments: GeoDataFrame,
     expected_skip_coords: MultiPoint,
 ):
-    result_segments, result_skip_coords = algorithm._get_segments_and_skip_coords(
-        data,
-        reference_data,
+    result_shoreline_gdf, result_segments, result_skip_coords = (
+        algorithm._get_shoreline_gdf_segments_and_skip_coords(
+            data,
+        )
     )
 
     assert_geodataframe_equal(result_segments, expected_segments)
+    assert_geodataframe_equal(result_shoreline_gdf, expected_shoreline_gdf)
     assert equals_exact(result_skip_coords, expected_skip_coords)
