@@ -30,6 +30,7 @@ from shapely import (
     get_coordinates,
     get_point,
     length,
+    make_valid,
     polygonize,
     shortest_line,
 )
@@ -1977,3 +1978,45 @@ def concatenate_lines(
         return LineString(a_coords + b_coords[1:])
 
     return LineString(a_coords + b_coords)
+
+
+def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
+    """Make a polygon valid and ensure the result is a polygon.
+
+    If the repaired polygon forms a multipolygon or a geometrycollection, the
+    largest polygonal part is chosen.
+
+    If the polygon can't be repaired into a multipolygon or geometry
+    collection, and empty polygon is returned.
+
+    Args:
+    ----
+        geom: Polygon to repair.
+
+    Returns:
+    -------
+        Repaired polygon (or empty polygon if it couldn't be repaired).
+
+    """
+    if geom.is_valid:
+        return geom
+
+    repaired = make_valid(geom)
+
+    if isinstance(repaired, Polygon):
+        return repaired
+
+    if isinstance(repaired, MultiPolygon):
+        polygons = repaired.geoms
+    elif isinstance(repaired, GeometryCollection):
+        polygons = tuple(g for g in repaired.geoms if isinstance(g, Polygon))
+    else:
+        return Polygon()
+
+    if not polygons:
+        return Polygon()
+
+    if len(polygons) == 1:
+        return polygons[0]
+
+    return largest_part(MultiPolygon(polygons))
