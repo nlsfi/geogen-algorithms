@@ -63,6 +63,7 @@ from geogenalg.core.geometry import (
     largest_part,
     line_mean_direction,
     lines_to_segments,
+    make_valid_ensure_polygon,
     mean_z,
     move_to_point,
     orient_line_toward_point,
@@ -3346,3 +3347,118 @@ def test_smooth_around_connection_point_of_two_lines(
 
     assert result_1.equals_exact(expected_1, tolerance=0.2)
     assert result_2.equals_exact(expected_2, tolerance=0.2)
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "expected_geometry"),
+    [
+        (
+            box(0, 0, 10, 10),
+            box(0, 0, 10, 10),
+        ),
+        (
+            Polygon(  # bowtie
+                [
+                    (0, 0),
+                    (4, 2),
+                    (0, 2),
+                    (2, 0),
+                    (0, 0),
+                ]
+            ),
+            Polygon(
+                [
+                    (4, 2),
+                    (1.333, 0.66),
+                    (0, 2),
+                    (4, 2),
+                ]
+            ),
+        ),
+        (
+            Polygon(  # donut
+                [
+                    (0, 0),
+                    (10, 0),
+                    (10, 10),
+                    (0, 10),
+                    (0, 0),
+                    (3, 3),
+                    (7, 3),
+                    (7, 7),
+                    (3, 7),
+                    (3, 3),
+                    (0, 0),
+                ]
+            ),
+            Polygon(
+                [
+                    [0, 10],
+                    [10, 10],
+                    [10, 0],
+                    [0, 0],
+                    [0, 10],
+                ],
+                holes=[
+                    [
+                        [7, 3],
+                        [7, 7],
+                        [3, 7],
+                        [3, 3],
+                        [7, 3],
+                    ]
+                ],
+            ),
+        ),
+        (
+            Polygon(
+                [
+                    (0, 0),
+                    (1, 0),
+                    (2, 0),
+                    (1, 0),
+                    (0, 0),
+                ]
+            ),
+            Polygon(),
+        ),
+        (
+            Polygon(
+                [
+                    (0, 0),
+                    (4, 0),
+                    (4, 4),
+                    (2, 4),
+                    (2, 2),
+                    (2, 4),
+                    (0, 4),
+                    (0, 0),
+                ]
+            ),
+            Polygon(
+                [
+                    [4, 4],
+                    [4, 0],
+                    [0, 0],
+                    [0, 4],
+                    [2, 4],
+                    [4, 4],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "valid_polygon",
+        "bowtie",
+        "donut",
+        "line_collapse",
+        "spike",
+    ],
+)
+def test_make_valid_ensure_polygon(
+    input_geometry: Polygon,
+    expected_geometry: Polygon,
+):
+    assert make_valid_ensure_polygon(input_geometry).equals_exact(
+        expected_geometry, tolerance=0.3
+    )
