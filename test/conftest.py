@@ -237,7 +237,7 @@ class IntegrationTest:
 
         if self.check_missing_reference:
             with pytest.raises(
-                MissingReferenceError, match=r"Reference data is missing."
+                MissingReferenceError, match="Algorithm has required reference data key"
             ):
                 self.algorithm.execute(test_gdfs.input_data)
 

@@ -31,7 +31,7 @@ def test_generalize_roads(
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         reference_uris={
-            "path": gpkg.to_input("path"),
+            "network": gpkg.to_input("path"),
         },
         check_missing_reference=False,
     ).run()

@@ -29,6 +29,7 @@ coord
 coords
 crs
 dataframe
+dataset
 DBSCAN
 densify
 dest
