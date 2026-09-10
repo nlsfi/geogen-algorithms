@@ -17,7 +17,11 @@ from geogenalg.analyze import (
 )
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import assign_nearest_z, equalize_z
+from geogenalg.core.geometry import (
+    assign_nearest_z,
+    equalize_z,
+    make_valid_ensure_polygon,
+)
 from geogenalg.exaggeration import extract_narrow_polygon_parts
 from geogenalg.identity import hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
@@ -304,6 +308,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         result_gdf = combine_gdfs([simplified_gdf, narrow_parts_gdf])
         result_gdf["_temp_id"] = result_gdf.index
         result_gdf = explode_and_hash_id(result_gdf, "buildings")
+        result_gdf = self._validate_polygon_geometries(result_gdf)
         result_gdf = dissolve_and_inherit_attributes(
             result_gdf,
             "_temp_id",
@@ -357,6 +362,7 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         # Dissolve buildings with the same building class
         result_gdf = explode_and_hash_id(result_gdf, "buildings")
+        result_gdf = self._validate_polygon_geometries(result_gdf)
         result_gdf = dissolve_and_inherit_attributes(
             result_gdf,
             self.building_class_column,
@@ -395,6 +401,7 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         input_gdf.geometry = input_gdf.buffer(0.1, cap_style="flat", join_style="mitre")
         input_gdf = explode_and_hash_id(input_gdf, "buildings")
+        input_gdf = self._validate_polygon_geometries(input_gdf)
         input_gdf = dissolve_and_inherit_attributes(
             input_gdf,
             self.building_class_column,
@@ -510,3 +517,25 @@ class GeneralizeBuildings(BaseAlgorithm):
         )
 
         return result_gdf
+
+    @staticmethod
+    def _validate_polygon_geometries(input_gdf: GeoDataFrame) -> GeoDataFrame:
+        """Validate polygon geometries.
+
+        Try to fix invalid geometries, always keeping the result as a polygon.
+        If the polygon splits into different geometry types or a multipolygon,
+        the largest part is kept. If the polygon can't be made valid as a
+        polygon, the feature will be removed.
+
+        Args:
+        ----
+            input_gdf: A GeoDataFrame containing polygon geometries.
+
+        Returns:
+        -------
+            A GeoDataFrame containing valid, non-empty polygon geometries.
+
+        """
+        gdf = input_gdf.copy()
+        gdf.geometry = gdf.geometry.apply(make_valid_ensure_polygon)
+        return gdf.loc[~gdf.geometry.is_empty]
