@@ -668,6 +668,7 @@ def process_lines_and_reconnect(
     reconnect_to: GeoDataFrame | BaseGeometry,
     *,
     length_tolerance: float = 0.0,
+    disallow_non_simple: bool = True,
 ) -> GeoDataFrame:
     """Do something to lines and if connections break reconnect them to reference data.
 
@@ -680,6 +681,8 @@ def process_lines_and_reconnect(
             was broken will be reconnected to.
         length_tolerance: If the would-be reconnected line segment is above
             this length it will not be reconnected.
+        disallow_non_simple: If True and the reconnected line would be non-simple
+            it will not be reconnected.
 
     Returns:
     -------
@@ -760,7 +763,7 @@ def process_lines_and_reconnect(
         if extend_end:
             already_extended.add(end_point)
 
-        return extend_line_to_nearest(
+        extended = extend_line_to_nearest(
             line,
             connect_to,
             LineExtendFrom.from_bools(
@@ -769,6 +772,11 @@ def process_lines_and_reconnect(
             ),
             length_tolerance,
         )
+
+        if disallow_non_simple and not extended.is_simple:
+            return line
+
+        return extended
 
     if not gdf.empty:
         gdf.geometry = gdf[
