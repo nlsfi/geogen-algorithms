@@ -4,7 +4,6 @@
 #
 #  SPDX-License-Identifier: MIT
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import ClassVar
@@ -17,7 +16,11 @@ from geopandas.testing import assert_geodataframe_equal
 from shapely import Point, Polygon, box
 from shapely.geometry import LineString, MultiLineString, MultiPolygon
 
-from geogenalg.application import BaseAlgorithm, supports_identity
+from geogenalg.application import (
+    BaseAlgorithm,
+    ReferenceDataInformation,
+    supports_identity,
+)
 from geogenalg.testing import (
     GeoPackageInput,
     TestReportWarning,
@@ -190,12 +193,18 @@ def test_assert_gdf_equal_save_diff_is_equal():
 
 
 @supports_identity
-@dataclass(frozen=True)
 class MockAlg(BaseAlgorithm):
     mock_attribute: str = "test"
+    reference_key: str = "ref"
 
     valid_input_geometry_types: ClassVar = {"Point"}
-    valid_reference_geometry_types: ClassVar = {"Point"}
+
+    reference_data_schema: ClassVar = {
+        "reference_key": ReferenceDataInformation(
+            valid_geometry_types={"Point"},
+            required=True,
+        )
+    }
 
     def _execute(
         self,
@@ -379,7 +388,7 @@ def test_get_test_gdfs(
     other_input, input_before, other_ref, ref_before, result, control = get_test_gdfs(
         input_path,
         control_path,
-        MockAlg("result"),
+        MockAlg(mock_attribute="result"),
         "id",
         reference_uris={"ref": ref_path},
         rename_geometry=geometry_column,

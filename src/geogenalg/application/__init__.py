@@ -152,7 +152,6 @@ class BaseAlgorithm(ABC, BaseModel):
                 subclass.
             InvalidCRSError: If input or reference data has missing, non-projected
                 or differing coordinate reference systems.
-            MissingReferenceError: If a required reference dataset is missing.
 
         """
         if not self.valid_input_geometry_types:
@@ -178,15 +177,82 @@ class BaseAlgorithm(ABC, BaseModel):
             msg = "Algorithm requires projected CRS and data does not have one."
             raise InvalidCRSError(msg)
 
-        for key_attribute, ref in self.reference_data_schema.items():
-            key = getattr(self, key_attribute)
-            reference = reference_data.get(key)
+        self._validate_reference_data(reference_data)
 
-            if reference is None and ref.required:
-                raise MissingReferenceError
+        for key, reference in reference_data.items():
+            # We've already established that the input data has a CRS and
+            # either the algorithm a) does not require a projected CRS or b)
+            # does require one and the data has one. Therefore it should be
+            # enough to just check that the reference data CRS matches the
+            # input data CRS.
+            if reference.crs != data.crs:
+                msg = (
+                    f'Reference data "{key}" and input data have different coordinate '
+                    + f"reference systems: {reference.crs} != {data.crs}."
+                )
+                raise InvalidCRSError(msg)
 
-            if reference is None:
-                continue
+    @final
+    def _validate_reference_data(
+        self,
+        reference_data: dict[str, GeoDataFrame],
+    ) -> None:
+        # Check that algorithm actually has expected reference key parameters.
+        # This is mostly relevant in the development phase of algorithms.
+        for attr in self.reference_data_schema:
+            if not hasattr(self, attr):
+                msg = (
+                    f"Attribute named '{attr}' is defined in reference"
+                    + "data schema but not found in algorithm instance."
+                )
+                raise ValueError(msg)
+
+        expected_keys = [getattr(self, attr) for attr in self.reference_data_schema]
+        required_dataset_keys = [
+            entry[0]
+            for entry in self.reference_data_schema.items()
+            if entry[1].required
+        ]
+
+        # Quick check first; if passed reference data is empty and algorithm
+        # has any required reference data, raise error
+        if required_dataset_keys and not reference_data:
+            msg = (
+                "Algorithm has required reference data key(s): '"
+                + ", ".join(required_dataset_keys)
+                + "' but no reference data passed."
+            )
+            raise MissingReferenceError(msg)
+
+        # Ensure that passed reference data has no unexpected keys and that the
+        # values are not None.
+        for key, value in reference_data.items():
+            if key not in expected_keys:
+                msg = (
+                    f"Reference data has unexpected key '{key}'."
+                    + f"""Expected one of '{", ".join(expected_keys)}'"""
+                )
+                raise MissingReferenceError(msg)
+
+            if value is None:
+                msg = f"Reference data by key '{key}' is None. Expected a GeoDataFrame."
+                raise MissingReferenceError(msg)
+
+        # Now we know that
+        # a) passed reference_data is not empty if there are required reference datasets
+        # b) it does not contain unexpected keys
+        # c) all the values are not None
+        for schema_key in self.reference_data_schema:
+            ref = self.reference_data_schema[schema_key]
+            key = getattr(self, schema_key)
+
+            # Check that required reference dataset actually exists in the
+            # passed reference_data
+            if ref.required and key not in reference_data:
+                msg = f"Reference data contains no mandatory key '{key}'."
+                raise MissingReferenceError(msg)
+
+            reference = reference_data[key]
 
             if not check_gdf_geometry_type(
                 reference,
@@ -203,18 +269,6 @@ class BaseAlgorithm(ABC, BaseModel):
                     + f"{types}."
                 )
                 raise GeometryTypeError(msg)
-
-            # We've already established that the input data has a CRS and
-            # either the algorithm a) does not require a projected CRS or b)
-            # does require one and the data has one. Therefore it should be
-            # enough to just check that the reference data CRS matches the
-            # input data CRS.
-            if reference.crs != data.crs:
-                msg = (
-                    f'Reference data "{key}" and input data have different coordinate '
-                    + f"reference systems: {reference.crs} != {data.crs}."
-                )
-                raise InvalidCRSError(msg)
 
 
 _Alg = TypeVar("_Alg", bound=type[BaseAlgorithm])
