@@ -203,7 +203,7 @@ class BaseAlgorithm(ABC, BaseModel):
             if not hasattr(self, attr):
                 msg = (
                     f"Attribute named '{attr}' is defined in reference"
-                    + "data schema but not found in algorithm instance."
+                    + " data schema but not found in algorithm instance."
                 )
                 raise ValueError(msg)
 
@@ -220,7 +220,7 @@ class BaseAlgorithm(ABC, BaseModel):
             msg = (
                 "Algorithm has required reference data key(s): '"
                 + ", ".join(required_dataset_keys)
-                + "' but no reference data passed."
+                + "', but no reference data passed."
             )
             raise MissingReferenceError(msg)
 
@@ -230,7 +230,7 @@ class BaseAlgorithm(ABC, BaseModel):
             if key not in expected_keys:
                 msg = (
                     f"Reference data has unexpected key '{key}'."
-                    + f"""Expected one of '{", ".join(expected_keys)}'"""
+                    + f""" Expected one of '{", ".join(expected_keys)}'"""
                 )
                 raise MissingReferenceError(msg)
 
