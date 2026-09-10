@@ -1194,12 +1194,33 @@ def test_flag_polygon_centerline_connections(
             ),
             1.0,
         ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [2, 2], [0, 2]]),
+                    LineString([[0, 2], [0, 3]]),
+                ],
+            ),
+            lambda gdf: gdf.drop(1).copy().reset_index(drop=True),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[1, 0], [1, 3]]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [2, 2], [0, 2]]),
+                ],
+            ),
+            0.0,
+        ),
     ],
     ids=[
         "reconnect_two",
         "reconnect_cut_line",
         "no_changes",
         "tolerance",
+        "non_simple",
     ],
 )
 def test_process_lines_and_reconnect(
