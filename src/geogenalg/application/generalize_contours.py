@@ -9,7 +9,7 @@ from typing import ClassVar
 from cartagen.utils import smooth_gaussian
 from geopandas import GeoDataFrame
 from pydantic import Field
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, MultiPolygon, Polygon
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -20,7 +20,7 @@ from geogenalg.continuity import (
     add_contiguous_lines_information,
     smooth_linestring_connections,
 )
-from geogenalg.core.geometry import assign_z_from_attribute
+from geogenalg.core.geometry import assign_z_from_attribute, largest_part
 from geogenalg.identity import hash_duplicate_indexes
 from geogenalg.split import split_lines_by_points
 
@@ -94,6 +94,10 @@ class GeneralizeContours(BaseAlgorithm):
                     temp_poly,
                     sigma=self.gaussian_filter_strength,
                 )
+
+                if isinstance(smoothed, MultiPolygon):
+                    smoothed = largest_part(smoothed)
+
                 return LineString(smoothed.exterior.coords)
 
             return smooth_gaussian(line, sigma=self.gaussian_filter_strength)
