@@ -54,7 +54,7 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
         dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
         expected_result_columns=ExpectedResultColumns(
             inherit="input",
-            acceptable_extra_colums=frozenset(["main_angle"]),
+            mandatory_extra_columns=frozenset(["main_angle"]),
         ),
     ).run()
 
@@ -83,7 +83,7 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
         dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
         expected_result_columns=ExpectedResultColumns(
             inherit="input",
-            acceptable_extra_colums=frozenset(["main_angle"]),
+            mandatory_extra_columns=frozenset(["main_angle"]),
         ),
     ).run()
 

@@ -46,10 +46,7 @@ def test_generalize_water_areas(testdata_path: Path):
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
         dummy_data_mandatory_columns=frozenset(["shoreline_type_id"]),
-        expected_result_columns=ExpectedResultColumns(
-            inherit="input",
-            acceptable_extra_colums=frozenset(["feature_type"]),
-        ),
+        expected_result_columns=ExpectedResultColumns(inherit="input"),
     ).run()
 
 
