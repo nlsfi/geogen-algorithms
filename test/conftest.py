@@ -43,7 +43,7 @@ class ExpectedResultColumns:
 
     inherit: Literal["input", "none"] = "input"
     inherit_from_reference_key: str | None = None
-    acceptable_extra_colums: frozenset[str] = frozenset()
+    mandatory_extra_columns: frozenset[str] = frozenset()
 
 
 GEOMETRY_TYPE_STRINGS = (
@@ -392,7 +392,7 @@ class IntegrationTest:
         reference_data: dict[str, GeoDataFrame],
         result: GeoDataFrame,
     ) -> None:
-        acceptable_extra_columns = self.expected_result_columns.acceptable_extra_colums
+        mandatory_extra_columns = self.expected_result_columns.mandatory_extra_columns
         result_columns = set(result.columns)
 
         match self.expected_result_columns.inherit:
@@ -417,14 +417,17 @@ class IntegrationTest:
                     raise AssertionError(msg)
                 return
 
+        for column in mandatory_extra_columns:
+            if column not in result_columns:
+                msg = f"Result does not have mandatory extra column: {column}"
+                raise AssertionError(msg)
+
         missing_columns = expected_columns - result_columns
         if missing_columns:
             msg = f"Output data is missing columns: {sorted(missing_columns)}"
             raise AssertionError(msg)
 
-        unexpected_columns = (
-            result_columns - expected_columns - acceptable_extra_columns
-        )
+        unexpected_columns = result_columns - expected_columns - mandatory_extra_columns
         if unexpected_columns:
             msg = f"Output data has unexpected columns: {sorted(unexpected_columns)}"
             raise AssertionError(msg)

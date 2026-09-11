@@ -17,7 +17,7 @@ from geogenalg.core.geometry import assign_nearest_z, chaikin_smooth_keep_topolo
 from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.split import explode_and_hash_id
 from geogenalg.transform import thin_polygon_sections_to_lines
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf, combine_gdfs
 
 
 @supports_identity
@@ -121,4 +121,12 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     def _execute(
         self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
     ) -> GeoDataFrame:
-        return super()._execute(data, reference_data)
+        result = super()._execute(data, reference_data)
+
+        if self.feature_type_column not in result.columns:
+            result = add_columns_to_gdf(
+                result,
+                {self.feature_type_column: "int64"},
+            )
+
+        return result

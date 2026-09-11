@@ -86,6 +86,6 @@ def test_generalize_points(
         dummy_data_mandatory_columns=frozenset(["boulder_in_water_type_id"]),
         expected_result_columns=ExpectedResultColumns(
             inherit="input",
-            acceptable_extra_colums=frozenset(["is_cluster"]),
+            mandatory_extra_columns=frozenset(["is_cluster"]),
         ),
     ).run()
