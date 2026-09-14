@@ -431,11 +431,90 @@ def test_get_shoreline_splitters(
                 ]
             ),
         ),
+        (
+            GeneralizeWaterAreas(
+                preserve_shoreline_sections_column="preserve",
+                preserve_shoreline_sections_values=frozenset([1]),
+            ),
+            GeoDataFrame(
+                {"preserve": [None, 0, 0, 0, 0]},
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 0],
+                            [10, 0],
+                            [10, 10],
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                {"preserve": [0.0, 0, 0, 0]},
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+                index=[1, 2, 3, 4],
+            ),
+            GeoDataFrame(
+                geometry=[],
+            ),
+            MultiPoint(),
+        ),
     ],
     ids=[
         "only_shoreline",
         "no_segments_found",
         "preserve_column",
+        "preserve_column_but_no_preserved_features",
     ],
 )
 def test_get_shoreline_gdf_segments_and_skip_coords(
