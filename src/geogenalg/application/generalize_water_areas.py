@@ -9,7 +9,14 @@ from geopandas import GeoDataFrame, GeoSeries
 from pandas.api.types import is_string_dtype
 from pydantic import Field
 from pygeoops import simplify
-from shapely import MultiPoint, Polygon, force_2d, shortest_line, union_all
+from shapely import (
+    MultiPoint,
+    Polygon,
+    extract_unique_points,
+    force_2d,
+    shortest_line,
+    union_all,
+)
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
 
@@ -123,9 +130,6 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 if segments.empty
                 else segments.extract_unique_points().union_all()
             )
-            if not isinstance(skip_coords, MultiPoint):
-                msg = "Result is not a MultiPoint."
-                raise GeometryOperationError(msg)
 
             # If specified, select shoreline features to preserve (no
             # simplification or smoothing) and add to skip_coords
@@ -133,16 +137,25 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 self.preserve_shoreline_sections_column is not None
                 and self.preserve_shoreline_sections_values
             ):
-                additional_skip_coords = (
-                    shoreline_gdf.loc[
-                        shoreline_gdf[self.preserve_shoreline_sections_column].isin(
-                            self.preserve_shoreline_sections_values
+                additional_skip_coords = shoreline_gdf.loc[
+                    shoreline_gdf[self.preserve_shoreline_sections_column].isin(
+                        self.preserve_shoreline_sections_values
+                    )
+                ].geometry
+
+                if not additional_skip_coords.empty:
+                    skip_coords = extract_unique_points(
+                        union_all(
+                            [
+                                skip_coords,
+                                additional_skip_coords.union_all(),
+                            ],
                         )
-                    ]
-                    .geometry.extract_unique_points()
-                    .union_all()
-                )
-                skip_coords = union_all([skip_coords, additional_skip_coords])
+                    )
+
+            if not isinstance(skip_coords, MultiPoint):
+                msg = "Result is not a MultiPoint."
+                raise GeometryOperationError(msg)
 
             skip_coords = force_2d(skip_coords)
         else:
