@@ -56,6 +56,16 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     classes_for_filtering: frozenset[int | str] = frozenset()
     """Buildings which a) have one of these values and b) are larger than the
     size threshold are filtered out."""
+
+    height_class_column: str = ""
+    """Name of the column that contains building height classes."""
+
+    tall_building_classes: frozenset[int | str] = frozenset()
+    """Buildings belonging to these classes are treated as tall buildings."""
+
+    height_area_class_column: str = "building_area_type"
+    """Output column indicating normal or tall building areas."""
+
     buildings_simplify_tolerance: float = Field(10.0, ge=0)
     """Tolerance for building simplification (Douglas-Peucker)."""
     boffet_area_buffer: float = Field(10.0, gt=0)
@@ -113,10 +123,9 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         ),
     }
 
-    @override
-    def _execute(
+    def _generalize_building_areas(
         self,
-        data: GeoDataFrame,
+        buildings: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
         reference_roads = (
@@ -125,17 +134,31 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             else copy_gdf_as_empty(data)
         )
 
-        copy = data.copy()
-
-        gdf = copy.loc[
-            ~(
-                (copy[self.building_filter_column].isin(self.classes_for_filtering))
-                & (copy.geometry.area > self.building_size_filter_threshold)
-            )
-        ]
+        if self.classes_for_filtering:
+            gdf = buildings.loc[
+                ~(
+                    (
+                        buildings[self.building_filter_column].isin(
+                            self.classes_for_filtering
+                        )
+                    )
+                    & (buildings.geometry.area > self.building_size_filter_threshold)
+                )
+            ]
+        else:
+            gdf = buildings
 
         gdf.geometry = gdf.simplify(self.buildings_simplify_tolerance)
+
         gdf = GeoDataFrame(
+            geometry=GeoSeries(
+                boffet_areas(
+                    gdf.geometry.to_list(),
+                    self.boffet_area_buffer,
+                    self.boffet_area_erosion,
+                ),
+            ),
+            crs=buildings.crs,
             {
                 data.geometry.name: GeoSeries(
                     boffet_areas(
@@ -151,7 +174,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
         if self.reference_key_parcels in reference_data:
             parcels_gdf = calculate_coverage(
-                copy, reference_data[self.reference_key_parcels], "coverage"
+                buildings, reference_data[self.reference_key_parcels], "coverage"
             )
             parcels_gdf = parcels_gdf.loc[
                 parcels_gdf["coverage"] > self.parcel_coverage_threshold
@@ -195,6 +218,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         buffered_network = reference_roads.geometry.buffer(
             self.roads_buffer_distance
         ).to_frame()
+
         gdf = gdf.overlay(buffered_network, how="difference")
 
         gdf = gdf.dissolve().explode(as_index=False).reset_index(drop=True)
@@ -208,11 +232,12 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
         gdf = gdf.assign(distance_to_nearest=distances)
         gdf = gdf.drop_duplicates()
-        # Drop small building areas with different threshold for areas which
-        # are close to other areas and areas which are far from other areas.
+
         is_near = gdf["distance_to_nearest"] <= self.near_area_distance
         is_far = ~is_near
+
         area = gdf.geometry.area
+
         gdf = gdf.loc[
             (is_near & (area > self.threshold_building_area_near))
             | (is_far & (area > self.threshold_building_area_far))
@@ -220,5 +245,53 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
         gdf = gdf.drop("distance_to_nearest", axis=1)
 
-        gdf = assign_nearest_z(data, gdf)
-        return hash_index_from_geometry(gdf, "buildingareas")
+        return gdf
+
+    @override
+    def _execute(
+        self,
+        data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+    ) -> GeoDataFrame:
+        copy = data.copy()
+
+        tall_gdf = GeoDataFrame(geometry=[], crs=data.crs)
+
+        if self.height_class_column and self.tall_building_classes:
+            tall_gdf= copy.loc[
+                copy[self.height_class_column].isin(self.tall_building_classes)
+            ].copy()
+
+        gdf = self._generalize_building_areas(
+            copy,
+            reference_data,
+        )
+
+        if not tall_gdf.empty:
+            tall_gdf = self._generalize_building_areas(
+                tall_gdf,
+                reference_data,
+            )
+
+        if not tall_gdf.empty:
+            gdf = gdf.overlay(
+                tall_gdf,
+                how="difference",
+            )
+
+        gdf[self.height_area_class_column] = 1
+
+        if not tall_gdf.empty:
+            tall_gdf[self.height_area_class_column] = 2
+
+        result = combine_gdfs(
+            [
+                gdf,
+                tall_gdf,
+            ]
+        )
+
+        result = result.explode(as_index=False).reset_index(drop=True)
+
+        result = assign_nearest_z(data, result)
+        return hash_index_from_geometry(result, "buildingareas")
