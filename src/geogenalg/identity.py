@@ -35,6 +35,9 @@ def hash_duplicate_indexes(
     Raises:
     ------
         ValueError: If input GeoDataFrame does not have a string index.
+        AssertionError: If result GeoDataFrame still has duplicate indexes,
+            which happens if the input has feature(s) with a duplicate index
+            and geometry.
 
     """
     if not is_string_dtype(data.index):
@@ -57,6 +60,13 @@ def hash_duplicate_indexes(
 
     gdf = gdf.set_index(temp_index)
     gdf.index.name = data.index.name
+
+    if gdf.index.has_duplicates:
+        msg = (
+            "Duplicate indexes found in GeoDataFrame after hashing. "
+            + "This means there were features with duplicate index and geometry."
+        )
+        raise AssertionError(msg)
 
     return gdf
 
