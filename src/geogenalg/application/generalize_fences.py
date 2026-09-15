@@ -25,6 +25,7 @@ from geogenalg.selection import (
     remove_parts_of_lines_on_polygon_edges,
     split_polygons_by_point_intersection,
 )
+from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
@@ -164,6 +165,13 @@ class GeneralizeFences(BaseAlgorithm):
 
         # Remove the surrounding fence lines of small closed areas with masts considered
         result_gdf = remove_parts_of_lines_on_polygon_edges(result_gdf, faces_gdf)
+
+        # Previous step may form multilines. Try to first merge them back to
+        # single lines.
+        result_gdf.geometry = result_gdf.geometry.line_merge()
+
+        # If multilines still remain, explode to single features.
+        result_gdf = explode_and_hash_id(result_gdf, "fences")
 
         # Remove short fence lines
         result_gdf = remove_disconnected_short_lines(
