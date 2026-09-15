@@ -45,3 +45,41 @@ def test_generalize_building_areas(testdata_path: Path) -> None:
         check_missing_reference=False,
         dummy_data_mandatory_columns=["building_function_id"],
     ).run()
+
+
+def test_generalize_building_areas_tall_buildings(testdata_path: Path) -> None:
+    gpkg = GeoPackagePath(testdata_path / "building_areas.gpkg")
+
+    IntegrationTest(
+        input_uri=gpkg.to_input("buildings"),
+        control_uri=gpkg.to_input("control_tall_buildings"),
+        algorithm=GeneralizeBuildingAreas(
+            building_size_filter_threshold=4000.0,
+            parcel_coverage_threshold=5.0,
+            parcel_buffer_distance=20.0,
+            building_filter_column="building_function_id",
+            classes_for_filtering=frozenset([1]),
+            buildings_simplify_tolerance=10.0,
+            roads_buffer_distance=10.0,
+            threshold_building_area_far=20000.0,
+            threshold_building_area_near=4000.0,
+            near_area_distance=50.0,
+            reference_key_parcels="parcels",
+            reference_key_roads="roads",
+            positive_buffer=10.0,
+            negative_buffer=-10.0,
+            simplification_tolerance=4.0,
+            hole_threshold=7500,
+            height_class_column="kohdeluokka",
+            tall_building_classes=frozenset(
+                [42212]
+            ),  # FIXME: assuming this is the correct class
+        ),
+        unique_id_column=UNIQUE_ID_COLUMN,
+        reference_uris={
+            "parcels": gpkg.to_input("parcels"),
+            "roads": gpkg.to_input("roads"),
+        },
+        check_missing_reference=False,
+        dummy_data_mandatory_columns=["building_function_id", "kohdeluokka"],
+    ).run()
