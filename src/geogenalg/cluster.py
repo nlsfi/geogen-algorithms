@@ -79,7 +79,7 @@ def get_cluster_centroids(
     """
     gdf = input_gdf.copy()
 
-    cluster_id_column = "__cluster_id"  # temporary column
+    cluster_id_column = "_cluster_id"  # temporary column
     cluster_ids = (
         dbscan_cluster_ids(
             gdf,

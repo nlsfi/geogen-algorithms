@@ -5,15 +5,18 @@
 #  SPDX-License-Identifier: MIT
 
 import re
+from typing import Any
 
 import pytest
 from geopandas import GeoDataFrame
-from pandas.testing import assert_frame_equal
+from pandas import Series
+from pandas.testing import assert_frame_equal, assert_series_equal
 from shapely import MultiLineString
 from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.selection import (
+    rank_parallel_lines,
     reduce_nearby_points_by_selecting,
     remove_close_line_segments,
     remove_disconnected_short_lines,
@@ -733,3 +736,110 @@ def test_remove_short_lines():
 def test_remove_short_lines_invalid_geometry_type():
     with pytest.raises(GeometryTypeError):
         remove_short_lines(GeoDataFrame(geometry=[Point(0, 0)]), length_threshold=1.0)
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "expected",
+    ),
+    [
+        (
+            GeoDataFrame(),
+            (Series(), []),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ],
+            ),
+            (Series(index=[0], data=[0]), []),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 1], [1, 1]]),
+                ],
+            ),
+            (Series(index=[0, 1], data=[0, 1]), []),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 1], [1, 1]]),
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 2], [1, 2]]),
+                ],
+            ),
+            (
+                Series(
+                    index=[0, 1, 2],
+                    data=[2.0, 1.0, 3.0],
+                ),
+                [],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 2], [1, 2]]),
+                    LineString([[0, 1], [1, 1]]),
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 3], [1, 3]]),
+                ],
+            ),
+            (
+                Series(
+                    index=[0, 1, 2, 3],
+                    data=[
+                        3.0,
+                        2.0,
+                        1.0,
+                        4.0,
+                    ],
+                ),
+                [],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 2], [1, 2]]),
+                    LineString([[0, 1], [1, 1]]),
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[0, 3], [1, 3]]),
+                    LineString([[3, 3], [3.1, 3]]),
+                ],
+            ),
+            (
+                Series(
+                    index=[0, 1, 2, 3],
+                    data=[
+                        3.0,
+                        2.0,
+                        1.0,
+                        4.0,
+                    ],
+                ),
+                [4],
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "one_line",
+        "two_lines",
+        "three_lines",
+        "four_lines",
+        "disjoint",
+    ],
+)
+def test_rank_parallel_lines(
+    input_gdf: GeoDataFrame,
+    expected: tuple[Series, list[Any]],
+):
+    result = rank_parallel_lines(input_gdf)
+    assert_series_equal(result[0], expected[0])
+    assert result[1] == expected[1]

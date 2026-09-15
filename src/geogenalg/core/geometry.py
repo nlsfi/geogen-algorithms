@@ -3,17 +3,17 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from collections.abc import Callable, Iterable
+from __future__ import annotations
+
 from copy import deepcopy
 from enum import Enum
-from itertools import chain
-from math import atan2, degrees, pi, sqrt
+from itertools import chain, pairwise
+from math import atan2, degrees, isclose
 from statistics import mean
-from typing import Literal, NamedTuple
-from warnings import warn
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import array, column_stack, ndarray, vstack  # noqa: SC200
+from numpy import array, column_stack, ndarray, pi, sqrt, vstack  # noqa: SC200
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -28,16 +28,16 @@ from shapely import (
     count_coordinates,
     force_2d,
     get_coordinates,
+    get_point,
     length,
+    make_valid,
     polygonize,
-    remove_repeated_points,
     shortest_line,
 )
 from shapely.affinity import rotate, scale, translate
-from shapely.coords import CoordinateSequence
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
-from shapely.ops import linemerge, nearest_points, split
+from shapely.ops import linemerge, nearest_points, split, substring
 from shapelysmooth import catmull_rom_smooth
 
 from geogenalg.core.exceptions import (
@@ -45,6 +45,11 @@ from geogenalg.core.exceptions import (
     GeometryTypeError,
     InvalidGeometryError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
+    from shapely.coords import CoordinateSequence
 
 
 class LineExtendFrom(Enum):
@@ -56,7 +61,7 @@ class LineExtendFrom(Enum):
     NONE = None
 
     @classmethod
-    def from_bools(cls, *, extend_start: bool, extend_end: bool) -> "LineExtendFrom":
+    def from_bools(cls, *, extend_start: bool, extend_end: bool) -> LineExtendFrom:
         """Construct enum from boolean values.
 
         Returns
@@ -80,9 +85,49 @@ class Dimensions(NamedTuple):
     height: float
 
 
+def ensure_geoms(geom: BaseGeometry) -> list[BaseGeometry]:
+    """Return list of geometry parts, even for single geometries.
+
+    This is a convenience function to allow f.e. iterating over geometry parts
+    without explicitly checking if the input is a single or multigeometry.
+
+    Returns:
+    -------
+        All geometries in a list.
+
+    Note:
+    ----
+        Output is a Python list, not a GeometrySequence.
+
+        If https://github.com/shapely/shapely/pull/1965 gets merged, this
+        is subject for removal.
+
+    """
+    if isinstance(geom, BaseMultipartGeometry):
+        return list(geom.geoms)
+
+    return [geom]
+
+
+def _modify_geometry_and_handle_multigeometries(
+    geom: BaseGeometry,
+    func: Callable[[BaseGeometry], BaseGeometry],
+) -> BaseGeometry:
+    if isinstance(geom, GeometryCollection):
+        msg = "Not implemented for GeometryCollection"
+        raise NotImplementedError(msg)
+
+    if isinstance(geom, BaseMultipartGeometry):
+        return type(geom)([func(part) for part in geom.geoms])
+
+    return type(geom)(
+        func(geom),
+    )
+
+
 def chaikin_smooth_skip_coords(
     geom: LineString | Polygon,
-    skip_coords: list[Point] | MultiPoint,
+    skip_coords: set[tuple[float, float]],
     *,
     iterations: int = 1,
 ) -> LineString | Polygon:
@@ -112,11 +157,6 @@ def chaikin_smooth_skip_coords(
 
 
     """
-    if isinstance(skip_coords, MultiPoint):
-        skip_coords_ = [point.coords[0] for point in skip_coords.geoms]
-    else:
-        skip_coords_ = [point.coords[0] for point in skip_coords]
-
     # TODO: allow processing 2.5D geometries and multigeometries?
 
     def _process_coord_sequence(
@@ -135,15 +175,15 @@ def chaikin_smooth_skip_coords(
             q = ((0.75 * current_x + 0.25 * next_x), (0.75 * current_y + 0.25 * next_y))
             r = ((0.25 * current_x + 0.75 * next_x), (0.25 * current_y + 0.75 * next_y))
 
-            if current_coord in skip_coords_:
+            if current_coord in skip_coords:
                 output.append(current_coord)
-                if next_coord not in skip_coords_:
+                if next_coord not in skip_coords:
                     output.append(r)
                 continue
 
             output.append(q)
 
-            if next_coord not in skip_coords_:
+            if next_coord not in skip_coords:
                 output.append(r)
 
         return output
@@ -258,13 +298,13 @@ def chaikin_smooth_keep_topology(
     """
     copy = geoseries.copy()
 
-    skipped_coords = get_topological_points(copy)
+    skipped_coords = {(point.x, point.y) for point in get_topological_points(copy)}
 
     if isinstance(extra_skip_coords, MultiPoint):
         extra_skip_coords = list(extra_skip_coords.geoms)
 
     if extra_skip_coords is not None:
-        skipped_coords += extra_skip_coords
+        skipped_coords.update((point.x, point.y) for point in extra_skip_coords)
 
     return copy.apply(
         lambda geom: chaikin_smooth_skip_coords(
@@ -838,6 +878,43 @@ def assign_nearest_z(
     return result_gdf
 
 
+def assign_z_from_attribute(
+    gdf: GeoDataFrame, z_attribute: str, *, overwrite_z: bool = False
+) -> GeoDataFrame:
+    """Assign Z values to geometries from a GeoDataFrame attribute.
+
+    Sets the Z value of all vertices in each geometry to the value
+    of the specified attribute for that row. Works for Point, LineString,
+    and Polygon geometries and their multi versions.
+
+    Args:
+    ----
+        gdf: GeoDataFrame with geometries and a Z attribute column.
+        z_attribute: Name of the column to use as Z value.
+        overwrite_z: Whether to overwrite existing Z values.
+
+    Returns:
+    -------
+        A copy of `gdf` with Z values assigned from the attribute.
+
+    """
+
+    def _with_z(geom: BaseGeometry, z: float) -> BaseGeometry:
+        if not overwrite_z and geom.has_z:
+            return geom
+        if hasattr(geom, "geoms"):
+            return type(geom)([_with_z(part, z) for part in geom.geoms])
+        return type(geom)([(x, y, z) for x, y, *_ in geom.coords])
+
+    geom_col = gdf.geometry.name
+    result_gdf = gdf.copy()
+    result_gdf.geometry = result_gdf.apply(
+        lambda row: _with_z(row[geom_col], row[z_attribute]),
+        axis=1,
+    )
+    return result_gdf
+
+
 def largest_part(
     geom: BaseGeometry,
     *,
@@ -1018,7 +1095,7 @@ def remove_line_segments_at_wide_sections(
     return result
 
 
-def segment_direction(segment: LineString) -> float:
+def segment_bearing(segment: LineString) -> float:
     """Calculate the direction of a two-point LineString relative to north.
 
     Calculation is done in the Cartesian plane.
@@ -1061,6 +1138,49 @@ def segment_direction(segment: LineString) -> float:
         return degrees(direction + 2 * pi)
 
     return degrees(direction)
+
+
+def segment_direction(
+    segment: LineString,
+    *,
+    unit: Literal["degrees", "radians"] = "degrees",
+) -> float:
+    """Calculate the direction of a two-point LineString.
+
+    Calculation is done in the Cartesian plane. The direction is normalized
+    so that segments with reversed vertex order have the same direction.
+
+    The input geometry must be a segment, i.e. a LineString consisting
+    of two vertices.
+
+    Returns
+    -------
+        The calculated direction in the given unit. The value is normalized
+        to [0, 180) degrees or [0, π) radians.
+
+    Raises
+    ------
+        GeometryOperationError: If geometry does not have exactly two vertices,
+            or has two identical vertices.
+
+    """
+    if count_coordinates(segment) != 2:  # noqa: PLR2004
+        msg = "Input geometry must have two vertices."
+        raise GeometryOperationError(msg)
+
+    vertex_1 = segment.coords[0]
+    vertex_2 = segment.coords[1]
+
+    if vertex_1 == vertex_2:
+        msg = "Segment has duplicate vertices."
+        raise GeometryOperationError(msg)
+
+    angle = atan2(vertex_2[1] - vertex_1[1], vertex_2[0] - vertex_1[0])
+
+    if unit == "degrees":
+        return degrees(angle) % 180
+
+    return angle % pi
 
 
 def equalize_z(  # noqa: C901, PLR0911
@@ -1337,14 +1457,16 @@ def insert_vertex(
 
     vertex_as_tuple = vertex.coords[0] if isinstance(vertex, Point) else vertex
 
+    index_to_insert = index if index >= 0 else len(coords) - (abs(index) - 1)
+
     vertex_has_z = len(vertex_as_tuple) == 3  # noqa: PLR2004
     if geom.has_z:
         z = vertex_as_tuple[2] if vertex_has_z else _interpolate_z()
 
-        coords.insert(index, (vertex_as_tuple[0], vertex_as_tuple[1], z))
+        coords.insert(index_to_insert, (vertex_as_tuple[0], vertex_as_tuple[1], z))
     else:
         coords.insert(
-            index,
+            index_to_insert,
             (
                 vertex_as_tuple[0],
                 vertex_as_tuple[1],
@@ -1478,7 +1600,7 @@ def snap_to_closest_vertex_or_segment(
 
     """
     _, snap_point = nearest_points(point, snap_to)
-    if point.distance(snap_point) < tolerance:
+    if tolerance > 0.0 and point.distance(snap_point) > tolerance:
         return point
 
     if z_behavior == "inherit" and point.has_z:
@@ -1504,164 +1626,397 @@ def _get_vertex_circular(coords: CoordinateSequence, index: int) -> tuple[float,
     return coords[(index % len(coords)) + 1]
 
 
-def smooth_around_ring_closing_vertex(
+def split_line_at_distances(
     line: LineString,
-    *,
-    spline_subdivisions: int = 10,
-) -> LineString:
-    """Smooth segments around closing vertex of closed linestring.
+    distances: list[float],
+) -> list[LineString]:
+    """Split a LineString at distances measured along the line.
 
-    If `line` is invalid or not closed it is returned as is.
-    If line has z coordinates, smoothed vertices will default to 0.0.
+    Returns
+    -------
+        List of LineString segments resulting from the split.
+
+    """
+    if not distances:
+        return [line]
+
+    coords = list(line.coords)
+
+    result_segments: list[LineString] = []
+
+    current_coords = [coords[0]]
+
+    distance_iter = iter(sorted(set(distances)))
+    next_split = next(distance_iter, None)
+
+    accumulated = 0.0
+
+    for start_coord, end_coord in pairwise(coords):
+        segment = LineString([start_coord, end_coord])
+
+        segment_length = segment.length
+        segment_end_distance = accumulated + segment_length
+
+        while (
+            next_split is not None and accumulated < next_split < segment_end_distance
+        ):
+            relative_distance = next_split - accumulated
+
+            split_point = segment.interpolate(relative_distance)
+
+            split_coord = (split_point.x, split_point.y)
+
+            current_coords.append(split_coord)
+
+            result_segments.append(LineString(current_coords))
+
+            current_coords = [split_coord]
+
+            next_split = next(distance_iter, None)
+
+        if next_split is not None and isclose(next_split, segment_end_distance):
+            current_coords.append(end_coord)
+
+            result_segments.append(LineString(current_coords))
+
+            current_coords = [end_coord]
+
+            next_split = next(distance_iter, None)
+
+            continue
+
+        current_coords.append(end_coord)
+
+        accumulated = segment_end_distance
+
+    if len(current_coords) > 1:
+        result_segments.append(LineString(current_coords))
+
+    return result_segments
+
+
+def remove_holes(
+    geom: Polygon | MultiPolygon,
+    *,
+    area_threshold: float = 0.0,
+) -> Polygon | MultiPolygon:
+    """Remove interior rings of a polygon.
+
+    Optionally set an area threshold to filter only small holes.
+
+    Returns
+    -------
+        (Multi)Polygon with holes removed.
+
+    """
+    if geom.is_empty:
+        return type(geom)()
+
+    return _modify_geometry_and_handle_multigeometries(
+        geom,
+        lambda poly: Polygon(
+            shell=poly.exterior,
+            holes=[
+                interior
+                for interior in poly.interiors
+                if Polygon(interior).area > area_threshold
+            ],
+        ),
+    )
+
+
+def line_mean_direction(
+    geom: LineString | MultiLineString,
+    *,
+    unit: Literal["degrees", "radians"] = "degrees",
+) -> float:
+    """Calculate mean direction of each line segment in a linestring.
 
     Args:
     ----
-        line: Line to smooth.
-        spline_subdivisions: How many vertices are added to smoothed segments.
+        geom: (Multi)LineString to calculate mean direction of.
+        unit: Whether to return value in degrees or radians.
 
     Returns:
     -------
-        Smoothed line (provided it was possible to smooth).
+        Calculated mean value.
 
     """
-    if not line.is_closed or not line.is_valid:
-        return line
-
-    smoothed_line = catmull_rom_smooth(
-        force_2d(line),
-        0.5,
-        subdivs=spline_subdivisions,
+    segments = explode_line(geom).geoms
+    return (
+        mean([segment_direction(segment, unit=unit) for segment in segments])
+        if len(segments) > 0
+        else 0.0
     )
 
-    before_vertices = [
-        _get_vertex_circular(smoothed_line.coords, i)
-        for i in range(-spline_subdivisions, 1)
-    ]
-    after_vertices = [
-        _get_vertex_circular(smoothed_line.coords, i)
-        for i in range(spline_subdivisions)
-    ]
-    after_vertices.reverse()
 
-    modified_line = line
+def angle_difference(a: float, b: float) -> float:
+    """Return the difference between two angles.
 
-    for vertex in before_vertices:
-        vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
-        modified_line = insert_vertex(
-            modified_line,
-            vertex_with_z_handled,
-            len(modified_line.coords) - 1,
-        )
+    Inputs are in degrees. Angles are treated cyclically, such that
+    the difference between 359° and 1° is 2°.
 
-    for vertex in after_vertices:
-        vertex_with_z_handled = vertex if not line.has_z else (vertex[0], vertex[1], 0)
-        modified_line = insert_vertex(
-            modified_line,
-            vertex_with_z_handled,
-            1,
-        )
+    Returns
+    -------
+        The difference between the two angles in degrees, always between 0 and
+        180.
 
-    return remove_repeated_points(modified_line)
+    """
+    return abs((a - b + 180) % 360 - 180)
 
 
-def smooth_around_connection_point_of_two_lines(  # noqa: C901
+def smooth_around_connection_point_of_two_lines(  # noqa: PLR0914
     line_1: LineString,
     line_2: LineString,
-    point: Point,
+    connection_point: Point,
+    distance: float,
     *,
     spline_subdivisions: int = 10,
 ) -> tuple[LineString, LineString]:
-    """Smooth segments in given lines which are around the given point.
+    """Smooth vertices in two LineStrings around their shared connection point.
 
-    If line has z coordinates, smoothed vertices will default to 0.0.
+    Both the lines are cut around their shared connection point by the given distance,
+    and a Catmull-Rom spline is added to the end of each line, created from the
+    cut points, travelling through the connection point.
+
+    If either line is empty, or the given connection point is not actually at the
+    lines' boundary, the lines are return unchanged.
 
     Args:
     ----
-        line_1: Line to smooth.
-        line_2: Line to smooth.
-        point: Point around which segments are smoothed.
-        spline_subdivisions: How many vertices are added to smoothed segments.
+        line_1: Line A to smooth.
+        line_2: Line B to smooth.
+        connection_point: Shared connection point around which the lines will be
+            smoothed.
+        distance: Distance along each line to replace with the smoothed curve.
+            If a line is shorter than the given distance, a smaller distance is
+            used.
+        spline_subdivisions: Number of subdivisions used when generating the
+            Catmull-Rom spline.
 
     Returns:
     -------
-        Smoothed lines (provided they could be smoothed) in this order:
-        (line_1, line_2).
+        A tuple containing the smoothed first and second lines.
+
+    Raises:
+    ------
+        ValueError: If distance is not greater than zero or if spline_subdivisions is
+            less than one.
 
     """
-    if not line_1.touches(line_2.boundary):
+    if line_1.is_empty or line_2.is_empty:
         return line_1, line_2
 
-    if not point.intersects(line_1) or not point.intersects(line_2):
+    if distance <= 0:
+        msg = "distance must be greater than zero"
+        raise ValueError(msg)
+
+    if spline_subdivisions < 1:
+        msg = "subdivs must be >= 1"
+        raise ValueError(msg)
+
+    # Check that given connection point can actually be used
+    boundary_intersection = line_1.boundary.intersection(line_2.boundary)
+
+    if boundary_intersection.is_empty:
         return line_1, line_2
 
-    combined_line = linemerge([line_1, line_2])
-
-    cut_index = -1
-    for i, vertex in enumerate(combined_line.coords):
-        if point.coords[0] == vertex:
-            cut_index = i
-
-    if cut_index == -1:
-        warn("Did not find matching vertex in combined line.", stacklevel=2)
+    if not connection_point.intersects(boundary_intersection):
         return line_1, line_2
 
-    vertex_before = _get_vertex_circular(combined_line.coords, cut_index - 1)
-    vertex_after = _get_vertex_circular(combined_line.coords, cut_index + 1)
+    # Force lines' vertex order to be oriented from line_1 -> connection -> line_2
+    line_1 = orient_line_toward_point(
+        line_1,
+        connection_point,
+        connection_at_end=True,
+    )
 
-    cut_index *= spline_subdivisions
+    line_2 = orient_line_toward_point(
+        line_2,
+        connection_point,
+        connection_at_end=False,
+    )
 
-    # Use Catmull-Rom spline because it's not going to shift existing
-    # coordinates and is guaranteed to travel through them
-    smoothed_combined_line = catmull_rom_smooth(
-        force_2d(combined_line),
-        0.5,
+    # In case either line is shorter than the given distance, adapt the
+    # used distance.
+    length_1 = line_1.length
+    length_2 = line_2.length
+
+    distance_1 = min(distance, length_1 - 0.1)
+    distance_2 = min(distance, length_2 - 0.1)
+
+    if distance_1 <= 0.0 or distance_2 <= 0.0:
+        # TODO: we could still smooth the other line even if one distance is
+        # negative
+        return line_1, line_2
+
+    interpolated_1 = line_1.interpolate(length_1 - distance_1)
+    interpolated_2 = line_2.interpolate(distance_2)
+
+    # Cut off the portions of the lines which we're going to replace with a
+    # smoothed curve.
+    line_1_prefix = substring(
+        line_1,
+        0.0,
+        length_1 - distance_1,
+    )
+
+    line_2_suffix = substring(
+        line_2,
+        distance_2,
+        length_2,
+    )
+
+    # Create smoothed curve between the interpolated points and the connection
+    local_curve = LineString(
+        [
+            interpolated_1.coords[0],
+            connection_point.coords[0],
+            interpolated_2.coords[0],
+        ]
+    )
+
+    curve = catmull_rom_smooth(
+        local_curve,
+        alpha=1.0,
         subdivs=spline_subdivisions,
     )
 
-    before_vertices = [
-        _get_vertex_circular(smoothed_combined_line.coords, i)
-        for i in range(cut_index - spline_subdivisions, cut_index + 1)
-    ]
-    after_vertices = [
-        _get_vertex_circular(smoothed_combined_line.coords, i)
-        for i in range(cut_index, cut_index + spline_subdivisions)
-    ]
-    after_vertices.reverse()
+    # The smoothing retains existing vertices and adds new vertices equal to
+    # spline_subdivisions * 2. We can use spline_subdivisions as an index to
+    # "split" the smoothed curve in half and then add the split parts to the
+    # cut lines.
+    connection_index = spline_subdivisions
+    curve_coords = list(curve.coords)
 
-    smoothed_lines = []
-    for line in (line_1, line_2):
-        smooth_start = point.coords[0] == line.coords[0]
-        smooth_end = point.coords[0] == line.coords[-1]
+    curve_to_connection = LineString(curve_coords[: connection_index + 1])
+    curve_from_connection = LineString(curve_coords[connection_index:])
 
-        if not smooth_start and not smooth_end:
-            continue
+    result_1 = concatenate_lines(
+        line_1_prefix,
+        curve_to_connection,
+    )
 
-        before_in_coords = vertex_before in line.coords
-        after_in_coords = vertex_after in line.coords
-        if before_in_coords and not after_in_coords:
-            chosen_vertices = before_vertices
-        elif after_in_coords and not before_in_coords:
-            chosen_vertices = after_vertices
-        else:
-            warn(
-                "Could not determine where from to add vertices, "
-                + "not smoothing line.",
-                stacklevel=2,
-            )
-            smoothed_lines.append(line)
-            continue
+    result_2 = concatenate_lines(
+        curve_from_connection,
+        line_2_suffix,
+    )
 
-        modified_line = line
-        for vertex in chosen_vertices:
-            vertex_with_z_handled = (
-                vertex if not line.has_z else (vertex[0], vertex[1], 0)
-            )
-            modified_line = insert_vertex(
-                modified_line,
-                vertex_with_z_handled,
-                len(modified_line.coords) - 1 if smooth_end else 1,
-            )
+    return result_1, result_2
 
-        smoothed_lines.append(remove_repeated_points(modified_line))
 
-    return tuple(smoothed_lines)
+def orient_line_toward_point(
+    line: LineString,
+    connection: Point,
+    *,
+    connection_at_end: bool,
+) -> LineString:
+    """Change line vertex order such that the given point is at the given end.
+
+    If line is already oriented as correctly, it'll be unchanged.
+
+    Args:
+    ----
+        line: LineString to orient.
+        connection: Point towards which to orient the line to. Has to be either
+            the start or end point of the given line.
+        connection_at_end: If true, line will be oriented so that the connection
+            point is the end point of the line, if false it'll be the start point.
+
+    Returns:
+    -------
+        Oriented line.
+
+    Raises:
+    ------
+        GeometryOperationError: If given connection point is not a boundary point
+            of the line.
+
+    """
+    start = get_point(line, 0)
+    end = get_point(line, -1)
+
+    case_a = end if connection_at_end else start
+    case_b = start if connection_at_end else end
+
+    if connection == case_a:
+        return line
+
+    if connection == case_b:
+        return line.reverse()
+
+    msg = "Connection point is not an end point of the LineString."
+    raise GeometryOperationError(msg)
+
+
+def concatenate_lines(
+    a: LineString,
+    b: LineString,
+) -> LineString:
+    """Concatenate two LineStrings into a single LineString.
+
+    Args:
+    ----
+        a: First LineString.
+        b: Second LineString.
+
+    Returns:
+    -------
+        Concatenated LineString.
+
+    Note:
+    ----
+        This function can produce self-intersecting lines, f.e. if the lines
+        are connected but have reverse orientation.
+
+    """
+    a_coords = list(a.coords)
+    b_coords = list(b.coords)
+
+    # If lines are already connected, avoid adding duplicate vertex
+    if a_coords[-1] == b_coords[0]:
+        return LineString(a_coords + b_coords[1:])
+
+    return LineString(a_coords + b_coords)
+
+
+def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
+    """Make a polygon valid and ensure the result is a polygon.
+
+    If the repaired polygon forms a multipolygon or a geometrycollection, the
+    largest polygonal part is chosen.
+
+    If the polygon can't be repaired into a multipolygon or geometry
+    collection, and empty polygon is returned.
+
+    Args:
+    ----
+        geom: Polygon to repair.
+
+    Returns:
+    -------
+        Repaired polygon (or empty polygon if it couldn't be repaired).
+
+    """
+    if geom.is_valid:
+        return geom
+
+    repaired = make_valid(geom)
+
+    if isinstance(repaired, Polygon):
+        return repaired
+
+    if isinstance(repaired, MultiPolygon):
+        polygons = repaired.geoms
+    elif isinstance(repaired, GeometryCollection):
+        polygons = tuple(g for g in repaired.geoms if isinstance(g, Polygon))
+    else:
+        return Polygon()
+
+    if not polygons:
+        return Polygon()
+
+    if len(polygons) == 1:
+        return polygons[0]
+
+    return largest_part(MultiPolygon(polygons))

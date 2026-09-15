@@ -31,7 +31,9 @@ class RemoveOverlap(BaseAlgorithm):
     """
 
     reference_key: str = "mask"
-    """Reference data key to use as a mask layer for overlap detection."""
+    """Reference data key for mask data. This mandatory reference data is used
+    as a mask layer over the input data. Sections in the input data which
+    overlap the mask are removed."""
 
     valid_input_geometry_types: ClassVar = {
         "LineString",
@@ -75,9 +77,9 @@ class RemoveOverlap(BaseAlgorithm):
         )
 
         gdf = data.copy()
-        gdf["__index"] = gdf.index
+        gdf["_index"] = gdf.index
         result = gdf.overlay(mask_gdf, how="difference")
-        result = result.set_index("__index")
+        result = result.set_index("_index")
         result.index.name = index_name
 
         # Sometimes gdf.overlay results in multiple single geometries, sometimes

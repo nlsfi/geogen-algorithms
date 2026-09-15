@@ -21,7 +21,7 @@ from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 from geogenalg.merge import buffer_and_merge_polygons
-from geogenalg.utility.dataframe_processing import combine_gdfs
+from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
 
 @supports_identity
@@ -95,9 +95,17 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """Area threshold for removing holes from building areas."""
 
     reference_key_parcels: str = "parcels"
-    """Reference data key for road data."""
+    """Reference data key for parcel data. This optional reference data is
+    intended to be a land parcel or similar polygonal dataset inside which
+    buildings in the input data reside in. The parcel polygons are turned into
+    building areas if they meet the coverage threshold. If not provided,
+    building areas will be formed only by buffering the buildings."""
     reference_key_roads: str = "roads"
-    """Reference data key for parcel data."""
+    """Reference data key for road data. This optional reference data is used
+    to create a buffer area around the roads which is removed out of the
+    generated building areas. The road data is intended to already be
+    generalized to the target scale, although this is not strictly
+    necessary."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
     reference_data_schema: ClassVar = {
@@ -123,7 +131,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         reference_roads = (
             reference_data[self.reference_key_roads]
             if self.reference_key_roads in reference_data
-            else GeoDataFrame(geometry=[], crs=buildings.crs)
+            else copy_gdf_as_empty(data)
         )
 
         if self.classes_for_filtering:
@@ -151,6 +159,17 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
                 ),
             ),
             crs=buildings.crs,
+            {
+                data.geometry.name: GeoSeries(
+                    boffet_areas(
+                        gdf.geometry.to_list(),
+                        self.boffet_area_buffer,
+                        self.boffet_area_erosion,
+                    ),
+                )
+            },
+            geometry=data.geometry.name,
+            crs=data.crs,
         )
 
         if self.reference_key_parcels in reference_data:
@@ -165,6 +184,9 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
                 parcels_gdf,
                 self.parcel_buffer_distance,
             ).explode(as_index=False)
+
+            if parcels_gdf.geometry.name != gdf.geometry.name:
+                parcels_gdf = parcels_gdf.rename_geometry(gdf.geometry.name)
 
             gdf = combine_gdfs(
                 [
@@ -189,7 +211,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         if gdf.empty:
             # GeneralizeLandCover may have eroded all areas away, which
             # will cause overlay() to fail later -> return early
-            return gdf
+            return GeoDataFrame(geometry=[], crs=gdf.crs)
 
         # Remove sections from building areas which are too close to the
         # reference roads

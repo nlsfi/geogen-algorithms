@@ -4,19 +4,19 @@
 #
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from math import hypot
+from typing import Any
 from warnings import catch_warnings
 
 from geopandas import GeoDataFrame
-from shapely.geometry import MultiPolygon, Polygon
-
-from geogenalg.utility.validation import check_gdf_geometry_type
-
-if TYPE_CHECKING:
-    from shapely.geometry import Point
+from numpy import cos, pi, sin
+from pandas import Series
+from shapely.geometry import LineString, Point
 
 from geogenalg.continuity import find_all_endpoints
 from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.geometry import line_mean_direction, remove_holes
+from geogenalg.utility.validation import check_gdf_geometry_type
 
 
 def remove_disconnected_short_lines(
@@ -185,38 +185,11 @@ def remove_small_holes(input_gdf: GeoDataFrame, hole_threshold: float) -> GeoDat
         A GeoDataFrame containing original polygons without too small holes.
 
     """
-
-    def filter_holes(geometry: Polygon | MultiPolygon) -> Polygon | MultiPolygon:
-        """Filter out holes in a polygon that are smaller than the hole_threshold.
-
-        Args:
-        ----
-            geometry: A shapely Polygon or MultiPolygon geometry potentially containing
-                  interior rings.
-
-        Returns:
-        -------
-            A new Polygon or MultiPolygon with only the retained holes.
-
-        """
-        if isinstance(geometry, Polygon):
-            if geometry.interiors:
-                new_interiors = [
-                    hole
-                    for hole in geometry.interiors
-                    if Polygon(hole).area >= hole_threshold
-                ]
-                return Polygon(geometry.exterior, new_interiors)
-            return geometry
-
-        if isinstance(geometry, MultiPolygon):
-            filtered_polygons = [filter_holes(polygon) for polygon in geometry.geoms]
-            return MultiPolygon(filtered_polygons)
-
-        return geometry
-
     output_gdf = input_gdf.copy()
-    output_gdf.geometry = output_gdf.geometry.apply(filter_holes)
+    output_gdf.geometry = output_gdf.geometry.apply(
+        remove_holes,
+        area_threshold=hole_threshold,
+    )
     return output_gdf
 
 
@@ -224,7 +197,7 @@ def reduce_nearby_points_by_selecting(
     input_points_gdf: GeoDataFrame,
     reference_points_gdf: GeoDataFrame | None,
     distance_threshold: float,
-    priority_column: str,
+    priority_column: str | None = None,
 ) -> GeoDataFrame:
     """Reduce nearby points by keeping the higher-priority point within a threshold.
 
@@ -286,9 +259,14 @@ def reduce_nearby_points_by_selecting(
                 getattr(other_point, possible_matches.geometry.name)
             )
 
-            if distance < distance_threshold and (
-                getattr(input_point, priority_column)
-            ) <= getattr(other_point, priority_column):
+            prioritize_other = (
+                (getattr(input_point, priority_column))
+                <= getattr(other_point, priority_column)
+                if priority_column is not None
+                else True
+            )
+
+            if distance < distance_threshold and prioritize_other:
                 to_remove.add(input_point_index)
                 break
 
@@ -368,3 +346,75 @@ def remove_short_lines(lines: GeoDataFrame, length_threshold: float) -> GeoDataF
 
     result = lines.copy()
     return result.loc[result.geometry.length >= length_threshold]
+
+
+def rank_parallel_lines(
+    input_gdf: GeoDataFrame,
+) -> tuple[
+    Series,
+    list[Any],
+]:
+    """Rank parallel lines by their position along a perpendicular axis.
+
+    Creates a line perpendicular to the mean direction of the input geometries
+    and uses the intersection points with this line to determine the relative
+    ordering of parallel lines. Lines that do not intersect the reference line
+    are returned separately.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame containing lines to rank.
+
+    Returns:
+    -------
+        Tuple containing a Pandas Series containing the ranks as the first
+        item, and a list of indices of features which do not intersect the
+        perpendicular line.
+
+    Note:
+    ----
+        If two or fewer geometries intersect the reference line, ranks are assigned
+        directly based on their order rather than calculated from intersection
+        distances.
+
+    """
+    if input_gdf.empty:
+        return (Series(), [])
+
+    centroid = input_gdf.union_all().centroid
+    direction = line_mean_direction(input_gdf.union_all(), unit="radians") + pi / 2
+
+    min_x, min_y, max_x, max_y = input_gdf.total_bounds
+    perpendicular_line_length = hypot(max_x - min_x, max_y - min_y) * 2
+
+    dx = cos(direction) * perpendicular_line_length
+    dy = sin(direction) * perpendicular_line_length
+
+    perpendicular_line = LineString(
+        [
+            (centroid.x - dx, centroid.y - dy),
+            (centroid.x + dx, centroid.y + dy),
+        ]
+    )
+
+    intersects = input_gdf.intersects(perpendicular_line)
+
+    disjoint = input_gdf.loc[~intersects]
+    gdf = input_gdf.loc[intersects]
+
+    if gdf.shape[0] <= 2:  # noqa: PLR2004
+        return (
+            Series(
+                index=gdf.index.tolist(),
+                data=list(range(len(gdf.index))),
+            ),
+            disjoint.index.tolist(),
+        )
+
+    intersections = gdf.geometry.intersection(perpendicular_line)
+    distances = intersections.distance(Point(perpendicular_line.coords[0]))
+
+    return (
+        distances.rank(),
+        disjoint.index.tolist(),
+    )

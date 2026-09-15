@@ -15,6 +15,7 @@ from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
 from geogenalg.selection import remove_small_holes, remove_small_polygons
+from geogenalg.split import explode_and_hash_id
 
 
 @supports_identity
@@ -50,8 +51,6 @@ class GeneralizeLandcover(BaseAlgorithm):
     """Minimum area of holes to retain."""
     smoothing: bool = False
     """If True, polygons will be smoothed."""
-    buffer_cap_style: Literal["round", "square", "flat"] = "square"
-    """Cap style used in buffer operations."""
     buffer_join_style: Literal["round", "mitre", "bevel"] = "bevel"
     """Join style used in buffer operations."""
     group_by: frozenset[str] = frozenset()
@@ -71,13 +70,13 @@ class GeneralizeLandcover(BaseAlgorithm):
         def _buffer(gdf: GeoDataFrame, distance: float) -> None:
             gdf.geometry = gdf.geometry.buffer(
                 distance,
-                cap_style=self.buffer_cap_style,
                 join_style=self.buffer_join_style,
             )
 
         # Create a positive_buffer to close narrow gaps between polygons
         _buffer(result_gdf, self.positive_buffer)
 
+        result_gdf = explode_and_hash_id(result_gdf, "landcover")
         result_gdf = dissolve_and_inherit_attributes(
             input_gdf=result_gdf,
             by_column=group_by,
@@ -93,11 +92,13 @@ class GeneralizeLandcover(BaseAlgorithm):
         # Restore polygons to their original size with a positive buffer
         _buffer(result_gdf, -negative_buffer)
 
+        result_gdf = explode_and_hash_id(result_gdf, "landcover")
         result_gdf = dissolve_and_inherit_attributes(
             input_gdf=result_gdf,
             by_column=group_by,
         )
         result_gdf = hash_index_from_old_ids(result_gdf, "landcover", "old_ids")
+        result_gdf = result_gdf.loc[~result_gdf.geometry.is_empty]
 
         # Simplify the polygons
         result_gdf.geometry = result_gdf.geometry.simplify(

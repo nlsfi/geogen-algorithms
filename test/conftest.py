@@ -9,14 +9,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from tempfile import gettempdir
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 from warnings import warn
 
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
-from pandas.testing import assert_series_equal
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
@@ -26,6 +25,7 @@ from geogenalg.testing import (
     TestGeoDataFrames,
     TestReportWarning,
     assert_gdf_equal_save_diff,
+    assert_geoseries_coordinates_equal,
     dummy_geometry,
     get_test_gdfs,
 )
@@ -35,6 +35,15 @@ from geogenalg.utility.validation import geometry_string_to_type
 @pytest.fixture
 def testdata_path() -> Path:
     return Path(__file__).resolve().parent / "testdata"
+
+
+@dataclass(frozen=True)
+class ExpectedResultColumns:
+    """Class for defining expected columns in test result."""
+
+    inherit: Literal["input", "none"] = "input"
+    inherit_from_reference_key: str | None = None
+    mandatory_extra_columns: frozenset[str] = frozenset()
 
 
 GEOMETRY_TYPE_STRINGS = (
@@ -47,6 +56,8 @@ GEOMETRY_TYPE_STRINGS = (
     "MultiPolygon",
     "GeometryCollection",
 )
+
+DEFAULT_EXPECTED_RESULT_COLUMNS = ExpectedResultColumns()
 
 
 @dataclass(frozen=True)
@@ -63,14 +74,19 @@ class IntegrationTest:
     """Name of column in input and reference data to set as GeoDataFrame index."""
     check_missing_reference: bool
     """If True, test will check that algorithm will raise a MissingReferenceError."""
+    expected_result_columns: ExpectedResultColumns = DEFAULT_EXPECTED_RESULT_COLUMNS
+    """Describes what columns result data should have."""
     reference_uris: dict[str, GeoPackageInput] = field(default_factory=dict)
     """Paths and layers of algorithm's reference data."""
     assert_function_arguments: dict[AssertFunctionParameter, Any] = field(
         default_factory=dict
     )
     """Any arguments to pass to geopandas.testing.assert_geodataframe_equal."""
-    dummy_data_mandatory_columns: list[str] = field(default_factory=list)
+    dummy_data_mandatory_columns: frozenset[str] = frozenset()
     """For defining columns which are required for algorithm to pass."""
+    dummy_reference_data_mandatory_columns: frozenset[str] = frozenset()
+    """For defining columns for reference data which are required for algorithm
+    to pass."""
 
     def get_test_gdfs(self, *, geometry_column: str | None = None) -> TestGeoDataFrames:
         """Get GeoDataFrames used in test.
@@ -161,8 +177,18 @@ class IntegrationTest:
 
         assert self.algorithm == algorithm_before
 
+        self._check_columns(
+            test_gdfs.input_data,
+            test_gdfs.reference_data,
+            test_gdfs.result,
+        )
+
         if any(test_gdfs.result.index.duplicated()):
             msg = "Duplicate indices found in result GeoDataFrame."
+            raise AssertionError(msg)
+
+        if any(test_gdfs.result.geometry.duplicated()):
+            msg = "Duplicate geometries found in result GeoDataFrame."
             raise AssertionError(msg)
 
         # Run this first so if report saving is on you can see the result (provided
@@ -180,9 +206,16 @@ class IntegrationTest:
                 test_gdfs.control,
                 **self.assert_function_arguments,
             )
-            # Test GeoSeries separately, because assert_geodataframe_equal
+
+            # Test GeoSeries Zs separately, because assert_geodataframe_equal
             # does not check that Z values are equal.
-            assert_series_equal(test_gdfs.result.geometry, test_gdfs.control.geometry)
+            assert_geoseries_coordinates_equal(
+                test_gdfs.result.geometry,
+                test_gdfs.control.geometry,
+                tolerance=5e-07
+                if self.assert_function_arguments.get("check_less_precise")
+                else 0,
+            )
         else:
             self._assert_and_save_report(test_gdfs.result, test_gdfs.control)
 
@@ -200,11 +233,11 @@ class IntegrationTest:
         self._check_test_data_has_z_coordinates(
             test_gdfs.input_data, test_gdfs.control, test_gdfs.result
         )
-        self._check_test_data_single_geometries(test_gdfs.input_data, test_gdfs.result)
+        self._check_test_data_geometries(test_gdfs.input_data, test_gdfs.result)
 
         if self.check_missing_reference:
             with pytest.raises(
-                MissingReferenceError, match=r"Reference data is missing."
+                MissingReferenceError, match="Algorithm has required reference data key"
             ):
                 self.algorithm.execute(test_gdfs.input_data)
 
@@ -290,7 +323,7 @@ class IntegrationTest:
             msg = "Control or result data has z when other does not."
             raise AssertionError(msg)
 
-    def _check_test_data_single_geometries(
+    def _check_test_data_geometries(
         self,
         input_data: GeoDataFrame,
         result: GeoDataFrame,
@@ -315,6 +348,10 @@ class IntegrationTest:
             msg = "Input has only single geometries but result does not."
             raise AssertionError(msg)
 
+        if result.geometry.is_empty.any():
+            msg = "Result has empty geometries."
+            raise AssertionError(msg)
+
     def _check_algorithm_passes_with_dummy_data(
         self,
     ) -> None:
@@ -324,26 +361,73 @@ class IntegrationTest:
             attribute_data,
             index=[str(uuid4())],
             geometry=[
-                dummy_geometry(next(iter(self.algorithm.valid_input_geometry_types)))
+                dummy_geometry(min(self.algorithm.valid_input_geometry_types)),
             ],
             crs="EPSG:3857",
         )
 
-        # TODO: selecting next from a set is non-deterministic potentially
-        # resulting in flaky tests?
-
         reference_data = {}
         for key, ref in self.algorithm.reference_data_schema.items():
+            reference_attributes = {
+                column: [1] for column in self.dummy_reference_data_mandatory_columns
+            }
+            reference_attributes["reference_field_1"] = [1]
             reference_data[getattr(self.algorithm, key)] = GeoDataFrame(
-                {
-                    "field_1": [1],
-                },
+                reference_attributes,
                 index=[str(uuid4())],
-                geometry=[dummy_geometry(next(iter(ref.valid_geometry_types)))],
+                geometry=[dummy_geometry(min(ref.valid_geometry_types))],
                 crs="EPSG:3857",
             )
 
-        self.algorithm.execute(
+        result = self.algorithm.execute(
             data,
             reference_data,
         )
+
+        self._check_columns(data, reference_data, result)
+
+    def _check_columns(
+        self,
+        input_data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+        result: GeoDataFrame,
+    ) -> None:
+        mandatory_extra_columns = self.expected_result_columns.mandatory_extra_columns
+        result_columns = set(result.columns)
+
+        match self.expected_result_columns.inherit:
+            case "input":
+                if self.expected_result_columns.inherit_from_reference_key is not None:
+                    reference_key = (
+                        self.expected_result_columns.inherit_from_reference_key
+                    )
+                    expected_columns = set(input_data.columns) | set(
+                        reference_data[reference_key].columns
+                    )
+                else:
+                    expected_columns = set(input_data.columns)
+            case "none":
+                columns = [
+                    column
+                    for column in result.columns
+                    if column != result.geometry.name
+                ]
+                if columns:
+                    msg = f"Expected no columns in result, found: {columns}"
+                    raise AssertionError(msg)
+                return
+
+        for column in mandatory_extra_columns:
+            if column not in result_columns:
+                msg = f"Result does not have mandatory extra column: {column}"
+                raise AssertionError(msg)
+
+        missing_columns = expected_columns - result_columns
+        if missing_columns:
+            msg = f"Output data is missing columns: {sorted(missing_columns)}"
+            raise AssertionError(msg)
+
+        unexpected_columns = result_columns - expected_columns - mandatory_extra_columns
+        if unexpected_columns:
+            msg = f"Output data has unexpected columns: {sorted(unexpected_columns)}"
+            raise AssertionError(msg)

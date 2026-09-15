@@ -27,7 +27,11 @@ from geogenalg.application import (
     ReferenceDataInformation,
     supports_identity,
 )
-from geogenalg.core.exceptions import GeometryTypeError, InvalidCRSError
+from geogenalg.core.exceptions import (
+    GeometryTypeError,
+    InvalidCRSError,
+    MissingReferenceError,
+)
 
 
 def test_index_reset_without_identity_support():
@@ -339,3 +343,180 @@ def test_limit_int_value():
         MockAlg(parameter=-1000)
     with pytest.raises(ValidationError, match=r"1 validation error for MockAlg"):
         MockAlg(parameter=1000)
+
+
+def test_algorithm_raises_on_extra_input():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(
+        ValidationError,
+        match="Extra inputs are not permitted",
+    ):
+        MockAlg(extra_argument=10)
+
+
+def test_algorithm_raises_on_nonexistant_reference_key_member():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+        reference_data_schema: ClassVar[dict[str, ReferenceDataInformation]] = {
+            "reference_key__": ReferenceDataInformation(
+                valid_geometry_types={"Point"},
+                required=True,
+            )
+        }
+
+        reference_key: str = "reference"
+        requires_projected_crs = False
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "Attribute named 'reference_key__' is defined in reference data schema but not found in algorithm instance."
+        ),
+    ):
+        MockAlg(
+            reference_key="not_reference",
+        ).execute(GeoDataFrame(geometry=[], crs="EPSG:4326"))
+
+
+def test_algorithm_raises_on_required_reference_data_keys():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+        reference_data_schema: ClassVar[dict[str, ReferenceDataInformation]] = {
+            "reference_key": ReferenceDataInformation(
+                valid_geometry_types={"Point"},
+                required=True,
+            )
+        }
+
+        reference_key: str = "reference"
+        requires_projected_crs = False
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(
+        MissingReferenceError,
+        match=re.escape(
+            "Algorithm has required reference data key(s): 'reference_key', but no reference data passed."
+        ),
+    ):
+        MockAlg(
+            reference_key="not_reference",
+        ).execute(
+            GeoDataFrame(geometry=[], crs="EPSG:4326"),
+            None,
+        )
+
+    with pytest.raises(
+        MissingReferenceError,
+        match=re.escape(
+            "Algorithm has required reference data key(s): 'reference_key', but no reference data passed."
+        ),
+    ):
+        MockAlg(
+            reference_key="not_reference",
+        ).execute(
+            GeoDataFrame(geometry=[], crs="EPSG:4326"),
+            {},
+        )
+
+
+def test_algorithm_raises_on_unexpected_key():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+        reference_data_schema: ClassVar[dict[str, ReferenceDataInformation]] = {
+            "reference_key": ReferenceDataInformation(
+                valid_geometry_types={"Point"},
+                required=True,
+            )
+        }
+
+        reference_key: str = "reference_key"
+        requires_projected_crs = False
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(
+        MissingReferenceError,
+        match=re.escape(
+            "Reference data has unexpected key 'not_reference'. Expected one of 'reference_key'"
+        ),
+    ):
+        MockAlg().execute(
+            GeoDataFrame(geometry=[], crs="EPSG:4326"),
+            {"not_reference": GeoDataFrame(geometry=[], crs="EPSG:4326")},
+        )
+
+
+def test_algorithm_raises_on_none_reference_data():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+        reference_data_schema: ClassVar[dict[str, ReferenceDataInformation]] = {
+            "reference_key": ReferenceDataInformation(
+                valid_geometry_types={"Point"},
+                required=True,
+            )
+        }
+
+        reference_key: str = "reference_key"
+        requires_projected_crs = False
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(
+        MissingReferenceError,
+        match=re.escape(
+            "Reference data by key 'reference_key' is None. Expected a GeoDataFrame"
+        ),
+    ):
+        MockAlg().execute(
+            GeoDataFrame(geometry=[], crs="EPSG:4326"),
+            {"reference_key": None},
+        )
+
+
+def test_algorithm_raises_on_missing_key():
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+        reference_data_schema: ClassVar[dict[str, ReferenceDataInformation]] = {
+            "reference_key": ReferenceDataInformation(
+                valid_geometry_types={"Point"},
+                required=True,
+            ),
+            "other_ref": ReferenceDataInformation(
+                valid_geometry_types={"Point"},
+                required=False,
+            ),
+        }
+
+        reference_key: str = "reference_key"
+        other_ref: str = "other_ref"
+        requires_projected_crs = False
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    with pytest.raises(
+        MissingReferenceError,
+        match=re.escape("Reference data contains no mandatory key 'reference_key'."),
+    ):
+        MockAlg().execute(
+            GeoDataFrame(geometry=[], crs="EPSG:4326"),
+            {"other_ref": GeoDataFrame(geometry=[], crs="EPSG:4326")},
+        )

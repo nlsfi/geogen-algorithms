@@ -11,7 +11,11 @@ from geopandas.testing import assert_geodataframe_equal
 from shapely import box
 from shapely.geometry import LineString, Polygon
 
-from geogenalg.attributes import inherit_attributes, inherit_attributes_from_largest
+from geogenalg.attributes import (
+    inherit_attributes,
+    inherit_attributes_for_lines_by_buffer,
+    inherit_attributes_from_largest,
+)
 
 
 @pytest.mark.parametrize(
@@ -136,7 +140,7 @@ def test_inherit_attributes(
                 {
                     "id": [1, 2, 3],
                     "other": [111111, 222222, 333333],
-                    "__old_ids": [
+                    "_old_ids": [
                         (1,),
                         (2,),
                         (3,),
@@ -172,7 +176,7 @@ def test_inherit_attributes(
                 {
                     "id": [1, 3],
                     "other": [111111, 333333],
-                    "__old_ids": [
+                    "_old_ids": [
                         (1,),
                         (3, 2),
                     ],
@@ -206,7 +210,7 @@ def test_inherit_attributes(
                 {
                     "id": [2, 3],
                     "other": [222222, 333333],
-                    "__old_ids": [
+                    "_old_ids": [
                         (2, 1),
                         (3,),
                     ],
@@ -236,7 +240,7 @@ def test_inherit_attributes_from_largest(
     result = inherit_attributes_from_largest(
         source_gdf,
         target_gdf,
-        old_ids_column="__old_ids",
+        old_ids_column="_old_ids",
         measure_by=measure_by,
     )
     assert_geodataframe_equal(
@@ -244,3 +248,98 @@ def test_inherit_attributes_from_largest(
         expected_gdf,
         check_like=True,
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "original",
+        "new",
+        "buffer_distance",
+        "expected",
+    ),
+    [
+        (
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[0, 0], [10, 0]])],
+            ),
+            GeoDataFrame(
+                geometry=[LineString([[1, 0], [9, 0]])],
+            ),
+            1,
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[1, 0], [9, 0]])],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[0, 0], [5, 0]])],
+            ),
+            GeoDataFrame(
+                geometry=[LineString([[5, 0], [10, 0]])],
+            ),
+            1,
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[5, 0], [10, 0]])],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"attribute": ["short", "long"]},
+                geometry=[
+                    LineString([[0, 0], [4, 0]]),
+                    LineString([[0, 0], [10, 0]]),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[LineString([[2, 0], [8, 0]])],
+            ),
+            1,
+            GeoDataFrame(
+                {"attribute": ["long"]},
+                geometry=[LineString([[2, 0], [8, 0]])],
+                index=[1],
+            ),
+        ),
+    ],
+    ids=[
+        "matching_line",
+        "matching_at_endpoint",
+        "best_match",
+    ],
+)
+def test_inherit_attributes_for_lines_by_buffer(
+    original: GeoDataFrame,
+    new: GeoDataFrame,
+    buffer_distance: float,
+    expected: GeoDataFrame,
+):
+    result = inherit_attributes_for_lines_by_buffer(
+        original,
+        new,
+        buffer_distance=buffer_distance,
+    )
+
+    assert_geodataframe_equal(result, expected)
+
+
+def test_inherit_attributes_for_lines_by_buffer_warns():
+    original = GeoDataFrame(
+        {"attribute": ["original"]},
+        geometry=[LineString([[0, 0], [1, 0]])],
+    )
+    new = GeoDataFrame(
+        geometry=[LineString([[10, 0], [11, 0]])],
+    )
+
+    with pytest.warns(UserWarning, match="Did not find match for line"):
+        result = inherit_attributes_for_lines_by_buffer(
+            original,
+            new,
+            buffer_distance=1,
+        )
+
+    assert result.empty

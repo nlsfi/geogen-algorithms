@@ -33,13 +33,13 @@ from geogenalg.utility.dataframe_processing import add_columns_to_gdf
                     columns=["id", "attribute"],
                     geometry=[],
                 ),
-                {"__old_ids": "object"},
+                {"_old_ids": "object"},
             ),
             GeoDataFrame(
                 {
                     "id": [1],
                     "attribute": ["attribute"],
-                    "__olds_ids": [nan],
+                    "_olds_ids": [nan],
                 },
                 geometry=[
                     box(0, 0, 100, 20),
@@ -61,11 +61,11 @@ from geogenalg.utility.dataframe_processing import add_columns_to_gdf
                 {
                     "id": [1],
                     "attribute": ["attribute"],
-                    "__old_ids": [(1,)],
+                    "_old_ids": [(1,)],
                 },
                 geometry=[LineString([[10, 10], [90, 10]])],
             ),
-            GeoDataFrame(columns=["id", "attribute", "__old_ids"], geometry=[]),
+            GeoDataFrame(columns=["id", "attribute", "_old_ids"], geometry=[]),
             100,
         ),
         (
@@ -96,7 +96,7 @@ from geogenalg.utility.dataframe_processing import add_columns_to_gdf
                         "section turns to line",
                         "turns to line",
                     ],
-                    "__old_ids": [
+                    "_old_ids": [
                         (3,),
                         (2,),
                     ],
@@ -113,7 +113,7 @@ from geogenalg.utility.dataframe_processing import add_columns_to_gdf
                         "remains a polygon",
                         "section turns to line",
                     ],
-                    "__old_ids": [
+                    "_old_ids": [
                         None,
                         None,
                     ],
@@ -161,7 +161,7 @@ def test_thin_polygon_sections_to_lines(
         min_line_length=10,
         min_new_section_length=10,
         min_new_section_area=250,
-        old_ids_column="__old_ids",
+        old_ids_column="_old_ids",
     )
     expected_lines = expected_lines.set_index("id")
     expected_polygons = expected_polygons.set_index("id")

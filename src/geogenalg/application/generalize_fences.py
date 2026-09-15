@@ -25,6 +25,7 @@ from geogenalg.selection import (
     remove_parts_of_lines_on_polygon_edges,
     split_polygons_by_point_intersection,
 )
+from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
@@ -60,8 +61,12 @@ class GeneralizeFences(BaseAlgorithm):
     """Maximum gap between two fence lines to be connected with a helper line."""
     attribute_for_line_merge: str = "kohdeluokka"
     """Name of the attribute to determine which line features can be merged."""
+    # TODO: this might not have to be strictly necessary in the general use case
     reference_key: str = "masts"
-    """Reference data key to use as a source of mast data."""
+    """Reference data key to use as a source of point data. This mandatory
+    reference data is used to identify closed fences containing points. These
+    fences have a different area threshold for removal. The data is intended to
+    already be generalized to the target scale."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {
@@ -160,6 +165,13 @@ class GeneralizeFences(BaseAlgorithm):
 
         # Remove the surrounding fence lines of small closed areas with masts considered
         result_gdf = remove_parts_of_lines_on_polygon_edges(result_gdf, faces_gdf)
+
+        # Previous step may form multilines. Try to first merge them back to
+        # single lines.
+        result_gdf.geometry = result_gdf.geometry.line_merge()
+
+        # If multilines still remain, explode to single features.
+        result_gdf = explode_and_hash_id(result_gdf, "fences")
 
         # Remove short fence lines
         result_gdf = remove_disconnected_short_lines(

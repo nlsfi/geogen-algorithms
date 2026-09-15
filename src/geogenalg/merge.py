@@ -3,15 +3,22 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+import operator
 from typing import Literal
 
 from geopandas import GeoDataFrame
+from numpy import zeros
+from pandas import Series
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
-from shapely.geometry import LineString, MultiLineString
+from shapely.geometry import LineString, MultiLineString, Point
 
+from geogenalg.analyze import group_geometries_by_intersections_recursively
 from geogenalg.attributes import inherit_attributes
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
+from geogenalg.utility.dataframe_processing import (
+    combine_gdfs,
+    copy_gdf_as_empty,
+)
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -101,7 +108,7 @@ def merge_connecting_lines_by_attribute(
     return result_gdf_with_attributes
 
 
-def dissolve_and_inherit_attributes(
+def dissolve_and_inherit_attributes(  # noqa: C901
     input_gdf: GeoDataFrame,
     by_column: str | list[str] | None = None,
     old_ids_column: str = "old_ids",
@@ -131,88 +138,138 @@ def dissolve_and_inherit_attributes(
             polygon geometries.
 
     """
-    if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
-        msg = "Dissolve only supports Polygon or MultiPolygon geometries."
+    if not check_gdf_geometry_type(input_gdf, {"Polygon"}):
+        msg = "Only works for single polygons."
         raise GeometryTypeError(msg)
+
+    if input_gdf.empty:
+        return copy_gdf_as_empty(input_gdf, add_columns={old_ids_column: "object"})
 
     gdf = input_gdf.copy()
 
-    # Apply buffer(0) to clean geometries. It fixes invalid polygons and
-    # ensures resulting geometries are valid before further processing.
-    gdf.geometry = gdf.buffer(0)
+    old_index_name = gdf.index.name
+    gdf.index.name = None
 
-    dissolved_gdf: GeoDataFrame = (
-        gdf.dissolve(by=by_column).explode(index_parts=True).reset_index()
-    )
+    # Create a dummy column to get every row to the same group if no column(s)
+    # was given.
+    by = zeros(len(gdf), dtype="int64") if by_column is None else by_column
 
-    features = []
-    for _, dissolved_row in dissolved_gdf.iterrows():
-        dissolved_geom = dissolved_row[dissolved_gdf.geometry.name]
+    # This function works by first grouping rows by the given column(s) (or all
+    # in the same group if nothing was given). Then we group rows by their
+    # geometries such that rows which intersect each other are grouped
+    # together. Those rows are then dissolved together and their geometries
+    # combined.
 
-        if by_column is None:
-            intersecting_polygons_gdf = gdf[
-                gdf.geometry.intersects(dissolved_geom)
+    # The reason for having special handling for dissolving instead of using
+    # GeoPandas dissolve and exploding features out of the multipolygon is that
+    # if disjoint features are added as parts of a multipolygon their vertex
+    # order may be changed, which may affect simplify etc. results, but more
+    # importantly index handling when the geometry is used to hash a new index.
+
+    def most_intersection_sort(geoms: Series, union: Polygon) -> Series:
+        return geoms.apply(lambda geom: union.intersection(geom).area)
+
+    def dissolve_geometry_group(geometry_group: GeoDataFrame) -> GeoDataFrame:
+        union = geometry_group.geometry.union_all()
+
+        used_geometry_group = geometry_group
+        single_touching_point_features = copy_gdf_as_empty(
+            geometry_group,
+            add_columns={old_ids_column: "object"},
+        )
+
+        if isinstance(union, MultiPolygon):
+            # This means we have now have polygons which intersect some other
+            # polygon in the group, but only by one point which means the
+            # geometries can't be dissolved into a single polygon. We have to
+            # extract out the features which will not dissolve into the union
+            # and keep them as separate features.
+            union_without_feature = geometry_group.geometry.apply(
+                union.difference,
+            )
+            intersection = geometry_group.geometry.intersection(union_without_feature)
+            single_intersection_point_only = intersection.apply(
+                lambda geom: isinstance(geom, Point),
+            )
+
+            used_geometry_group = geometry_group.loc[~single_intersection_point_only]
+
+            single_touching_point_features = geometry_group.loc[
+                single_intersection_point_only
             ].copy()
-        elif isinstance(by_column, str):
-            intersecting_polygons_gdf = gdf[
-                (gdf.geometry.intersects(dissolved_geom))
-                & (gdf[by_column] == dissolved_row[by_column])
-            ].copy()
-        else:  # list[str]
-            mask = gdf[by_column[0]] == dissolved_row[by_column[0]]
-            for column in by_column[1:]:
-                mask &= gdf[column] == dissolved_row[column]
 
-            intersecting_polygons_gdf = gdf[
-                (gdf.geometry.intersects(dissolved_geom)) & mask
-            ].copy()
+            single_touching_point_features[old_ids_column] = (
+                single_touching_point_features.index.to_series().apply(
+                    lambda idx: (idx,)
+                )
+            )
 
-        if intersecting_polygons_gdf.empty:
-            continue
+            if used_geometry_group.empty:
+                return single_touching_point_features
+
+            union = used_geometry_group.union_all()
 
         match inherit_from:
             case "min_id":
-                min_id = intersecting_polygons_gdf.index.min()
-                representative_polygon_gdf = intersecting_polygons_gdf.loc[
-                    [min_id]
-                ].copy()
-                representative_feature = representative_polygon_gdf.iloc[0]
+                used_geometry_group = used_geometry_group.sort_index(
+                    ascending=True,
+                )
             case "most_intersection":
-                intersecting_polygons_gdf.geometry = (
-                    intersecting_polygons_gdf.geometry.intersection(dissolved_geom)
-                )
-                intersecting_polygons_gdf["__area"] = (
-                    intersecting_polygons_gdf.geometry.area
-                )
-                intersecting_polygons_gdf = intersecting_polygons_gdf.sort_values(
-                    "__area",
+                used_geometry_group = used_geometry_group.sort_values(
+                    by=used_geometry_group.geometry.name,
+                    key=lambda geom: most_intersection_sort(geom, union),
                     ascending=False,
                 )
-                intersecting_polygons_gdf = intersecting_polygons_gdf.drop(
-                    "__area", axis=1
-                )
 
-                representative_feature = intersecting_polygons_gdf.iloc[0]
+        old_ids = tuple(used_geometry_group.index)
 
-        feature = representative_feature.copy()
-        feature[dissolved_gdf.geometry.name] = dissolved_geom
+        dissolved_group = used_geometry_group[:1].copy()
+        dissolved_group[old_ids_column] = [old_ids]
+        dissolved_group.geometry = [union]
 
-        feature[old_ids_column] = tuple(
-            intersecting_polygons_gdf.index.to_list(),
+        if not single_touching_point_features.empty:
+            dissolved_group = combine_gdfs(
+                [
+                    dissolved_group,
+                    single_touching_point_features,
+                ]
+            )
+
+        return dissolved_group
+
+    def dissolve_attribute_group(group: GeoDataFrame) -> GeoDataFrame:
+        grouped_by_geom = group_geometries_by_intersections_recursively(group)
+
+        return (
+            grouped_by_geom.groupby(
+                by="_geometry_group",
+                as_index=False,
+                level=None,
+                sort=False,
+            )[grouped_by_geom.columns]
+            .apply(
+                dissolve_geometry_group,
+                include_groups=False,
+            )
+            .drop("_geometry_group", axis=1)
         )
 
-        features.append(feature)
+    attribute_groups = gdf.groupby(
+        by=by,
+        as_index=False,
+        level=None,
+        sort=False,
+    )[gdf.columns].apply(
+        dissolve_attribute_group,
+        include_groups=False,
+    )
 
-    if features:
-        output = GeoDataFrame(
-            features, geometry=input_gdf.geometry.name, crs=input_gdf.crs
-        )
-    else:
-        return copy_gdf_as_empty(input_gdf, add_columns={old_ids_column: "object"})
+    attribute_groups.index = attribute_groups[old_ids_column].apply(
+        operator.itemgetter(0),
+    )
+    attribute_groups.index.name = old_index_name
 
-    output.index.name = input_gdf.index.name
-
-    return output
+    return attribute_groups
 
 
 def buffer_and_merge_polygons(

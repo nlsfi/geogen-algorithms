@@ -4,12 +4,14 @@
 #
 #  SPDX-License-Identifier: MIT
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from geopandas.tools import overlay
+from networkx.classes.graph import Graph
 from shapely import box
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
@@ -26,8 +28,9 @@ from geogenalg.continuity import (
     flag_connections,
     flag_connections_to_reference,
     flag_polygon_centerline_connections,
+    gdf_to_networkx_graph,
     get_lines_along_reference_lines,
-    get_segments_in_polygon_exteriors_but_not_in_lines,
+    get_segments_in_polygon_boundary_but_not_in_lines,
     inspect_dead_end_candidates,
     process_lines_and_reconnect,
     smooth_linestring_connections,
@@ -546,11 +549,11 @@ def test_get_lines_along_reference_lines(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         True,
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                         False,
                     ],
@@ -570,11 +573,11 @@ def test_get_lines_along_reference_lines(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         False,
                         False,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                         False,
                     ],
@@ -595,12 +598,12 @@ def test_get_lines_along_reference_lines(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         True,
                         True,
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                         False,
                         True,
@@ -652,11 +655,11 @@ def test_flag_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         False,
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         True,
                         False,
                     ],
@@ -680,10 +683,10 @@ def test_flag_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         False,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         False,
                     ],
                 },
@@ -706,10 +709,10 @@ def test_flag_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connected": [
+                    "_start_connected": [
                         True,
                     ],
-                    "__end_connected": [
+                    "_end_connected": [
                         True,
                     ],
                 },
@@ -875,8 +878,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [True],
-                    "__end_connected": [False],
+                    "_start_connected": [True],
+                    "_end_connected": [False],
                 },
                 geometry=[
                     LineString(
@@ -918,8 +921,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [False],
-                    "__end_connected": [True],
+                    "_start_connected": [False],
+                    "_end_connected": [True],
                 },
                 geometry=[
                     LineString(
@@ -962,8 +965,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [True],
-                    "__end_connected": [True],
+                    "_start_connected": [True],
+                    "_end_connected": [True],
                 },
                 geometry=[
                     LineString(
@@ -1006,8 +1009,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 100),
                         ]
                     ),
-                    "__start_connected": [False],
-                    "__end_connected": [False],
+                    "_start_connected": [False],
+                    "_end_connected": [False],
                 },
                 geometry=[
                     LineString(
@@ -1049,8 +1052,8 @@ def test_connect_lines_to_polygon_centroids(
                             box(0, 0, 2, 1000),
                         ]
                     ),
-                    "__start_connected": [False],
-                    "__end_connected": [False],
+                    "_start_connected": [False],
+                    "_end_connected": [False],
                 },
                 geometry=[
                     LineString(
@@ -1191,12 +1194,33 @@ def test_flag_polygon_centerline_connections(
             ),
             1.0,
         ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [2, 2], [0, 2]]),
+                    LineString([[0, 2], [0, 3]]),
+                ],
+            ),
+            lambda gdf: gdf.drop(1).copy().reset_index(drop=True),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[1, 0], [1, 3]]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [2, 2], [0, 2]]),
+                ],
+            ),
+            0.0,
+        ),
     ],
     ids=[
         "reconnect_two",
         "reconnect_cut_line",
         "no_changes",
         "tolerance",
+        "non_simple",
     ],
 )
 def test_process_lines_and_reconnect(
@@ -1642,18 +1666,18 @@ def test_add_contiguous_lines_information(
         "empty_lines",
     ],
 )
-def test_get_segments_in_polygon_exteriors_but_not_in_lines(
+def test_get_segments_in_polygon_boundary_but_not_in_lines(
     polygons: GeoDataFrame,
     lines: GeoDataFrame,
     expected_gdf: GeoDataFrame,
 ):
-    get_segments_in_polygon_exteriors_but_not_in_lines(
+    get_segments_in_polygon_boundary_but_not_in_lines(
         polygons,
         lines,
     )
 
     assert_geodataframe_equal(
-        get_segments_in_polygon_exteriors_but_not_in_lines(
+        get_segments_in_polygon_boundary_but_not_in_lines(
             polygons,
             lines,
         ),
@@ -1709,16 +1733,18 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
                             [1.25, 0.25],
                             [1.75, 1],
                             [2.5, 2],
-                            [2.9661258867648237, 2.433208736292763],
-                            [3.5049204064058337, 2.842054416166005],
+                            [3.583974852831078, 2.7226499018873858],
+                            [3.7189260289566217, 2.8341817702000847],
+                            [3.8629336676214034, 2.9521410789170366],
                             [4, 3],
                         ]
                     ),
                     LineString(
                         [
                             [4, 3],
-                            [4.363927764355153, 2.711489274491867],
-                            [4.693562719333668, 2.2261563204196673],
+                            [4.121990780416937, 2.924822660881621],
+                            [4.237040254547688, 2.7795449341292544],
+                            [4.353553390593274, 2.646446609406726],
                             [5, 2],
                             [6, 4.25],
                             [5.5, 4.75],
@@ -1730,8 +1756,8 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
         ),
         (
             GeoDataFrame(
-                {"attribute": ["1"]},
-                index=[1],
+                {"attribute": ["1", "2"]},
+                index=[1, 1],
                 geometry=[
                     LineString(
                         [
@@ -1740,40 +1766,46 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
                             [1.75, 1],
                             [2.5, 2],
                             [4, 3],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [4, 3],
                             [5, 2],
                             [6, 4.25],
                             [5.5, 4.75],
                             [5, 6],
-                            [0, 6],
-                            [-2, 3],
-                            [0, 0],
                         ]
                     ),
                 ],
             ),
             3,
             GeoDataFrame(
-                {"attribute": ["1"]},
-                index=[1],
+                {"attribute": ["1", "2"]},
+                index=[1, 1],
                 geometry=[
                     LineString(
                         [
                             [0, 0],
-                            [0.4396802056781041, -0.0548478681379274],
-                            [0.884397910840029, 0.0588325415544701],
                             [1.25, 0.25],
                             [1.75, 1],
                             [2.5, 2],
+                            [3.583974852831078, 2.7226499018873858],
+                            [3.7189260289566217, 2.8341817702000847],
+                            [3.8629336676214034, 2.9521410789170366],
                             [4, 3],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [4, 3],
+                            [4.121990780416937, 2.924822660881621],
+                            [4.237040254547688, 2.7795449341292544],
+                            [4.353553390593274, 2.646446609406726],
                             [5, 2],
                             [6, 4.25],
                             [5.5, 4.75],
                             [5, 6],
-                            [0, 6],
-                            [-2, 3],
-                            [-1.6343790296899408, 1.8411100158993157],
-                            [-0.8243136149354368, 0.6822200317986311],
-                            [0, 0],
                         ]
                     ),
                 ],
@@ -1782,8 +1814,8 @@ def test_get_segments_in_polygon_exteriors_but_not_in_lines(
     ],
     ids=[
         "empty",
-        "non_ring",
-        "ring",
+        "line_smoothes",
+        "line_smoothes_with_duplicate_index",
     ],
 )
 def test_smooth_linestring_connections(
@@ -1793,6 +1825,7 @@ def test_smooth_linestring_connections(
 ):
     result = smooth_linestring_connections(
         input_gdf,
+        smoothed_distance=0.5,
         spline_subdivisions=spline_subdivisions,
     )
     assert_geodataframe_equal(
@@ -1818,11 +1851,11 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         1,
                         1,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                     ],
@@ -1843,12 +1876,12 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         2,
                         2,
                         2,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                         0,
@@ -1872,13 +1905,13 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         3,
                         3,
                         3,
                         0,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                         0,
@@ -1902,11 +1935,11 @@ def test_smooth_linestring_connections(
             ),
             GeoDataFrame(
                 {
-                    "__start_connections": [
+                    "_start_connections": [
                         0,
                         0,
                     ],
-                    "__end_connections": [
+                    "_end_connections": [
                         0,
                         0,
                     ],
@@ -1934,3 +1967,119 @@ def test_count_connections(
         expected_gdf,
         check_like=True,
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "gdf",
+        "extra_data_to_add",
+        "expected_edges",
+    ),
+    [
+        (
+            GeoDataFrame(geometry=[]),
+            None,
+            [],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ]
+            ),
+            None,
+            [
+                (
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    {
+                        "idx": 0,
+                        "geometry": LineString([[0, 0], [1, 0]]),
+                        "length": 1.0,
+                    },
+                )
+            ],
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                    LineString([[1, 0], [1, 1]]),
+                ]
+            ),
+            None,
+            [
+                (
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    {
+                        "idx": 0,
+                        "geometry": LineString([[0, 0], [1, 0]]),
+                        "length": 1.0,
+                    },
+                ),
+                (
+                    (1.0, 0.0),
+                    (1.0, 1.0),
+                    {
+                        "idx": 1,
+                        "geometry": LineString([[1, 0], [1, 1]]),
+                        "length": 1.0,
+                    },
+                ),
+            ],
+        ),
+        (
+            GeoDataFrame(
+                {
+                    "dummy": ["test"],
+                },
+                geometry=[
+                    LineString([[0, 0], [1, 0]]),
+                ],
+            ),
+            "dummy",
+            [
+                (
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    {
+                        "idx": 0,
+                        "geometry": LineString([[0, 0], [1, 0]]),
+                        "dummy": "test",
+                        "length": 1.0,
+                    },
+                ),
+            ],
+        ),
+    ],
+    ids=[
+        "empty",
+        "single_line",
+        "multiple_lines",
+        "extra_data_to_add",
+    ],
+)
+def test_gdf_to_networkx_graph(
+    gdf: GeoDataFrame,
+    extra_data_to_add: list[str] | str | None,
+    expected_edges: list[
+        tuple[
+            tuple[float, float],
+            tuple[float, float],
+            dict[str, Any],
+        ]
+    ],
+):
+    graph = gdf_to_networkx_graph(gdf, extra_data_to_add=extra_data_to_add)
+
+    assert isinstance(graph, Graph)
+    assert graph.number_of_edges() == len(expected_edges)
+
+    for start, end, expected_data in expected_edges:
+        assert graph.has_edge(start, end)
+
+        edge_data = graph[start][end]
+
+        for column in expected_data:
+            assert edge_data[column] == expected_data[column]

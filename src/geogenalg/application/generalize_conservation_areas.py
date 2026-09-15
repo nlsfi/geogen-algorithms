@@ -62,7 +62,10 @@ class GeneralizeConservationAreas(BaseAlgorithm):
     group_by: frozenset[str] = frozenset()
     """Column(s) whose values define the groups to be dissolved."""
     reference_key: str = "water_areas"
-    """Reference data key for water area data."""
+    """Reference data key for water area data. This mandatory reference data is
+    used to identify whether a conservation area is inland or coastal. The data
+    is intended to already be generalized to the target scale, although this is
+    not strictly necessary."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
     reference_data_schema: ClassVar = {

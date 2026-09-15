@@ -41,5 +41,5 @@ def test_generalize_conservation_areas(
             "water_areas": gpkg.to_input("water_areas"),
         },
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["layer"],
+        dummy_data_mandatory_columns=frozenset(["layer"]),
     ).run()

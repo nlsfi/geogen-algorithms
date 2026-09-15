@@ -18,6 +18,9 @@ from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
 from geogenalg.application.generalize_conservation_areas import (
     GeneralizeConservationAreas,
 )
+from geogenalg.application.generalize_contours import GeneralizeContours
+from geogenalg.application.generalize_railroads import GeneralizeRailroads
+from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
 
 try:
     import typer
@@ -45,10 +48,6 @@ from geogenalg.application.generalize_polygons_to_points import (
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
-from geogenalg.application.generalize_shoreline import GeneralizeShoreline
-from geogenalg.application.generalize_tall_building_areas import (
-    GeneralizeTallBuildingAreas,
-)
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.application.generalize_watercourse_areas import (
     GeneralizeWaterCourseAreas,
@@ -380,16 +379,23 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
             args.pop("input_geopackages"),
         )
         output_geopackage = cast("GeoPackageArgument", args.pop("output_geopackage"))
-        unique_id_column = cast("str", args.pop("unique_id_column"))
+        unique_id_column = cast("str | None", args.pop("unique_id_column"))
 
         reference_options = cast("list[NamedGeoPackageURI]", args.pop("ref"))
 
         reference_data: dict[str, GeoDataFrame] = {}
         for reference in reference_options:
-            reference_gdf = read_file(
-                reference.uri.file,
-                layer=reference.uri.layer_name,
-            )
+            if unique_id_column is not None:
+                reference_gdf = read_gdf_from_file_and_set_index(
+                    reference.uri.file,
+                    unique_id_column,
+                    layer=reference.uri.layer_name,
+                )
+            else:
+                reference_gdf = read_file(
+                    reference.uri.file,
+                    layer=reference.uri.layer_name,
+                )
 
             if reference.name not in reference_data:
                 reference_data[reference.name] = reference_gdf
@@ -442,7 +448,6 @@ def build_app() -> None:
         "polygons_to_points": GeneralizePolygonsToPoints,
         "fences": GeneralizeFences,
         "landcover": GeneralizeLandcover,
-        "shoreline": GeneralizeShoreline,
         "points": GeneralizePoints,
         "water_areas": GeneralizeWaterAreas,
         "remove_overlap": RemoveOverlap,
@@ -457,6 +462,9 @@ def build_app() -> None:
         "tall_building_areas": GeneralizeTallBuildingAreas,
         "dissolve_polygons": DissolvePolygons,
         "conservation_areas": GeneralizeConservationAreas,
+        "railroads": GeneralizeRailroads,
+        "contours": GeneralizeContours,
+        "slope_lines": GeneralizeSlopeLines,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
@@ -523,6 +531,10 @@ def build_app() -> None:
             frozenset[str]: TransformedTypeInformation(
                 transformed_type=list[str],
                 custom_default=frozenset(),
+                extra_parse_help="Can be specified multiple times.",
+            ),
+            frozenset[int]: TransformedTypeInformation(
+                transformed_type=list[int],
                 extra_parse_help="Can be specified multiple times.",
             ),
         }

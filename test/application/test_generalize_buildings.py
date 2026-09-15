@@ -9,19 +9,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import IntegrationTest
+from conftest import ExpectedResultColumns, IntegrationTest
 from geopandas import GeoDataFrame
-from numpy import nan
 from pandas import isna
 from pandas.testing import assert_frame_equal
-from shapely import LineString, Point, Polygon
+from shapely import LineString, Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
-from geogenalg.application.generalize_buildings import GeneralizeBuildings
+from geogenalg.application.generalize_buildings import (
+    TEMPORARY_AREA_COLUMN,
+    GeneralizeBuildings,
+)
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.testing import (
     GeoPackagePath,
 )
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -44,12 +47,15 @@ def test_generalize_buildings_50k(testdata_path: Path) -> None:
             classes_for_point_buildings=frozenset([8]),
             classes_for_always_kept_buildings=frozenset(),
             building_class_column="kayttotarkoitus",
-            original_area_column="original_area",
             main_angle_column="main_angle",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["kayttotarkoitus"],
+        dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+            mandatory_extra_columns=frozenset(["main_angle"]),
+        ),
     ).run()
 
 
@@ -70,12 +76,15 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
             classes_for_point_buildings=frozenset([8]),
             classes_for_always_kept_buildings=frozenset(),
             building_class_column="kayttotarkoitus",
-            original_area_column="original_area",
             main_angle_column="main_angle",
         ),
         unique_id_column=UNIQUE_ID_COLUMN,
         check_missing_reference=False,
-        dummy_data_mandatory_columns=["kayttotarkoitus"],
+        dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="input",
+            mandatory_extra_columns=frozenset(["main_angle"]),
+        ),
     ).run()
 
 
@@ -92,30 +101,28 @@ def test_generalize_buildings_100k(testdata_path: Path) -> None:
         (
             GeoDataFrame(geometry=[Point(1, 1)], crs="EPSG:3067"),
             0.0,
-            nan,
+            0.0,
         ),
         (
             GeoDataFrame(
                 {
                     "geometry": [Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
-                    "original_area": [9999.0],
                     "main_angle": [8888.0],
                 },
                 crs="EPSG:3067",
             ),
-            9999.0,
+            4.0,
             8888.0,
         ),
         (
             GeoDataFrame(
                 {
                     "geometry": [Point(1, 1)],
-                    "original_area": [123.0],
                     "main_angle": [321.0],
                 },
                 crs="EPSG:3067",
             ),
-            123.0,
+            0.0,
             321.0,
         ),
     ],
@@ -131,10 +138,10 @@ def test_add_attributes_for_area_and_angle(
 ):
     result_gdf = GeneralizeBuildings()._add_attributes_for_area_and_angle(input_gdf)
 
-    assert "original_area" in result_gdf.columns
+    assert TEMPORARY_AREA_COLUMN in result_gdf.columns
     assert "main_angle" in result_gdf.columns
 
-    area = result_gdf.loc[0, "original_area"]
+    area = result_gdf.loc[0, TEMPORARY_AREA_COLUMN]
     angle = result_gdf.loc[0, "main_angle"]
 
     assert area == expected_area
@@ -166,7 +173,7 @@ def test_filter_buildings_by_area_and_class(
 ):
     input_gdf = GeoDataFrame(
         {
-            "original_area": [original_area],
+            TEMPORARY_AREA_COLUMN: [original_area],
             "class": [building_class],
             "geometry": [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
         },
@@ -230,7 +237,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
 ):
     gdf = GeoDataFrame(
         {
-            "original_area": original_areas,
+            TEMPORARY_AREA_COLUMN: original_areas,
             "class": classes,
             "geometry": geometries,
         },
@@ -259,19 +266,19 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
     [
         (
             GeoDataFrame(
-                {"id": [1], "class": ["A"]},
+                {"id": ["1"], "class": ["A"]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1], "class": ["A"], "old_ids": [(1,)]},
+                {"id": ["1"], "class": ["A"], "old_ids": [("1",)]},
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [2, 1], "class": ["A", "A"]},
+                {"id": ["2", "1"], "class": ["A", "A"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(1.0001, 0), (2, 0), (2, 1), (1.0001, 1)]),
@@ -280,13 +287,13 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1], "class": ["A"], "old_ids": [(2, 1)]},
+                {"id": ["1"], "class": ["A"], "old_ids": [("2", "1")]},
                 geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1)])],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "B"]},
+                {"id": ["1", "2"], "class": ["A", "B"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(1.0001, 0), (2, 0), (2, 1), (1.0001, 1)]),
@@ -295,7 +302,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "B"], "old_ids": [(1,), (2,)]},
+                {"id": ["1", "2"], "class": ["A", "B"], "old_ids": [("1",), ("2",)]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(1.0001, 0), (2, 0), (2, 1), (1.0001, 1)]),
@@ -310,7 +317,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
         ),
         (
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "A"]},
+                {"id": ["1", "2"], "class": ["A", "A"]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(5, 5), (6, 5), (6, 6), (5, 6)]),
@@ -319,7 +326,7 @@ def test_filter_buildings_by_area_and_class_with_varied_geometries(
             "class",
             "id",
             GeoDataFrame(
-                {"id": [1, 2], "class": ["A", "A"], "old_ids": [(1,), (2,)]},
+                {"id": ["1", "2"], "class": ["A", "A"], "old_ids": [("1",), ("2",)]},
                 geometry=[
                     Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                     Polygon([(5, 5), (6, 5), (6, 6), (5, 6)]),
@@ -378,7 +385,7 @@ def test_simplify_buildings_calls_cartagen_function_correctly(mocker: "MockerFix
     # directly, instead requiring to import the buildings module in
     # generalize_buildings.py. Ideally this test should be refactored so that
     # the direct import can be used.
-    spy_simplify_building = mocker.spy(buildings, "simplify_building")
+    spy_simplify_building = mocker.spy(buildings, "simplify_building_ruas")
     GeneralizeBuildings._simplify_buildings(input_gdf, 3)
 
     assert spy_simplify_building.call_count == 2
@@ -401,3 +408,121 @@ def test_simplify_buildings_raises_on_invalid_geometry():
         ),
     ):
         GeneralizeBuildings._simplify_buildings(invalid_gdf, 5.0)
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "classes_for_low_priority_buildings",
+        "classes_for_always_kept_buildings",
+        "expected_gdf",
+    ),
+    [
+        (
+            GeoDataFrame({"id": [], "class": []}, geometry=[]),
+            frozenset(),
+            frozenset(),
+            GeoDataFrame({"id": [], "class": []}, geometry=[]),
+        ),
+        (
+            GeoDataFrame(
+                {"id": [1, 2], "class": [1, 2], "attribute": [4, 5]},
+                geometry=[
+                    Point(0, 0),
+                    box(5, 5, 6, 6),
+                ],
+            ),
+            frozenset(),
+            frozenset([1]),
+            GeoDataFrame(
+                {"id": [1], "class": [1], "attribute": [4]},
+                geometry=[
+                    Point(0, 0),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"id": [1, 2, 3], "class": [1, 1, 2], "attribute": [5, 4, 5]},
+                geometry=[
+                    Point(0, 0),
+                    Point(0, 0.5),
+                    box(5, 5, 6, 6),
+                ],
+            ),
+            frozenset(),
+            frozenset([1]),
+            GeoDataFrame(
+                {"id": [2], "class": [1], "attribute": [4]},
+                geometry=[
+                    Point(0, 0.5),
+                ],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"id": [1, 2], "class": [5, 5], "attribute": [3.1, 4.1]},
+                geometry=[
+                    Point(0, 0),
+                    box(0.5, 0.5, 1.5, 1.5),
+                ],
+            ),
+            frozenset(),
+            frozenset(),
+            add_columns_to_gdf(
+                GeoDataFrame(
+                    geometry=[],
+                ),
+                {"id": "int64", "class": "int64", "attribute": "float64"},
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"id": [1, 2], "class": [4, 5], "attribute": [3.1, 4.1]},
+                geometry=[
+                    Point(0, 0),
+                    box(0.5, 0.5, 1.5, 1.5),
+                ],
+            ),
+            frozenset([4]),
+            frozenset(),
+            add_columns_to_gdf(
+                GeoDataFrame(
+                    geometry=[],
+                ),
+                {"id": "int64", "class": "int64", "attribute": "float64"},
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "always_keep",
+        "always_keep_reduces",
+        "other_buildings",
+        "low_priority",
+    ],
+)
+def test_generalize_point_buildings(
+    input_gdf: GeoDataFrame,
+    classes_for_low_priority_buildings: frozenset[int | str],
+    classes_for_always_kept_buildings: frozenset[int | str],
+    expected_gdf: GeoDataFrame,
+):
+    input_gdf = input_gdf.set_index("id")
+    expected_gdf = expected_gdf.set_index("id")
+
+    centroids = input_gdf.loc[input_gdf.geometry.geom_type == "Polygon"].copy()
+    points = input_gdf.loc[input_gdf.geometry.geom_type == "Point"].copy()
+
+    centroids.geometry = centroids.geometry.centroid
+
+    result_gdf = GeneralizeBuildings(
+        classes_for_low_priority_buildings=classes_for_low_priority_buildings,
+        classes_for_always_kept_buildings=classes_for_always_kept_buildings,
+        building_class_column="class",
+    )._generalize_point_buildings(
+        points,
+        centroids,
+    )
+
+    assert_frame_equal(result_gdf, expected_gdf, check_like=True)

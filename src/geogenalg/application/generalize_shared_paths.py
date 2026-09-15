@@ -43,7 +43,11 @@ class GeneralizeSharedPaths(BaseAlgorithm):
     """If the percentage of a lower priority line's total length within the
     detection distance of higher priority lines is below this it will be removed."""
     reference_key: str = "roads"
-    """Reference data, higher priority layer"""
+    """Reference data, higher priority layer. This mandatory reference data is
+    used to create a buffer, which is used to check what percentage of each
+    shared path's length in the input data is too close to the reference data.
+    If the minimum percentage is exceeded, the shared path will be removed. The
+    data is intended to already be generalized to the target scale."""
 
     valid_input_geometry_types: ClassVar = {"LineString"}
     reference_data_schema: ClassVar = {

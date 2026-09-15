@@ -3,17 +3,32 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+from collections.abc import Hashable
 from typing import Literal
 
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
-from shapely import MultiLineString, concave_hull, convex_hull
-from shapely.geometry import LineString, Polygon
+from shapely import (
+    BufferJoinStyle,
+    MultiLineString,
+    concave_hull,
+    convex_hull,
+    union_all,
+)
+from shapely.geometry import GeometryCollection, LineString, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import explode_line, segment_direction
+from geogenalg.core.geometry import (
+    angle_difference,
+    ensure_geoms,
+    explode_line,
+    line_mean_direction,
+    remove_holes,
+    segment_bearing,
+    segment_direction,
+)
 from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
@@ -131,7 +146,7 @@ def flag_parallel_lines(
     gdf = gdf.explode().reset_index(drop=True)
 
     # Normalize so that comparing the direction of segments later on is consistent
-    gdf[column_direction] = Series(gdf.geometry.normalize().apply(segment_direction))
+    gdf[column_direction] = Series(gdf.geometry.normalize().apply(segment_bearing))
     gdf[column_parallel_check] = gdf.geometry.buffer(
         parallel_distance, cap_style="flat"
     ).buffer(0.01, cap_style="square")
@@ -491,3 +506,217 @@ def calculate_edge_adjacency(
     result_gdf[result_column] = [feature_ratio(geom) for geom in result_gdf.geometry]
 
     return result_gdf
+
+
+def group_geometries_by_intersections_recursively(  # noqa: C901
+    input_gdf: GeoDataFrame,
+    geometry_group_column: str = "_geometry_group",
+) -> GeoDataFrame:
+    """Recursively determine which geometries intersect.
+
+    In practice this means that if we consider the polygons:
+
+    A - intersects with just B
+    B - intersects with A and C
+    C - intersects just with B
+
+    All of these will be in the same group.
+
+    The function works by determining which rows each row intersects via a
+    spatial join. The function then goes through each row and checks which
+    other rows it intersects, then recursively descending to check what other
+    rows those rows intersect (skipping already processed rows) and collecting
+    the indices of each row found.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame with geometries to group.
+        geometry_group_column: Name of column to save the group index of each feature.
+
+    Returns:
+    -------
+        GeoDataFrame with group column added.
+
+    """
+    gdf = input_gdf.copy()
+
+    # Initialize group column as each row being its own group, this way if row
+    # truly does not belong to a group it'll still have a valid value.
+    gdf[geometry_group_column] = range(gdf.shape[0])
+
+    geometry_group_sets = []
+    processed = set()
+
+    joined_group = input_gdf.sjoin(
+        input_gdf,
+        how="inner",
+        predicate="intersects",
+    )
+
+    if joined_group.empty:
+        return gdf
+
+    def group_by_geometry(
+        index: Hashable,
+        rows: GeoDataFrame,
+        geometry_group: set[Hashable],
+    ) -> None:
+        if index in processed:
+            return
+
+        intersects = rows["index_right"]
+
+        processed.add(index)
+
+        geometry_group.add(index)
+        geometry_group.update(intersects)
+
+        for intersecting_feature in intersects:
+            if intersecting_feature == index:
+                continue
+
+            if intersecting_feature in gdf.index:
+                group_by_geometry(
+                    intersecting_feature,
+                    joined_group.loc[joined_group.index == intersecting_feature],
+                    geometry_group,
+                )
+
+    unique_indices = joined_group.index.unique()
+
+    for index in unique_indices:
+        if index in processed:
+            continue
+
+        geometry_group: set[Hashable] = set()
+        group_by_geometry(
+            index,
+            joined_group.loc[joined_group.index == index],
+            geometry_group,
+        )
+        geometry_group_sets.append(geometry_group)
+
+    for i, geometry_group in enumerate(geometry_group_sets, start=1):
+        for idx in geometry_group:
+            if idx in gdf.index:
+                gdf.loc[idx, geometry_group_column] = i
+
+    return gdf
+
+
+def polygonize_parallel_lines(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    *,
+    maximum_angle_difference: float = 15,
+    postprocessing_join_style: BufferJoinStyle
+    | Literal["round", "mitre", "bevel"] = "round",
+    postprocessing_hole_threshold: float = 1000,
+) -> GeoDataFrame:
+    """Turn areas with parallel lines to polygons.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame containing LineStrings.
+        parallel_distance: Minimum distance for two lines to be considered to
+            be parallel.
+        maximum_angle_difference: Maximum allowed difference in line angle for
+            two lines to still be considered to be parallel.
+        postprocessing_join_style: Buffer join style for post-processing
+            the generated polygons.
+        postprocessing_hole_threshold: Area threshold for removing holes from
+            the generated polygons.
+
+    Returns:
+    -------
+        GeoDataFrame with polygons encompassing parallel lines.
+
+    """
+    if input_gdf.empty:
+        return copy_gdf_as_empty(input_gdf)
+
+    gdf = input_gdf.copy()
+    polys_for_lines = gdf.union_all()
+
+    segments = gdf.geometry.apply(explode_line).explode()
+
+    # This approach works by going through each line segment in the input
+    # dataset, searching for other line segments by a buffered polygon, and if
+    # they are close enough and within the allowed angle difference, a convex
+    # hull of the lines is created.
+    hulls = []
+    for geom in segments:
+        parallel_check = geom.buffer(
+            parallel_distance,
+            join_style="mitre",
+            cap_style="flat",
+        )
+
+        direction = segment_direction(geom)
+        intersection = polys_for_lines.intersection(parallel_check)
+
+        if isinstance(intersection, GeometryCollection):
+            intersection = union_all(
+                [
+                    geom
+                    for geom in intersection.geoms
+                    if geom.geom_type in {"LineString", "MultiLineString"}
+                ],
+            )
+
+        if not isinstance(intersection, MultiLineString | LineString):
+            raise NotImplementedError
+
+        intersection = MultiLineString(
+            [
+                line
+                for line in ensure_geoms(intersection)
+                if angle_difference(
+                    line_mean_direction(line),
+                    direction,
+                )
+                < maximum_angle_difference
+            ]
+        )
+
+        if intersection.is_empty:
+            continue
+
+        polygonized_lines = convex_hull(intersection)
+
+        if not isinstance(polygonized_lines, Polygon):
+            continue
+
+        hulls.append(polygonized_lines)
+
+    # Now that each segment is processed, combine all the results
+    polygonized_lines = union_all(hulls)
+
+    # Do some post-processing by removing some of the smaller holes
+    polygonized_lines = remove_holes(
+        polygonized_lines,
+        area_threshold=postprocessing_hole_threshold,
+    )
+
+    # Do some further post-processing and remove thin spikes
+    polygonized_lines = polygonized_lines.buffer(
+        parallel_distance / 10,
+        join_style=postprocessing_join_style,
+    )
+    polygonized_lines = polygonized_lines.buffer(
+        -(parallel_distance / 10),
+        join_style=postprocessing_join_style,
+    )
+    polygonized_lines = remove_holes(
+        polygonized_lines,
+        area_threshold=postprocessing_hole_threshold,
+    )
+
+    if polygonized_lines.is_empty:
+        return copy_gdf_as_empty(input_gdf)
+
+    return (
+        GeoDataFrame(geometry=[polygonized_lines], crs=input_gdf.crs)
+        .explode()
+        .reset_index(drop=True)
+    )

@@ -7,10 +7,12 @@ from collections import defaultdict
 from collections.abc import Callable
 from itertools import starmap
 from typing import Literal, cast
+from warnings import warn
 
 from geopandas import GeoDataFrame
+from networkx.classes.graph import Graph
 from pandas import Series
-from shapely import force_2d
+from shapely import force_2d, get_point
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
@@ -21,7 +23,6 @@ from geogenalg.core.geometry import (
     extend_line_to_nearest,
     get_topological_points,
     smooth_around_connection_point_of_two_lines,
-    smooth_around_ring_closing_vertex,
 )
 from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
@@ -422,8 +423,8 @@ def get_lines_along_reference_lines(
 def flag_connections(
     input_gdf: GeoDataFrame,
     *,
-    start_connected_column: str = "__start_connected",
-    end_connected_column: str = "__end_connected",
+    start_connected_column: str = "_start_connected",
+    end_connected_column: str = "_end_connected",
 ) -> GeoDataFrame:
     """Flag which end of an input line is connected to dataset.
 
@@ -455,11 +456,15 @@ def flag_connections(
     gdf[end_connected_column] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[-1]))
     )
-    gdf[start_connected_column] = gdf[start_connected_column].apply(
-        lambda geom: geom in topological_points,
+    gdf[start_connected_column] = Series(
+        gdf[start_connected_column].apply(
+            lambda geom: geom in topological_points,
+        )
     )
-    gdf[end_connected_column] = gdf[end_connected_column].apply(
-        lambda geom: geom in topological_points,
+    gdf[end_connected_column] = Series(
+        gdf[end_connected_column].apply(
+            lambda geom: geom in topological_points,
+        )
     )
 
     return gdf
@@ -469,8 +474,8 @@ def flag_connections_to_reference(
     input_gdf: GeoDataFrame,
     reference_gdf: GeoDataFrame,
     *,
-    start_connected_column: str = "__start_connected",
-    end_connected_column: str = "__end_connected",
+    start_connected_column: str = "_start_connected",
+    end_connected_column: str = "_end_connected",
 ) -> GeoDataFrame:
     """Flag which end of an input line is connected to reference dataset.
 
@@ -502,10 +507,12 @@ def flag_connections_to_reference(
     gdf = input_gdf.copy()
     gdf[start_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[0]))
     gdf[end_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[-1]))
-    gdf[start_connected_column] = gdf[start_connected_column].intersects(
-        reference_union
+    gdf[start_connected_column] = Series(
+        gdf[start_connected_column].intersects(reference_union)
     )
-    gdf[end_connected_column] = gdf[end_connected_column].intersects(reference_union)
+    gdf[end_connected_column] = Series(
+        gdf[end_connected_column].intersects(reference_union)
+    )
 
     return gdf
 
@@ -587,8 +594,8 @@ def flag_polygon_centerline_connections(
     reference_gdf: GeoDataFrame,
     polygon_geometry_column: str,
     *,
-    start_connected_column: str = "__start_connected",
-    end_connected_column: str = "__end_connected",
+    start_connected_column: str = "_start_connected",
+    end_connected_column: str = "_end_connected",
 ) -> GeoDataFrame:
     """Flag which "end" of a polygon is connected to reference data.
 
@@ -661,6 +668,7 @@ def process_lines_and_reconnect(
     reconnect_to: GeoDataFrame | BaseGeometry,
     *,
     length_tolerance: float = 0.0,
+    disallow_non_simple: bool = True,
 ) -> GeoDataFrame:
     """Do something to lines and if connections break reconnect them to reference data.
 
@@ -673,6 +681,8 @@ def process_lines_and_reconnect(
             was broken will be reconnected to.
         length_tolerance: If the would-be reconnected line segment is above
             this length it will not be reconnected.
+        disallow_non_simple: If True and the reconnected line would be non-simple
+            it will not be reconnected.
 
     Returns:
     -------
@@ -683,47 +693,47 @@ def process_lines_and_reconnect(
     boundaries = gdf.boundary.union_all()
     gdf = count_connections(
         gdf,
-        start_connections_column="__start_connections_before",
-        end_connections_column="__end_connections_before",
+        start_connections_column="_start_connections_before",
+        end_connections_column="_end_connections_before",
     )
 
     gdf = process_function(gdf)
 
     if gdf.empty:
         return gdf.drop(
-            ["__start_connections_before", "__end_connections_before"],
+            ["_start_connections_before", "_end_connections_before"],
             axis=1,
         )
 
     gdf = count_connections(
         gdf,
-        start_connections_column="__start_connections_after",
-        end_connections_column="__end_connections_after",
+        start_connections_column="_start_connections_after",
+        end_connections_column="_end_connections_after",
     )
 
-    gdf["__start_point"] = gdf.geometry.apply(
+    gdf["_start_point"] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[0]))
     )
-    gdf["__end_point"] = gdf.geometry.apply(
+    gdf["_end_point"] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[-1]))
     )
     data_union = data.union_all().buffer(0.1)
-    gdf["__start_was_cut"] = gdf["__start_point"].intersects(data_union) & gdf[
-        "__start_point"
+    gdf["_start_was_cut"] = gdf["_start_point"].intersects(data_union) & gdf[
+        "_start_point"
     ].disjoint(boundaries)
-    gdf["__end_was_cut"] = gdf["__end_point"].intersects(data_union) & gdf[
-        "__end_point"
+    gdf["_end_was_cut"] = gdf["_end_point"].intersects(data_union) & gdf[
+        "_end_point"
     ].disjoint(boundaries)
 
     # Effectively this checks which connections have been broken
     # in the process function.
-    gdf["__extend_start"] = (
-        gdf["__start_connections_before"] > gdf["__start_connections_after"]
-    ) | gdf["__start_was_cut"]
+    gdf["_extend_start"] = (
+        gdf["_start_connections_before"] > gdf["_start_connections_after"]
+    ) | gdf["_start_was_cut"]
 
-    gdf["__extend_end"] = (
-        gdf["__end_connections_before"] > gdf["__end_connections_after"]
-    ) | gdf["__end_was_cut"]
+    gdf["_extend_end"] = (
+        gdf["_end_connections_before"] > gdf["_end_connections_after"]
+    ) | gdf["_end_was_cut"]
 
     connect_to = (
         reconnect_to
@@ -753,7 +763,7 @@ def process_lines_and_reconnect(
         if extend_end:
             already_extended.add(end_point)
 
-        return extend_line_to_nearest(
+        extended = extend_line_to_nearest(
             line,
             connect_to,
             LineExtendFrom.from_bools(
@@ -763,38 +773,43 @@ def process_lines_and_reconnect(
             length_tolerance,
         )
 
+        if disallow_non_simple and not extended.is_simple:
+            return line
+
+        return extended
+
     if not gdf.empty:
         gdf.geometry = gdf[
             [
-                "__start_point",
-                "__end_point",
-                "__extend_start",
-                "__extend_end",
+                "_start_point",
+                "_end_point",
+                "_extend_start",
+                "_extend_end",
                 gdf.geometry.name,
             ]
         ].apply(
             lambda columns: extend_conditionally(
-                columns["__start_point"],
-                columns["__end_point"],
+                columns["_start_point"],
+                columns["_end_point"],
                 columns[gdf.geometry.name],
-                extend_start=columns["__extend_start"],
-                extend_end=columns["__extend_end"],
+                extend_start=columns["_extend_start"],
+                extend_end=columns["_extend_end"],
             ),
             axis=1,
         )
 
     return gdf.drop(
         [
-            "__start_connections_before",
-            "__end_connections_before",
-            "__start_connections_after",
-            "__end_connections_after",
-            "__extend_start",
-            "__extend_end",
-            "__start_was_cut",
-            "__end_was_cut",
-            "__start_point",
-            "__end_point",
+            "_start_connections_before",
+            "_end_connections_before",
+            "_start_connections_after",
+            "_end_connections_after",
+            "_extend_start",
+            "_extend_end",
+            "_start_was_cut",
+            "_end_was_cut",
+            "_start_point",
+            "_end_point",
         ],
         axis=1,
     )
@@ -829,10 +844,10 @@ def _get_merged_line_connections(
         end_connected_column="connected_to_network_end",
     )
 
-    merged["start_connected"] = (
+    merged["start_connected"] = Series(
         merged["connected_to_self_start"] | merged["connected_to_network_start"]
     )
-    merged["end_connected"] = (
+    merged["end_connected"] = Series(
         merged["connected_to_self_end"] | merged["connected_to_network_end"]
     )
 
@@ -841,7 +856,7 @@ def _get_merged_line_connections(
 
 def add_contiguous_lines_information(  # noqa: PLR0913
     input_gdf: GeoDataFrame,
-    reference_network: GeoDataFrame,
+    reference_network: GeoDataFrame | None = None,
     *,
     line_type_column: str | None = None,
     length_column: str = "contiguous_length",
@@ -870,6 +885,9 @@ def add_contiguous_lines_information(  # noqa: PLR0913
         Input GeoDataFrame with boolean Series added.
 
     """
+    if reference_network is None:
+        reference_network = GeoDataFrame(geometry=[], crs=input_gdf.crs)
+
     gdf = cast("GeoDataFrame", input_gdf.copy())
 
     def _get_length(line: LineString, merged: GeoDataFrame) -> float:
@@ -885,6 +903,8 @@ def add_contiguous_lines_information(  # noqa: PLR0913
         return merged_lines.iloc[[0]].geometry.length.to_numpy()[0]
 
     def _flag(filtered_gdf: GeoDataFrame, reference_data: GeoDataFrame) -> GeoDataFrame:
+        if filtered_gdf.empty:
+            return filtered_gdf
         merged = _get_merged_line_connections(gdf, reference_data)
         merged["is_deadend"] = merged["start_connected"] != merged["end_connected"]
         merged["is_disconnected"] = (~merged["start_connected"]) & (
@@ -926,7 +946,7 @@ def add_contiguous_lines_information(  # noqa: PLR0913
     return combine_gdfs(list(starmap(_flag, inputs)))
 
 
-def get_segments_in_polygon_exteriors_but_not_in_lines(
+def get_segments_in_polygon_boundary_but_not_in_lines(
     polygons: GeoDataFrame,
     lines: GeoDataFrame,
 ) -> GeoDataFrame:
@@ -949,7 +969,7 @@ def get_segments_in_polygon_exteriors_but_not_in_lines(
     if polygons.empty or lines.empty:
         return GeoDataFrame(geometry=[], crs=polygons.crs)
 
-    boundary = polygons.geometry.exterior.union_all()
+    boundary = polygons.geometry.boundary.union_all()
     segments = boundary.difference(lines.union_all())
 
     if segments.is_empty:
@@ -968,6 +988,7 @@ def get_segments_in_polygon_exteriors_but_not_in_lines(
 def smooth_linestring_connections(
     input_gdf: GeoDataFrame,
     *,
+    smoothed_distance: float = 30,
     spline_subdivisions: int = 10,
 ) -> GeoDataFrame:
     """Smooth segments around connection points of two lines.
@@ -975,6 +996,8 @@ def smooth_linestring_connections(
     Args:
     ----
         input_gdf: GeoDataFrame with lines.
+        smoothed_distance: How long a section around the connection point
+            is smoothed.
         spline_subdivisions: How many vertices are added to smoothed segments.
 
     Returns:
@@ -986,6 +1009,11 @@ def smooth_linestring_connections(
         return copy_gdf_as_empty(input_gdf)
 
     gdf = input_gdf.copy()
+    old_index = gdf.index
+
+    # Reset index in case there's duplicate indices so we for sure have an
+    # unique index for assigning smoothed geometry
+    gdf = gdf.reset_index(drop=True)
 
     points = get_topological_points(input_gdf.geometry, force_2d=False)
 
@@ -999,17 +1027,14 @@ def smooth_linestring_connections(
             intersecting_lines.geometry.to_numpy()[0],
             intersecting_lines.geometry.to_numpy()[1],
             point,
+            smoothed_distance,
             spline_subdivisions=spline_subdivisions,
         )
 
         gdf.geometry.at[intersecting_lines.index.to_numpy()[0]] = smoothed_line_1  # noqa: PD008
         gdf.geometry.at[intersecting_lines.index.to_numpy()[1]] = smoothed_line_2  # noqa: PD008
 
-    gdf.geometry = gdf.geometry.apply(
-        lambda geom: smooth_around_ring_closing_vertex(
-            geom, spline_subdivisions=spline_subdivisions
-        )
-    )
+    gdf.index = old_index
 
     return gdf
 
@@ -1017,8 +1042,8 @@ def smooth_linestring_connections(
 def count_connections(
     input_gdf: GeoDataFrame,
     *,
-    start_connections_column: str = "__start_connections",
-    end_connections_column: str = "__end_connections",
+    start_connections_column: str = "_start_connections",
+    end_connections_column: str = "_end_connections",
 ) -> GeoDataFrame:
     """Flag how many other lines each line is connected to.
 
@@ -1037,7 +1062,15 @@ def count_connections(
         GeoDataFrame with Series added, telling how many connections each line end is
         connected to.
 
+    Raises:
+    ------
+        ValueError: If there are duplicate indices in the input GeoDataFrame.
+
     """
+    if input_gdf.index.has_duplicates:
+        msg = "Input GeoDataFrame cannot have duplicate indices."
+        raise ValueError(msg)
+
     start = input_gdf.geometry.apply(lambda geom: Point(geom.coords[0])).to_frame()
     end = input_gdf.geometry.apply(lambda geom: Point(geom.coords[-1])).to_frame()
 
@@ -1057,3 +1090,69 @@ def count_connections(
     gdf[end_connections_column] = end_count[0] - 1
 
     return gdf
+
+
+def gdf_to_networkx_graph(
+    input_gdf: GeoDataFrame,
+    *,
+    extra_data_to_add: list[str] | str | None = None,
+) -> Graph:
+    """Convert GeoDataFrame to networkx Graph.
+
+    By default saves the following data to graph edges:
+        - "idx": index of feature in GeoDataFrame.
+        - "geometry": LineString geometry.
+        - "length": length of LineString geometry.
+
+    Args:
+    ----
+        input_gdf: GeoDataFrame to create Graph from.
+        extra_data_to_add: Column name(s) to add extra data from.
+
+    Returns:
+    -------
+        Constructed graph.
+
+    """
+    if extra_data_to_add is None:
+        extra_data_to_add = []
+
+    if isinstance(extra_data_to_add, str):
+        extra_data_to_add = [extra_data_to_add]
+
+    graph = Graph()
+
+    for idx, feature in input_gdf.iterrows():
+        geometry = feature[input_gdf.geometry.name]
+
+        if len(geometry.coords) < 2:  # noqa: PLR2004
+            warn(
+                "Skipping line with less than two vertices",
+                UserWarning,
+                stacklevel=2,
+            )
+            continue
+
+        start_point = get_point(force_2d(geometry), 0)
+        end_point = get_point(force_2d(geometry), -1)
+        start = (round(start_point.x, 3), round(start_point.y, 3))
+        end = (round(end_point.x, 3), round(end_point.y, 3))
+
+        data = {
+            "geometry": geometry,
+            "idx": idx,
+            "length": geometry.length,
+        }
+
+        for column in extra_data_to_add:
+            if column in data:
+                continue
+            data[column] = feature[column]
+
+        graph.add_edge(
+            start,
+            end,
+            **data,
+        )
+
+    return graph

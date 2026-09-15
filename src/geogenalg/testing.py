@@ -11,8 +11,10 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 from warnings import warn
 
 from geopandas import GeoDataFrame
+from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
-from pandas.testing import assert_series_equal
+from numpy import allclose
+from shapely import get_coordinates
 from shapely.geometry import (
     GeometryCollection,
     LinearRing,
@@ -93,6 +95,68 @@ class TestGeoDataFrames(NamedTuple):
     control: GeoDataFrame
 
 
+def assert_geoseries_coordinates_equal(
+    left: GeoSeries, right: GeoSeries, tolerance: float = 0.0
+) -> None:
+    """Assert that each matching geometry in two GeoSeries have the same coordinates.
+
+    The purpose of this function over geopandas.testing.assert_geoseries_equal is that
+    it also checks Z coordinates, not just X and Y.
+
+    Args:
+    ----
+        left: Other GeoSeries.
+        right: Other GeoSeries.
+        tolerance: Allowed difference between two coordinate values.
+
+    Raises:
+    ------
+        AssertionError: If coordinates don't match.
+
+    """
+
+    def _truncate_wkt(wkt: str) -> str:
+        if len(wkt) > 75:  # noqa: PLR2004
+            return wkt[0:75] + " ... "
+
+        return wkt
+
+    if len(left) != len(right):
+        msg = "GeoSeries are of different length."
+        raise AssertionError(msg)
+
+    length = len(left)
+    a = list(left)
+    b = list(right)
+
+    for i in range(length):
+        a_geom = a[i]
+        b_geom = b[i]
+
+        if type(a_geom) is not type(b_geom):
+            msg = (
+                "Geometries are not of equivalent type: "
+                + f"{type(a_geom).__name__} != {type(b_geom).__name__}"
+            )
+            raise AssertionError(msg)
+
+        a_coords = get_coordinates(a_geom, include_z=True)
+        b_coords = get_coordinates(b_geom, include_z=True)
+
+        if not allclose(
+            a_coords,
+            b_coords,
+            atol=tolerance,
+            rtol=0,
+            equal_nan=True,
+        ):
+            msg = (
+                "Geometries are not equivalent: "
+                + f"{_truncate_wkt(a_geom.wkt)} != {_truncate_wkt(b_geom.wkt)}"
+            )
+            raise AssertionError(msg)
+
+
 def assert_gdf_equal_save_diff(  # noqa: C901
     result: GeoDataFrame,
     control: GeoDataFrame,
@@ -130,9 +194,15 @@ def assert_gdf_equal_save_diff(  # noqa: C901
     try:
         assert_geodataframe_equal(result, control, **assert_function_arguments)
 
-        # Test GeoSeries separately, because assert_geodataframe_equal
+        # Test GeoSeries Zs separately, because assert_geodataframe_equal
         # does not check that Z values are equal.
-        assert_series_equal(result.geometry, control.geometry)
+        assert_geoseries_coordinates_equal(
+            result.geometry,
+            control.geometry,
+            tolerance=5e-07
+            if assert_function_arguments.get("check_less_precise")
+            else 0,
+        )
     except:
         if not directory.exists():
             directory.mkdir(parents=True)
