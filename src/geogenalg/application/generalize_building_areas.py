@@ -233,10 +233,10 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     ) -> GeoDataFrame:
         copy = data.copy()
 
-        tall_buildings = GeoDataFrame(geometry=[], crs=data.crs)
+        tall_gdf = GeoDataFrame(geometry=[], crs=data.crs)
 
         if self.height_class_column and self.tall_building_classes:
-            tall_buildings = copy.loc[
+            tall_gdf= copy.loc[
                 copy[self.height_class_column].isin(self.tall_building_classes)
             ].copy()
 
@@ -245,13 +245,13 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             reference_data,
         )
 
-        if not tall_buildings.empty:
+        if not tall_gdf.empty:
             tall_gdf = self._generalize_building_areas(
-                tall_buildings,
+                tall_gdf,
                 reference_data,
             )
 
-        if not tall_buildings.empty:
+        if not tall_gdf.empty:
             gdf = gdf.overlay(
                 tall_gdf,
                 how="difference",
@@ -259,7 +259,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
         gdf[self.height_area_class_column] = 1
 
-        if not tall_buildings.empty:
+        if not tall_gdf.empty:
             tall_gdf[self.height_area_class_column] = 2
 
         result = combine_gdfs(
