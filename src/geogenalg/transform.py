@@ -17,6 +17,8 @@ from geogenalg.core.geometry import (
 )
 from geogenalg.utility.dataframe_processing import add_columns_to_gdf, copy_gdf_as_empty
 
+DIFFERENCE_CLEAN_UP_LINE_LENGTH = 0.01
+
 
 def thin_polygon_sections_to_lines(  # noqa: PLR0913
     input_gdf: GeoDataFrame,
@@ -149,6 +151,10 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         crs=input_gdf.crs,
     )
 
+    # Remove tiny lines which may be introduced by the difference.
+    new_line_features = new_line_features.loc[
+        new_line_features.length >= DIFFERENCE_CLEAN_UP_LINE_LENGTH
+    ]
     new_line_features = inherit_attributes_from_largest(
         input_gdf,
         new_line_features,
