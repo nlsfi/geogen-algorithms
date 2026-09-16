@@ -64,8 +64,11 @@ from geogenalg.core.geometry import (
     line_mean_direction,
     lines_to_segments,
     make_valid_ensure_polygon,
+    make_valid_extract_linestrings,
+    make_valid_extract_polygons,
     mean_z,
     move_to_point,
+    node_non_simple,
     orient_line_toward_point,
     oriented_envelope_dimensions,
     perforate_polygon_with_gdf_exteriors,
@@ -3542,3 +3545,142 @@ def test_make_valid_ensure_polygon(
     assert make_valid_ensure_polygon(input_geometry).equals_exact(
         expected_geometry, tolerance=0.3
     )
+
+
+@pytest.mark.parametrize(
+    ("input_geometry", "expected"),
+    [
+        (
+            box(0, 0, 10, 10),
+            box(0, 0, 10, 10),
+        ),
+        (
+            Polygon(  # bowtie
+                [
+                    (0, 0),
+                    (4, 2),
+                    (0, 2),
+                    (2, 0),
+                    (0, 0),
+                ]
+            ),
+            MultiPolygon(
+                [
+                    Polygon([(2, 0), (0, 0), (1.333, 0.666), (2, 0)]),
+                    Polygon([(4, 2), (1.333, 0.666), (0, 2), (4, 2)]),
+                ]
+            ),
+        ),
+        (
+            Polygon(  # line collapse
+                [
+                    (0, 0),
+                    (1, 0),
+                    (2, 0),
+                    (1, 0),
+                    (0, 0),
+                ]
+            ),
+            Polygon(),
+        ),
+        (
+            Polygon(  # spike
+                [
+                    (0, 0),
+                    (4, 0),
+                    (4, 4),
+                    (2, 4),
+                    (2, 6),
+                    (2, 4),
+                    (0, 4),
+                    (0, 0),
+                ]
+            ),
+            Polygon(
+                [
+                    [4, 4],
+                    [4, 0],
+                    [0, 0],
+                    [0, 4],
+                    [2, 4],
+                    [4, 4],
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "unchanged",
+        "bowtie",
+        "line_collapse",
+        "spike",
+    ],
+)
+def test_make_valid_extract_polygons(
+    input_geometry: Polygon,
+    expected: Polygon | MultiPolygon,
+):
+    assert make_valid_extract_polygons(input_geometry).equals_exact(
+        expected, tolerance=1e-3
+    )
+
+
+@pytest.mark.parametrize(
+    ("input_geom", "expected"),
+    [
+        (
+            LineString([(0, 0), (1, 1), (2, 0)]),
+            LineString([(0, 0), (1, 1), (2, 0)]),
+        ),
+        (
+            LineString(
+                [
+                    (0, 0),
+                    (1, 0),
+                    (1, 1),
+                    (0.5, 1),
+                    (0.5, -1),
+                ]
+            ),
+            MultiLineString(
+                [
+                    LineString([(0, 0), (0.5, 0)]),
+                    LineString([(0.5, 0), (1, 0), (1, 1), (0.5, 1), (0.5, 0)]),
+                    LineString([(0.5, 0), (0.5, -1)]),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "unchanged",
+        "self_crossing",
+    ],
+)
+def test_node_non_simple(
+    input_geom: LineString,
+    expected: LineString | MultiLineString,
+):
+    assert node_non_simple(input_geom) == expected
+
+
+@pytest.mark.parametrize(
+    ("input_geom", "expected"),
+    [
+        (
+            LineString([(0, 0), (1, 1), (2, 0)]),
+            LineString([(0, 0), (1, 1), (2, 0)]),
+        ),
+        (
+            LineString([(1, 1), (1, 1)]),
+            LineString(),
+        ),
+    ],
+    ids=[
+        "unchanged",
+        "point_collapse",
+    ],
+)
+def test_make_valid_extract_linestrings(
+    input_geom: LineString,
+    expected: LineString | MultiLineString,
+):
+    assert make_valid_extract_linestrings(input_geom) == expected

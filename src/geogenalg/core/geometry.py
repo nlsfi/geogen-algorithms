@@ -46,6 +46,7 @@ from shapely import (
     get_point,
     length,
     make_valid,
+    node,
     polygonize,
     shortest_line,
 )
@@ -2138,3 +2139,108 @@ def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
         return polygons[0]
 
     return largest_part(MultiPolygon(polygons))
+
+
+def make_valid_extract_polygons(
+    geom: Polygon,
+) -> Polygon | MultiPolygon:
+    """Make a polygon valid and extract only its polygon components.
+
+    If the repaired geometry contains non-polygonal geometries, discard them.
+
+    If polygon can't be repaired into valid (Multi)Polygon, return empty Polygon.
+
+    Args:
+    ----
+        geom: Polygon to repair.
+
+    Returns:
+    -------
+        Repaired polygon.
+
+    """
+    if geom.is_valid:
+        return geom
+
+    repaired = make_valid(geom)
+
+    if isinstance(repaired, (Polygon, MultiPolygon)):
+        return repaired
+
+    if isinstance(repaired, GeometryCollection):
+        polys = []
+        for g in repaired.geoms:
+            if isinstance(g, Polygon):
+                polys.append(g)
+            elif isinstance(g, MultiPolygon):
+                polys.extend(g.geoms)
+        if not polys:
+            return Polygon()
+        return MultiPolygon(polys) if len(polys) > 1 else polys[0]
+
+    return Polygon()
+
+
+def make_valid_extract_linestrings(
+    geom: LineString,
+) -> LineString | MultiLineString:
+    """Make a linestring valid and extract only its linear components.
+
+    If the repaired geometry contains non-linear elements they are discarded.
+
+    If no linear components remain after repair, an empty linestring is
+    returned.
+
+    Args:
+    ----
+        geom: LineString to repair.
+
+    Returns:
+    -------
+        Repaired geometry.
+
+    """
+    if geom.is_valid:
+        return geom
+
+    repaired = make_valid(geom)
+
+    if isinstance(repaired, (LineString, MultiLineString)):
+        return repaired
+
+    if isinstance(repaired, GeometryCollection):
+        lines = []
+        for g in repaired.geoms:
+            if isinstance(g, LineString):
+                lines.append(g)
+            elif isinstance(g, MultiLineString):
+                lines.extend(g.geoms)
+        if not lines:
+            return LineString()
+        return MultiLineString(lines) if len(lines) > 1 else lines[0]
+
+    return LineString()
+
+
+def node_non_simple(
+    geom: LineString | MultiLineString,
+) -> LineString | MultiLineString:
+    """Node non-simple line.
+
+    Simple wrapper around shapely's node function, returns geometry
+    unchanged if input is already simple.
+
+    Args:
+    ----
+        geom: LineString to process.
+
+    Returns:
+    -------
+        Unchanged linestring if simple, or a multilinestring of noded simple
+        components.
+
+    """
+    if geom.is_simple:
+        return geom
+
+    return node(geom)
