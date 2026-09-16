@@ -7,7 +7,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, TypeVar, final
+from typing import ClassVar, Literal, TypeVar, final
 
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
@@ -18,6 +18,14 @@ from geogenalg.core.exceptions import (
     InvalidCRSError,
     MissingReferenceError,
 )
+from geogenalg.core.geometry import (
+    largest_part,
+    make_valid_ensure_polygon,
+    make_valid_extract_linestrings,
+    make_valid_extract_polygons,
+    node_non_simple,
+)
+from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.hash import reset_with_random_hash_index
 from geogenalg.utility.validation import (
     ShapelyGeometryTypeString,
@@ -38,6 +46,8 @@ class ReferenceDataInformation:
 class BaseAlgorithm(ABC, BaseModel):
     """Abstract base class for all algorithms."""
 
+    repair_result_geometries: Literal["no", "keep_largest", "explode"] = "no"
+    """Describes how invalid result geometries area handled."""
     valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
     """Set of accepted geometry types for input data. If there is a mismatch,
     GeometryTypeError will be raised."""
@@ -90,6 +100,9 @@ class BaseAlgorithm(ABC, BaseModel):
         # Ensure the output has the same index name as the input data
         if output.index.name != data.index.name:
             output.index.name = data.index.name
+
+        if not output.geometry.is_valid.all():
+            output = self._repair_result_geometries(output)
 
         if getattr(self, _SUPPORTS_IDENTITY_ATTR, False):
             return output
@@ -269,6 +282,52 @@ class BaseAlgorithm(ABC, BaseModel):
                     f"{types}."
                 )
                 raise GeometryTypeError(msg)
+
+    @final
+    def _repair_result_geometries(self, data: GeoDataFrame) -> GeoDataFrame:
+        if self.repair_result_geometries == "no":
+            return data
+
+        is_invalid = ~data.geometry.is_valid
+        is_non_simple = ~data.geometry.is_simple
+
+        is_line = data.geometry.geom_type == "LineString"
+        is_polygon = data.geometry.geom_type == "Polygon"
+
+        if self.repair_result_geometries == "keep_largest":
+            target_lines = (is_invalid | is_non_simple) & is_line
+            if target_lines.any():
+                data.loc[target_lines, data.geometry.name] = (
+                    data.loc[target_lines, data.geometry.name]
+                    .apply(make_valid_extract_linestrings)
+                    .apply(node_non_simple)
+                    .apply(largest_part)
+                )
+            target_polygons = is_invalid & is_polygon
+            if target_polygons.any():
+                data.loc[target_polygons, data.geometry.name] = data.loc[
+                    target_polygons, data.geometry.name
+                ].apply(make_valid_ensure_polygon)
+
+            return data.loc[~data.geometry.is_empty]
+
+        # explode
+        target_lines = (is_invalid | is_non_simple) & is_line
+        if target_lines.any():
+            data.loc[target_lines, data.geometry.name] = (
+                data.loc[target_lines, data.geometry.name]
+                .apply(make_valid_extract_linestrings)
+                .apply(node_non_simple)
+            )
+
+        target_polygons = is_invalid & is_polygon
+        if target_polygons.any():
+            data.loc[target_polygons, data.geometry.name] = data.loc[
+                target_polygons, data.geometry.name
+            ].apply(make_valid_extract_polygons)
+
+        data = data.loc[~data.geometry.is_empty]
+        return explode_and_hash_id(data, "basealgorithmgeometryrepair")
 
 
 _Alg = TypeVar("_Alg", bound=type[BaseAlgorithm])

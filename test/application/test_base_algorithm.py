@@ -4,10 +4,11 @@
 #
 #  SPDX-License-Identifier: MIT
 import re
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import pytest
 from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
 from pandas import Index
 from pandas.testing import assert_index_equal
 from pydantic import Field, ValidationError
@@ -520,3 +521,111 @@ def test_algorithm_raises_on_missing_key():
             GeoDataFrame(geometry=[], crs="EPSG:4326"),
             {"other_ref": GeoDataFrame(geometry=[], crs="EPSG:4326")},
         )
+
+
+@pytest.mark.parametrize(
+    (
+        "mode",
+        "input_gdf",
+        "expected_gdf",
+    ),
+    [
+        (
+            "no",
+            GeoDataFrame(
+                geometry=[
+                    Polygon([(0, 0), (4, 2), (0, 2), (2, 0), (0, 0)]),
+                    LineString([(0, 0), (2, 2), (0, 2), (2, 0)]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Polygon([(0, 0), (4, 2), (0, 2), (2, 0), (0, 0)]),
+                    LineString([(0, 0), (2, 2), (0, 2), (2, 0)]),
+                ]
+            ),
+        ),
+        (
+            "keep_largest",
+            GeoDataFrame(
+                geometry=[
+                    Polygon([(0, 0), (4, 2), (0, 2), (2, 0), (0, 0)]),
+                    LineString([(0, 0), (1, 0), (1, 1), (0.5, 1), (0.5, -1)]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Polygon([(4, 2), (1.3333333333, 0.6666666666), (0, 2), (4, 2)]),
+                    LineString([(0.5, 0), (1, 0), (1, 1), (0.5, 1), (0.5, 0)]),
+                ]
+            ),
+        ),
+        (
+            "explode",
+            GeoDataFrame(
+                geometry=[
+                    Polygon([(0, 0), (4, 2), (0, 2), (2, 0), (0, 0)]),
+                    LineString([(0, 0), (2, 2), (0, 2), (2, 0)]),
+                ]
+            ),
+            GeoDataFrame(
+                geometry=[
+                    Polygon([(2, 0), (0, 0), (1.3333333333, 0.6666666666), (2, 0)]),
+                    Polygon([(4, 2), (1.3333333333, 0.6666666666), (0, 2), (4, 2)]),
+                    LineString([(0, 0), (1, 1)]),
+                    LineString([(1, 1), (2, 2), (0, 2), (1, 1)]),
+                    LineString([(1, 1), (2, 0)]),
+                ],
+                index=[
+                    "ec9c3e680737d94401aed12fd60205cf9ed3c48f71a0fe9673efb1299c508926",
+                    "082d4a6d49ec7271a86d784507acfd0ebe60503019eb8101b0c062ee1acb9f49",
+                    "34406e3e2314db2f5e4f5296f1b1ddd4fc98693918c327e99a9139b6b97f9a09",
+                    "979fe9ee9765c966b47bae87ff510d294f2e6959c77cebb7bc0caeb3e4a39169",
+                    "9b0225e4812210250c2fafb2f29ed57cba4e110893200111f59e3dead047c801",
+                ],
+            ),
+        ),
+        (
+            "keep_largest",
+            GeoDataFrame(geometry=[Point(0, 0)]),
+            GeoDataFrame(geometry=[Point(0, 0)]),
+        ),
+        (
+            "explode",
+            GeoDataFrame(geometry=[Point(0, 0)]),
+            GeoDataFrame(geometry=[Point(0, 0)]),
+        ),
+    ],
+    ids=[
+        "no",
+        "keep_largest",
+        "explode",
+        "point_keep_largest",
+        "point_explode",
+    ],
+)
+def test_repair_result_geometries(
+    mode: Literal["no", "keep_largest", "explode"],
+    input_gdf: GeoDataFrame,
+    expected_gdf: GeoDataFrame,
+):
+    @supports_identity
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point", "LineString", "Polygon"}
+        requires_projected_crs = False
+
+        def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
+            return data
+
+    alg = MockAlg(
+        repair_result_geometries=mode,
+    )
+
+    result = alg._repair_result_geometries(
+        input_gdf.set_index(input_gdf.index.astype("string"))
+    )
+    assert_geodataframe_equal(
+        result,
+        expected_gdf.set_index(expected_gdf.index.astype("string")),
+        check_less_precise=True,
+    )
