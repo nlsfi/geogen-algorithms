@@ -98,6 +98,9 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     smoothing_passes: int = Field(3, ge=0)
     """How many smoothing passes will be performed. Each smoothing passes
     (nearly) doubles the vertex count."""
+    smoothing_maximum_cut_distance: float | None = None
+    """If the distance between an original vertex and its potential smoothed
+    vertex exceeds this distance the vertex will remain unchanged."""
     preserve_shoreline_sections_column: str | None = None
     """Name of column used to select shoreline features whose vertices are
     preserved as is. This affects results only if shoreline features are
@@ -281,6 +284,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             gdf.geometry,
             iterations=self.smoothing_passes,
             extra_skip_coords=skip_coords,
+            distance_threshold=self.smoothing_maximum_cut_distance,
         )
 
         if not shoreline_gdf.empty and not gdf.empty:

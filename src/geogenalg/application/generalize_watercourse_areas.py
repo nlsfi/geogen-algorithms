@@ -13,7 +13,10 @@ from shapely.geometry import MultiPoint
 
 from geogenalg.application import supports_identity
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
-from geogenalg.core.geometry import assign_nearest_z, chaikin_smooth_keep_topology
+from geogenalg.core.geometry import (
+    assign_nearest_z,
+    chaikin_smooth_keep_topology,
+)
 from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.split import explode_and_hash_id
 from geogenalg.transform import thin_polygon_sections_to_lines
@@ -81,6 +84,7 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
             generalized_areas.geometry,
             iterations=self.smoothing_passes,
             extra_skip_coords=skip_coords,
+            distance_threshold=self.smoothing_maximum_cut_distance,
         )
 
         generalized_lines = hash_index_from_old_ids(
