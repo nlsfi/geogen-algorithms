@@ -47,7 +47,7 @@ class BaseAlgorithm(ABC, BaseModel):
     """Abstract base class for all algorithms."""
 
     repair_result_geometries: Literal["no", "keep_largest", "explode"] = "no"
-    """Describes how invalid result geometries area handled."""
+    """Specify if invalid and non-simple geometries should be repaired."""
     valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
     """Set of accepted geometry types for input data. If there is a mismatch,
     GeometryTypeError will be raised."""
