@@ -65,6 +65,12 @@ GEOPACKAGE_URI_HELP = (
     '"file.gpkg|layer"'
 )
 
+BASE_ALGORITHM_CLASS_VARS = {
+    "valid_input_geometry_types",
+    "reference_data_schema",
+    "requires_projected_crs",
+}
+
 
 @dataclass(frozen=True)
 class GeoPackageURI:
@@ -286,9 +292,6 @@ def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str
         if not issubclass(base_class, BaseAlgorithm):
             continue
 
-        if base_class == BaseAlgorithm:
-            continue
-
         if base_class == cls:
             continue
 
@@ -296,7 +299,7 @@ def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str
 
     output |= get_class_attribute_docstrings(cls)
 
-    return output
+    return {k: v for k, v in output.items() if k not in BASE_ALGORITHM_CLASS_VARS}
 
 
 def basemetadata_to_string(data: BaseMetadata) -> str:
