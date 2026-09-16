@@ -47,8 +47,8 @@ from geogenalg.core.geometry import (
     assign_nearest_z,
     assign_z_from_attribute,
     centerline_length,
+    chaikin_smooth_conditional,
     chaikin_smooth_keep_topology,
-    chaikin_smooth_skip_coords,
     concatenate_lines,
     elongation,
     ensure_geoms,
@@ -152,7 +152,13 @@ def test_chaikin_smooth_keep_topology(
 
 
 @pytest.mark.parametrize(
-    ("input_geometry", "skip_coords", "iterations", "expected_geometry"),
+    (
+        "input_geometry",
+        "skip_coords",
+        "iterations",
+        "distance_threshold",
+        "expected_geometry",
+    ),
     [
         (
             LineString(
@@ -164,6 +170,7 @@ def test_chaikin_smooth_keep_topology(
             ),
             set(),
             1,
+            None,
             LineString(
                 [
                     [0, 0],
@@ -185,6 +192,7 @@ def test_chaikin_smooth_keep_topology(
             ),
             {(1.0, 1.0)},
             1,
+            None,
             LineString(
                 [
                     [0, 0],
@@ -205,6 +213,7 @@ def test_chaikin_smooth_keep_topology(
             ),
             {(1.0, 1.0)},
             2,
+            None,
             LineString(
                 [
                     [0, 0],
@@ -223,6 +232,7 @@ def test_chaikin_smooth_keep_topology(
             box(0, 0, 1, 1),
             set(),
             1,
+            None,
             Polygon(
                 [
                     [1, 0.25],
@@ -239,8 +249,9 @@ def test_chaikin_smooth_keep_topology(
         ),
         (
             box(0, 0, 1, 1),
-            {(0.0, 0.0), (0.0, 0.0)},
+            {(0.0, 0.0)},
             1,
+            None,
             Polygon(
                 [
                     [1, 0.25],
@@ -258,6 +269,7 @@ def test_chaikin_smooth_keep_topology(
             box(0, 0, 1, 1),
             {(0.0, 0.0), (1.0, 1.0)},
             1,
+            None,
             Polygon(
                 [
                     [1, 0.25],
@@ -270,27 +282,95 @@ def test_chaikin_smooth_keep_topology(
                 ]
             ),
         ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [0, 1],
+                    [1, 1],
+                    [1, 10],
+                    [2, 10],
+                ]
+            ),
+            set(),
+            1,
+            2.0,
+            LineString(
+                [
+                    [0.0, 0.0],
+                    [0.0, 0.25],
+                    [0.0, 0.75],
+                    [0.25, 1.0],
+                    [1.0, 1.0],
+                    [1.0, 10.0],
+                    [1.75, 10.0],
+                    [2.0, 10.0],
+                ]
+            ),
+        ),
+        (
+            LineString(
+                [
+                    [0, 0],
+                    [1, 1],
+                    [2, 2],
+                    [10, 2],
+                ]
+            ),
+            {(1.0, 1.0)},
+            1,
+            1.5,
+            LineString(
+                [
+                    [0.0, 0.0],
+                    [0.25, 0.25],
+                    [1.0, 1.0],
+                    [2.0, 2.0],
+                    [10.0, 2.0],
+                ]
+            ),
+        ),
+        (
+            box(0, 0, 10, 1),
+            set(),
+            5,
+            2.0,
+            Polygon(
+                [
+                    [10.0, 0.0],
+                    [10.0, 1.0],
+                    [0.0, 1.0],
+                    [0.0, 0.0],
+                    [10.0, 0.0],
+                ]
+            ),
+        ),
     ],
     ids=[
-        "three point linestring, no skip",
-        "three point linestring, skip one",
-        "three point linestring, skip one, two iterations",
-        "square polygon, no skip",
-        "square polygon, skip one",
-        "square polygon, skip two",
+        "three_point_linestring_no_skip",
+        "three_point_linestring_skip_one",
+        "three_point_linestring_skip_one_two_iterations",
+        "square_polygon_no_skip",
+        "square_polygon_skip_one",
+        "square_polygon_skip_two",
+        "linestring_skip_long_segments_over_distance_threshold",
+        "linestring_combine_skip_coords_and_distance_threshold",
+        "polygon_rectangle_skip_long_edges_over_distance_threshold",
     ],
 )
-def test_chaikin_smooth_skip_coords(
+def test_chaikin_smooth_conditional(
     input_geometry: LineString | Polygon,
-    skip_coords: list[Point] | MultiPoint,
+    skip_coords: set[tuple[float, float]],
     iterations: int,
+    distance_threshold: float | None,
     expected_geometry: LineString | Polygon,
 ):
     assert (
-        chaikin_smooth_skip_coords(
+        chaikin_smooth_conditional(
             input_geometry,
-            skip_coords,
+            skip_coords=skip_coords,
             iterations=iterations,
+            distance_threshold=distance_threshold,
         )
         == expected_geometry
     )

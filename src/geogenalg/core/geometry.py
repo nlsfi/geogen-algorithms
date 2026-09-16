@@ -5,15 +5,30 @@
 #  SPDX-License-Identifier: MIT
 from __future__ import annotations
 
+from collections.abc import Iterable
 from copy import deepcopy
 from enum import Enum
 from itertools import chain, pairwise
 from math import atan2, degrees, isclose
 from statistics import mean
-from typing import TYPE_CHECKING, Literal, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import array, column_stack, ndarray, pi, sqrt, vstack  # noqa: SC200
+from numpy import (  # noqa: SC200
+    array,
+    asarray,
+    column_stack,
+    empty,
+    float64,
+    fromiter,
+    linalg,
+    ndarray,
+    pi,
+    sqrt,
+    vstack,
+    where,
+    zeros,
+)
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -47,9 +62,12 @@ from geogenalg.core.exceptions import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
 
     from shapely.coords import CoordinateSequence
+
+PointLike: TypeAlias = Point | tuple[float, ...]  # noqa: UP040
+SkipCoordsInput: TypeAlias = MultiPoint | Iterable[PointLike] | None  # noqa: UP040
 
 
 class LineExtendFrom(Enum):
@@ -125,26 +143,132 @@ def _modify_geometry_and_handle_multigeometries(
     )
 
 
-def chaikin_smooth_skip_coords(
-    geom: LineString | Polygon,
-    skip_coords: set[tuple[float, float]],
+def _normalize_skip_coords(
+    skip_coords: SkipCoordsInput,
+) -> set[tuple[float, ...]]:
+    if not skip_coords:
+        return set()
+    if isinstance(skip_coords, MultiPoint):
+        return {tuple(pt.coords[0]) for pt in skip_coords.geoms}
+
+    normalized = set()
+    for item in skip_coords:
+        if isinstance(item, Point):
+            normalized.add(tuple(item.coords[0]))
+        else:
+            normalized.add(tuple(item))
+    return normalized
+
+
+def _chaikin_conditional_pass(
+    coords: ndarray,
+    skip_set: set[tuple[float, ...]],
+    distance_threshold: float | None,
     *,
+    is_linestring: bool,
+) -> ndarray:
+    """Perform a single iteration of the Chaikin corner cutting algorithm.
+
+    Potential conditions can be specified i.e. leaving specific vertices or
+    segments which are too long untouched.
+
+    Returns
+    -------
+        Smoothed coordinates.
+
+    """
+    if len(coords) < 2:  # noqa: PLR2004
+        return coords
+
+    segment_start_points = coords[:-1]
+    segment_end_points = coords[1:]
+
+    # Create interpolated cut coordinates
+    q = 0.75 * segment_start_points + 0.25 * segment_end_points
+    r = 0.25 * segment_start_points + 0.75 * segment_end_points
+
+    n = len(segment_start_points)
+
+    # First mark all vertices as a no-skip
+    skip_vertex_mask = zeros(len(coords), dtype=bool)
+
+    if skip_set:
+        skip_mask = fromiter(
+            (tuple(pt) in skip_set for pt in coords),
+            dtype=bool,
+            count=len(coords),
+        )
+        skip_vertex_mask |= skip_mask
+
+    if distance_threshold is not None:
+        # Measure distance from unsmoothed vertex to the cut points
+        cut_distances = 0.25 * linalg.norm(
+            segment_end_points - segment_start_points,
+            axis=1,
+        )
+        exceeds_threshold = cut_distances > distance_threshold
+
+        skip_vertex_mask[:-1] |= exceeds_threshold
+        skip_vertex_mask[1:] |= exceeds_threshold
+
+    # Ensure start and end of closed rings share identical skip status
+    if not is_linestring and (skip_vertex_mask[0] or skip_vertex_mask[-1]):
+        skip_vertex_mask[0] = True
+        skip_vertex_mask[-1] = True
+
+    skip_segment_start_points = skip_vertex_mask[:-1]
+    skip_segment_end_points = skip_vertex_mask[1:]
+
+    first_segment_vertices = where(
+        skip_segment_start_points[:, None],
+        segment_start_points,
+        q,
+    )
+
+    # Create space for double the points and interleave smoothed points.
+    # Q (or original start) coordinates in the even indexes
+    # R in the odd indices.
+    combined = empty((2 * n, coords.shape[1]), dtype=coords.dtype)
+    combined[0::2] = first_segment_vertices
+    combined[1::2] = r
+
+    # Create mask to finally filter out skipped R coordinates
+    mask = empty(2 * n, dtype=bool)
+    mask[0::2] = True
+    mask[1::2] = ~skip_segment_end_points
+
+    smoothed_vertices = combined[mask]
+
+    if is_linestring:
+        return vstack([coords[0:1], smoothed_vertices, coords[-1:]])
+
+    return vstack([smoothed_vertices, smoothed_vertices[0:1]])
+
+
+def chaikin_smooth_conditional(
+    geom: LineString | Polygon,
+    *,
+    skip_coords: SkipCoordsInput = None,
     iterations: int = 1,
+    distance_threshold: float | None = None,
 ) -> LineString | Polygon:
     """Smooth input linestring or polygon.
 
     This is an implementation of Chaikin's corner cutting line smoothing
     algorithm, with the addition of being able to skip the smoothing of
-    specific points.
+    specific points and points where smoothing would create segments
+    which are too long.
 
     Args:
     ----
         geom: Geometry to smooth.
+        skip_coords: List of points to skip. If a corresponding coordinate exists
+            in the input geometry, it is guaranteed to remain unchanged.
         iterations: Number of iterations i.e. smoothing passes. Each pass
             doubles the number of vertices (minus the skipped coordinates) i.e.
             increase with caution, growth is exponential.
-        skip_coords: List of points to skip. If a corresponding coordinate exists
-            in the input geometry, it is guaranteed to remain unchanged.
+        distance_threshold: Maximum distance from an unsmoothed vertex to
+            a potential cut vertex. If exceeded, segment will not be smoothed.
 
     Returns:
     -------
@@ -155,64 +279,56 @@ def chaikin_smooth_skip_coords(
         If skipping of coordinates is not required, prefer shapelysmooth's
         function as it is likely to be more efficient.
 
+    Raises:
+    ------
+        TypeError: If passed geometry is not a LineString or a Polygon.
+
 
     """
-    # TODO: allow processing 2.5D geometries and multigeometries?
+    if iterations <= 0:
+        return geom
 
-    def _process_coord_sequence(
-        seq: CoordinateSequence,
-        output: list[tuple[float, ...]],
-    ) -> list[tuple[float, ...]]:
-        for i in range(len(seq) - 1):
-            current_coord = seq[i]
-            next_coord = seq[i + 1]
+    skip_set = _normalize_skip_coords(skip_coords)
 
-            current_x = current_coord[0]
-            current_y = current_coord[1]
-            next_x = next_coord[0]
-            next_y = next_coord[1]
+    if isinstance(geom, LineString):
+        coords = asarray(geom.coords, dtype=float64)
+        for _ in range(iterations):
+            coords = _chaikin_conditional_pass(
+                coords,
+                skip_set,
+                distance_threshold,
+                is_linestring=True,
+            )
+        return LineString(coords)
 
-            q = ((0.75 * current_x + 0.25 * next_x), (0.75 * current_y + 0.25 * next_y))
-            r = ((0.25 * current_x + 0.75 * next_x), (0.25 * current_y + 0.75 * next_y))
-
-            if current_coord in skip_coords:
-                output.append(current_coord)
-                if next_coord not in skip_coords:
-                    output.append(r)
-                continue
-
-            output.append(q)
-
-            if next_coord not in skip_coords:
-                output.append(r)
-
-        return output
-
-    def _process_linestring(geom: LineString) -> LineString:
-        coords = [geom.coords[0]]
-
-        processed_coords = _process_coord_sequence(geom.coords, coords)
-        processed_coords.append(geom.coords[-1])
-
-        return LineString(processed_coords)
-
-    def _process_polygon(geom: Polygon) -> Polygon:
-        exterior = _process_coord_sequence(geom.exterior.coords, [])
-        interiors = [
-            _process_coord_sequence(interior.coords, []) for interior in geom.interiors
+    if isinstance(geom, Polygon):
+        exterior_coords = asarray(geom.exterior.coords, dtype=float64)
+        interior_coords_list = [
+            asarray(interior.coords, dtype=float64) for interior in geom.interiors
         ]
 
-        return Polygon(exterior, interiors)
+        for _ in range(iterations):
+            exterior_coords = _chaikin_conditional_pass(
+                exterior_coords,
+                skip_set,
+                distance_threshold,
+                is_linestring=False,
+            )
 
-    process_function = (
-        _process_linestring if isinstance(geom, LineString) else _process_polygon
-    )
+            interior_coords_list = [
+                _chaikin_conditional_pass(
+                    coords,
+                    skip_set,
+                    distance_threshold,
+                    is_linestring=False,
+                )
+                for coords in interior_coords_list
+            ]
 
-    result = geom
-    for _ in range(iterations):
-        result = process_function(result)
+        return Polygon(exterior_coords, interior_coords_list)
 
-    return result
+    msg = f"Expected LineString or Polygon, got '{type(geom)}'"
+    raise TypeError(msg)
 
 
 def get_topological_points(
@@ -271,7 +387,8 @@ def chaikin_smooth_keep_topology(
     geoseries: GeoSeries,
     iterations: int = 3,
     *,
-    extra_skip_coords: list[Point] | MultiPoint | None,
+    extra_skip_coords: SkipCoordsInput,
+    distance_threshold: float | None = None,
 ) -> GeoSeries:
     """Apply smoothing algorithm while keeping topological points unchanged.
 
@@ -285,6 +402,7 @@ def chaikin_smooth_keep_topology(
             unnecessarily increase vertex count.
         extra_skip_coords: Any additional coordinates in addition to
             topological points which should not be smoothed.
+        distance_threshold: Segments longer than this threshold skip smoothing.
 
     Returns:
     -------
@@ -300,17 +418,17 @@ def chaikin_smooth_keep_topology(
 
     skipped_coords = {(point.x, point.y) for point in get_topological_points(copy)}
 
-    if isinstance(extra_skip_coords, MultiPoint):
-        extra_skip_coords = list(extra_skip_coords.geoms)
+    extra_skip_coords = _normalize_skip_coords(extra_skip_coords)
 
-    if extra_skip_coords is not None:
-        skipped_coords.update((point.x, point.y) for point in extra_skip_coords)
+    if extra_skip_coords:
+        skipped_coords.update((point[0], point[1]) for point in extra_skip_coords)
 
     return copy.apply(
-        lambda geom: chaikin_smooth_skip_coords(
+        lambda geom: chaikin_smooth_conditional(
             force_2d(geom),
             iterations=iterations,
             skip_coords=skipped_coords,
+            distance_threshold=distance_threshold,
         ),
     )
 
