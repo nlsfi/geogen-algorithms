@@ -34,3 +34,7 @@ class MissingReferenceError(Exception):
     ) -> None:
         """Initialize exception."""
         super().__init__(msg, *args, **kwargs)
+
+
+class DuplicateIndexError(ValueError):
+    pass

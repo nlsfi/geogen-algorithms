@@ -9,6 +9,7 @@ from geopandas import GeoDataFrame
 from pandas import DataFrame, Index
 from pandas.api.types import is_string_dtype
 
+from geogenalg.core.exceptions import DuplicateIndexError
 from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 
 
@@ -35,7 +36,7 @@ def hash_duplicate_indexes(
     Raises:
     ------
         ValueError: If input GeoDataFrame does not have a string index.
-        AssertionError: If result GeoDataFrame still has duplicate indexes,
+        DuplicateIndexError: If result GeoDataFrame still has duplicate indexes,
             which happens if the input has feature(s) with a duplicate index
             and geometry.
 
@@ -66,7 +67,7 @@ def hash_duplicate_indexes(
             "Duplicate indexes found in GeoDataFrame after hashing. "
             + "This means there were features with duplicate index and geometry."
         )
-        raise AssertionError(msg)
+        raise DuplicateIndexError(msg)
 
     return gdf
 
