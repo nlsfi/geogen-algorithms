@@ -65,7 +65,7 @@ def hash_duplicate_indexes(
     if gdf.index.has_duplicates:
         msg = (
             "Duplicate indexes found in GeoDataFrame after hashing. "
-            + "This means there were features with duplicate index and geometry."
+            "This means there were features with duplicate index and geometry."
         )
         raise DuplicateIndexError(msg)
 

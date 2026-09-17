@@ -87,7 +87,7 @@ class GeneralizeFences(BaseAlgorithm):
         if self.attribute_for_line_merge not in data.columns:
             msg = (
                 "Specified `attribute_for_line_merge` "
-                + f"({self.attribute_for_line_merge}) not found in input GeoDataFrame."
+                f"({self.attribute_for_line_merge}) not found in input GeoDataFrame."
             )
             raise KeyError(msg)
 

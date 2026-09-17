@@ -130,9 +130,6 @@ extend-exclude = ["setup.py"]
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
-[tool.ruff.lint.flake8-implicit-str-concat]
-allow-multiline = false
-
 [tool.ruff.lint.flake8-import-conventions]
 [tool.ruff.lint.flake8-import-conventions.aliases]
 pandas = "pd"

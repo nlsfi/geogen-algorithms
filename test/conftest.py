@@ -125,10 +125,10 @@ class IntegrationTest:
         if report_dir is None:
             warn(
                 "No directory specified for report. Using temporary directory by default. "
-                + "You can set the GEOGENALG_TEST_REPORT_DIR environment variable to save to "
-                + "a set location. By default the report will be saved to a subdirectory according "
-                + "to algorithm name and a timestamp. To save specifically to the set directory "
-                + "and overwrite contents, set GEOGENALG_TEST_REPORT_DIR_SPECIFIC=true.",
+                "You can set the GEOGENALG_TEST_REPORT_DIR environment variable to save to "
+                "a set location. By default the report will be saved to a subdirectory according "
+                "to algorithm name and a timestamp. To save specifically to the set directory "
+                "and overwrite contents, set GEOGENALG_TEST_REPORT_DIR_SPECIFIC=true.",
                 category=TestReportWarning,
                 stacklevel=1,
             )
@@ -155,7 +155,7 @@ class IntegrationTest:
             ).resolve()
             warn(
                 "If the result is okay, you can make it the new control data by running: \n\n"
-                + f"python {script_path} {report_dir}/result.gpkg {self.control_uri.file}@{self.control_uri.layer_name}\n\n",
+                f"python {script_path} {report_dir}/result.gpkg {self.control_uri.file}@{self.control_uri.layer_name}\n\n",
                 category=TestReportWarning,
                 stacklevel=1,
             )
