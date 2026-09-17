@@ -61,8 +61,8 @@ from geogenalg.utility.dataframe_processing import (
 
 GEOPACKAGE_URI_HELP = (
     "Path to a GeoPackage, with layer name optionally specified after a @ or | symbol, "
-    + 'examples: "my_geopackage.gpkg" "my_geopackage.gpkg@my_layer_name" '
-    + '"file.gpkg|layer"'
+    'examples: "my_geopackage.gpkg" "my_geopackage.gpkg@my_layer_name" '
+    '"file.gpkg|layer"'
 )
 
 
@@ -359,10 +359,10 @@ ReferenceGeoPackageList = Annotated[
         parser=named_geopackage_uri,
         help=(
             'Reference data as name and GeoPackageURI. Examples: "--ref=name:data.gpkg"'
-            + '--ref=name:data.gpkg@layer". You can specify the option multiple times. '
-            + "These will be used as reference data in the algorithm. The name should "
-            + "correspond to a reference key. If multiple datasets with the same name "
-            + "are specified, they will be combined."
+            '--ref=name:data.gpkg@layer". You can specify the option multiple times. '
+            "These will be used as reference data in the algorithm. The name should "
+            "correspond to a reference key. If multiple datasets with the same name "
+            "are specified, they will be combined."
         ),
     ),
 ]
@@ -494,8 +494,8 @@ def build_app() -> None:
                     typer.Option(
                         help=(
                             "Column containing unique id for features. If specified, "
-                            + "the column will be used as an index. May also be set as "
-                            + "environment variable GEOGENALG_UNIQUE_ID_COLUMN."
+                            "the column will be used as an index. May also be set as "
+                            "environment variable GEOGENALG_UNIQUE_ID_COLUMN."
                         ),
                     ),
                 ],
@@ -523,8 +523,8 @@ def build_app() -> None:
                 custom_default=frozenset(),
                 extra_parse_help=(
                     "Either an integer or a string. Can be specified multiple times. "
-                    + "If you need to pass an integer as a string, you can add do so "
-                    + "by appending str: in front of the integer, i.e. str:10."
+                    "If you need to pass an integer as a string, you can add do so "
+                    "by appending str: in front of the integer, i.e. str:10."
                 ),
             ),
             frozenset[str]: TransformedTypeInformation(

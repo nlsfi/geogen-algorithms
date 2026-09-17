@@ -281,7 +281,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
             msg = (
                 "generalize_polygon_buildings only supports "
-                + "Polygon or MultiPolygon geometries."
+                "Polygon or MultiPolygon geometries."
             )
             raise GeometryTypeError(msg)
 

@@ -136,7 +136,7 @@ def assert_geoseries_coordinates_equal(
         if type(a_geom) is not type(b_geom):
             msg = (
                 "Geometries are not of equivalent type: "
-                + f"{type(a_geom).__name__} != {type(b_geom).__name__}"
+                f"{type(a_geom).__name__} != {type(b_geom).__name__}"
             )
             raise AssertionError(msg)
 
@@ -152,7 +152,7 @@ def assert_geoseries_coordinates_equal(
         ):
             msg = (
                 "Geometries are not equivalent: "
-                + f"{_truncate_wkt(a_geom.wkt)} != {_truncate_wkt(b_geom.wkt)}"
+                f"{_truncate_wkt(a_geom.wkt)} != {_truncate_wkt(b_geom.wkt)}"
             )
             raise AssertionError(msg)
 
@@ -209,7 +209,7 @@ def assert_gdf_equal_save_diff(  # noqa: C901
 
         warn(
             "Exception occured while checking GeoDataFrame "
-            + f"equality. Saving diff to {directory}",
+            f"equality. Saving diff to {directory}",
             category=TestReportWarning,
             stacklevel=3,
         )

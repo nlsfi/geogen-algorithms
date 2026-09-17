@@ -29,9 +29,9 @@ def main() -> int:
         )
         sys.stderr.write(
             "This is likely because the file is open in a program. "
-            + "Edits made to the file might not entirely be saved yet. "
-            + "Make sure the edits are permanently saved to the main "
-            + "GeoPackage file before commiting.\n"
+            "Edits made to the file might not entirely be saved yet. "
+            "Make sure the edits are permanently saved to the main "
+            "GeoPackage file before commiting.\n"
         )
 
         return 1

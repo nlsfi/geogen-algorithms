@@ -188,7 +188,7 @@ class BaseAlgorithm(ABC, BaseModel):
             if reference.crs != data.crs:
                 msg = (
                     f'Reference data "{key}" and input data have different coordinate '
-                    + f"reference systems: {reference.crs} != {data.crs}."
+                    f"reference systems: {reference.crs} != {data.crs}."
                 )
                 raise InvalidCRSError(msg)
 
@@ -203,7 +203,7 @@ class BaseAlgorithm(ABC, BaseModel):
             if not hasattr(self, attr):
                 msg = (
                     f"Attribute named '{attr}' is defined in reference"
-                    + " data schema but not found in algorithm instance."
+                    " data schema but not found in algorithm instance."
                 )
                 raise ValueError(msg)
 
@@ -230,7 +230,7 @@ class BaseAlgorithm(ABC, BaseModel):
             if key not in expected_keys:
                 msg = (
                     f"Reference data has unexpected key '{key}'."
-                    + f""" Expected one of '{", ".join(expected_keys)}'"""
+                    f""" Expected one of '{", ".join(expected_keys)}'"""
                 )
                 raise MissingReferenceError(msg)
 
@@ -265,8 +265,8 @@ class BaseAlgorithm(ABC, BaseModel):
                 )
                 msg = (
                     f'Reference data "{key}" must contain only '
-                    + "geometries of following types: "
-                    + f"{types}."
+                    "geometries of following types: "
+                    f"{types}."
                 )
                 raise GeometryTypeError(msg)
 
