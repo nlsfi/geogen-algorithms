@@ -533,9 +533,9 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         Returns:
         -------
-            A GeoDataFrame containing valid, non-empty polygon geometries.
+            A GeoDataFrame containing valid geometries.
 
         """
         gdf = input_gdf.copy()
         gdf.geometry = gdf.geometry.apply(make_valid_ensure_polygon)
-        return gdf.loc[~gdf.geometry.is_empty]
+        return gdf.loc[~gdf.geometry.is_valid]

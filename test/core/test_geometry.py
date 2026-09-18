@@ -7,6 +7,7 @@ import math
 import re
 from collections.abc import Callable
 from typing import Literal
+from warnings import catch_warnings
 
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
@@ -3433,11 +3434,12 @@ def test_smooth_around_connection_point_of_two_lines(
 
 
 @pytest.mark.parametrize(
-    ("input_geometry", "expected_geometry"),
+    ("input_geometry", "expected_geometry", "expects_warning"),
     [
         (
             box(0, 0, 10, 10),
             box(0, 0, 10, 10),
+            False,
         ),
         (
             Polygon(  # bowtie
@@ -3457,6 +3459,7 @@ def test_smooth_around_connection_point_of_two_lines(
                     (4, 2),
                 ]
             ),
+            False,
         ),
         (
             Polygon(  # donut
@@ -3492,8 +3495,18 @@ def test_smooth_around_connection_point_of_two_lines(
                     ]
                 ],
             ),
+            False,
         ),
         (
+            Polygon(  # line collapse
+                [
+                    (0, 0),
+                    (1, 0),
+                    (2, 0),
+                    (1, 0),
+                    (0, 0),
+                ]
+            ),
             Polygon(
                 [
                     (0, 0),
@@ -3503,10 +3516,10 @@ def test_smooth_around_connection_point_of_two_lines(
                     (0, 0),
                 ]
             ),
-            Polygon(),
+            True,
         ),
         (
-            Polygon(
+            Polygon(  # spike
                 [
                     (0, 0),
                     (4, 0),
@@ -3528,6 +3541,30 @@ def test_smooth_around_connection_point_of_two_lines(
                     [4, 4],
                 ]
             ),
+            False,
+        ),
+        (
+            Polygon(  # geometry collection
+                [
+                    (0, 0),
+                    (2, 0),
+                    (2, 2),
+                    (0, 2),
+                    (0, 0),
+                    (3, 3),
+                    (0, 0),
+                ]
+            ),
+            Polygon(
+                [
+                    [0, 0],
+                    [0, 2],
+                    [2, 2],
+                    [2, 0],
+                    [0, 0],
+                ],
+            ),
+            False,
         ),
     ],
     ids=[
@@ -3536,23 +3573,31 @@ def test_smooth_around_connection_point_of_two_lines(
         "donut",
         "line_collapse",
         "spike",
+        "geometry_collection",
     ],
 )
 def test_make_valid_ensure_polygon(
     input_geometry: Polygon,
     expected_geometry: Polygon,
+    expects_warning: bool,
 ):
-    assert make_valid_ensure_polygon(input_geometry).equals_exact(
-        expected_geometry, tolerance=0.3
-    )
+    if expects_warning:
+        with pytest.warns(UserWarning, match="Returning original geometry"):
+            result = make_valid_ensure_polygon(input_geometry)
+    else:
+        with catch_warnings(category=UserWarning, action="ignore"):
+            result = make_valid_ensure_polygon(input_geometry)
+
+    assert result.equals_exact(expected_geometry, tolerance=0.3)
 
 
 @pytest.mark.parametrize(
-    ("input_geometry", "expected"),
+    ("input_geometry", "expected", "expects_warning"),
     [
         (
             box(0, 0, 10, 10),
             box(0, 0, 10, 10),
+            False,
         ),
         (
             Polygon(  # bowtie
@@ -3570,6 +3615,7 @@ def test_make_valid_ensure_polygon(
                     Polygon([(4, 2), (1.333, 0.666), (0, 2), (4, 2)]),
                 ]
             ),
+            False,
         ),
         (
             Polygon(  # line collapse
@@ -3581,7 +3627,16 @@ def test_make_valid_ensure_polygon(
                     (0, 0),
                 ]
             ),
-            Polygon(),
+            Polygon(
+                [
+                    (0, 0),
+                    (1, 0),
+                    (2, 0),
+                    (1, 0),
+                    (0, 0),
+                ]
+            ),
+            True,
         ),
         (
             Polygon(  # spike
@@ -3606,6 +3661,30 @@ def test_make_valid_ensure_polygon(
                     [4, 4],
                 ]
             ),
+            False,
+        ),
+        (
+            Polygon(  # geometry collection
+                [
+                    (0, 0),
+                    (2, 0),
+                    (2, 2),
+                    (0, 2),
+                    (0, 0),
+                    (3, 3),
+                    (0, 0),
+                ]
+            ),
+            Polygon(
+                [
+                    [0, 0],
+                    [0, 2],
+                    [2, 2],
+                    [2, 0],
+                    [0, 0],
+                ],
+            ),
+            False,
         ),
     ],
     ids=[
@@ -3613,15 +3692,22 @@ def test_make_valid_ensure_polygon(
         "bowtie",
         "line_collapse",
         "spike",
+        "geometry_collection",
     ],
 )
 def test_make_valid_extract_polygons(
     input_geometry: Polygon,
     expected: Polygon | MultiPolygon,
+    expects_warning: bool,
 ):
-    assert make_valid_extract_polygons(input_geometry).equals_exact(
-        expected, tolerance=1e-3
-    )
+    if expects_warning:
+        with pytest.warns(UserWarning, match="Returning original geometry"):
+            result = make_valid_extract_polygons(input_geometry)
+    else:
+        with catch_warnings(category=UserWarning, action="ignore"):
+            result = make_valid_extract_polygons(input_geometry)
+
+    assert result.equals_exact(expected, tolerance=1e-3)
 
 
 @pytest.mark.parametrize(
@@ -3663,15 +3749,17 @@ def test_node_non_simple(
 
 
 @pytest.mark.parametrize(
-    ("input_geom", "expected"),
+    ("input_geom", "expected", "expects_warning"),
     [
         (
             LineString([(0, 0), (1, 1), (2, 0)]),
             LineString([(0, 0), (1, 1), (2, 0)]),
+            False,
         ),
         (
             LineString([(1, 1), (1, 1)]),
-            LineString(),
+            LineString([(1, 1), (1, 1)]),
+            True,
         ),
     ],
     ids=[
@@ -3682,5 +3770,13 @@ def test_node_non_simple(
 def test_make_valid_extract_linestrings(
     input_geom: LineString,
     expected: LineString | MultiLineString,
+    expects_warning: bool,
 ):
-    assert make_valid_extract_linestrings(input_geom) == expected
+    if expects_warning:
+        with pytest.warns(UserWarning, match="Returning original geometry"):
+            result = make_valid_extract_linestrings(input_geom)
+    else:
+        with catch_warnings(category=UserWarning, action="ignore"):
+            result = make_valid_extract_linestrings(input_geom)
+
+    assert result == expected
