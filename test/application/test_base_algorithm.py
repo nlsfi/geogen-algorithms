@@ -585,23 +585,11 @@ def test_algorithm_raises_on_missing_key():
                 ],
             ),
         ),
-        (
-            "keep_largest",
-            GeoDataFrame(geometry=[Point(0, 0)]),
-            GeoDataFrame(geometry=[Point(0, 0)]),
-        ),
-        (
-            "explode",
-            GeoDataFrame(geometry=[Point(0, 0)]),
-            GeoDataFrame(geometry=[Point(0, 0)]),
-        ),
     ],
     ids=[
         "no",
         "keep_largest",
         "explode",
-        "point_keep_largest",
-        "point_explode",
     ],
 )
 def test_repair_result_geometries(
@@ -617,14 +605,14 @@ def test_repair_result_geometries(
         def _execute(self, data, reference_data):  # noqa: ANN001, ANN202, ARG002
             return data
 
+    input_gdf = input_gdf.set_crs("EPSG:3857")
+    expected_gdf = expected_gdf.set_crs("EPSG:3857")
     alg = MockAlg(
         repair_result_geometries=mode,
     )
 
     with pytest.warns(UserWarning, match="contains invalid geometries"):
-        result = alg._repair_result_geometries(
-            input_gdf.set_index(input_gdf.index.astype("string"))
-        )
+        result = alg.execute(input_gdf.set_index(input_gdf.index.astype("string")))
 
     assert_geodataframe_equal(
         result,

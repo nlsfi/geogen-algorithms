@@ -103,6 +103,12 @@ class BaseAlgorithm(ABC, BaseModel):
             output.index.name = data.index.name
 
         if not output.geometry.is_valid.all() or not output.geometry.is_simple.all():
+            warn(
+                f"{self.__repr_name__()} algorithm result contains invalid geometries.",
+                UserWarning,
+                stacklevel=2,
+            )
+
             output = self._repair_result_geometries(output)
 
         if getattr(self, _SUPPORTS_IDENTITY_ATTR, False):
@@ -286,12 +292,6 @@ class BaseAlgorithm(ABC, BaseModel):
 
     @final
     def _repair_result_geometries(self, data: GeoDataFrame) -> GeoDataFrame:
-        warn(
-            f"{self.__repr_name__()} algorithm result contains invalid geometries.",
-            UserWarning,
-            stacklevel=2,
-        )
-
         if self.repair_result_geometries == "no":
             return data
 
