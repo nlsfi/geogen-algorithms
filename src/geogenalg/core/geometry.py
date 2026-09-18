@@ -12,6 +12,7 @@ from itertools import chain, pairwise
 from math import atan2, degrees, isclose
 from statistics import mean
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
+from warnings import warn
 
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import (  # noqa: SC200
@@ -2105,8 +2106,8 @@ def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
     If the repaired polygon forms a multipolygon or a geometrycollection, the
     largest polygonal part is chosen.
 
-    If the polygon can't be repaired into a multipolygon or geometry
-    collection, and empty polygon is returned.
+    If the polygon can't be repaired into a valid polygon, the original invalid
+    geometry is returned.
 
     Args:
     ----
@@ -2125,20 +2126,24 @@ def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
     if isinstance(repaired, Polygon):
         return repaired
 
+    polygons = ()
     if isinstance(repaired, MultiPolygon):
         polygons = repaired.geoms
     elif isinstance(repaired, GeometryCollection):
         polygons = tuple(g for g in repaired.geoms if isinstance(g, Polygon))
-    else:
-        return Polygon()
 
-    if not polygons:
-        return Polygon()
+    if polygons:
+        return (
+            polygons[0] if len(polygons) == 1 else largest_part(MultiPolygon(polygons))
+        )
 
-    if len(polygons) == 1:
-        return polygons[0]
-
-    return largest_part(MultiPolygon(polygons))
+    warn(
+        "Geometry could not be repaired into a valid polygon."
+        " Returning original geometry.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return geom
 
 
 def make_valid_extract_polygons(
@@ -2148,7 +2153,8 @@ def make_valid_extract_polygons(
 
     If the repaired geometry contains non-polygonal geometries, discard them.
 
-    If polygon can't be repaired into valid (Multi)Polygon, return empty Polygon.
+    If polygon can't be repaired into valid (Multi)Polygon, return original
+    invalid geometry.
 
     Args:
     ----
@@ -2174,11 +2180,17 @@ def make_valid_extract_polygons(
                 polys.append(g)
             elif isinstance(g, MultiPolygon):
                 polys.extend(g.geoms)
-        if not polys:
-            return Polygon()
-        return MultiPolygon(polys) if len(polys) > 1 else polys[0]
 
-    return Polygon()
+        if polys:
+            return MultiPolygon(polys) if len(polys) > 1 else polys[0]
+
+    warn(
+        "Geometry could not be repaired into valid (multi)polygon."
+        " Returning original geometry.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return geom
 
 
 def make_valid_extract_linestrings(
@@ -2188,8 +2200,8 @@ def make_valid_extract_linestrings(
 
     If the repaired geometry contains non-linear elements they are discarded.
 
-    If no linear components remain after repair, an empty linestring is
-    returned.
+    If no linear components remain after repair, the original invalid geometry
+    is returned.
 
     Args:
     ----
@@ -2215,11 +2227,17 @@ def make_valid_extract_linestrings(
                 lines.append(g)
             elif isinstance(g, MultiLineString):
                 lines.extend(g.geoms)
-        if not lines:
-            return LineString()
-        return MultiLineString(lines) if len(lines) > 1 else lines[0]
 
-    return LineString()
+        if lines:
+            return MultiLineString(lines) if len(lines) > 1 else lines[0]
+
+    warn(
+        "Geometry could not be repaired into valid (multi)linestring."
+        " Returning original geometry.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return geom
 
 
 def node_non_simple(
