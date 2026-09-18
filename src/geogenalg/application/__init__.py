@@ -102,7 +102,7 @@ class BaseAlgorithm(ABC, BaseModel):
         if output.index.name != data.index.name:
             output.index.name = data.index.name
 
-        if not output.geometry.is_valid.all():
+        if not output.geometry.is_valid.all() or not output.geometry.is_simple.all():
             output = self._repair_result_geometries(output)
 
         if getattr(self, _SUPPORTS_IDENTITY_ATTR, False):
