@@ -154,7 +154,7 @@ def test_get_basealgorithm_docstrings():
     assert get_basealgorithm_attribute_docstrings(MockAlgSubclass) == {
         "parent_attribute": "Parent attribute.",
         "subclass_attribute": "Subclass attribute.",
-        "repair_result_geometries": "Specify if invalid and non-simple geometries should be repaired.",
+        "repair_result_geometries": "Specify if repairing invalid and non-simple geometries should be attempted.",
     }
 
 

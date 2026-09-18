@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Literal, TypeVar, final
+from warnings import warn
 
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
@@ -47,7 +48,7 @@ class BaseAlgorithm(ABC, BaseModel):
     """Abstract base class for all algorithms."""
 
     repair_result_geometries: Literal["no", "keep_largest", "explode"] = "no"
-    """Specify if invalid and non-simple geometries should be repaired."""
+    """Specify if repairing invalid and non-simple geometries should be attempted."""
     valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
     """Set of accepted geometry types for input data. If there is a mismatch,
     GeometryTypeError will be raised."""
@@ -285,6 +286,12 @@ class BaseAlgorithm(ABC, BaseModel):
 
     @final
     def _repair_result_geometries(self, data: GeoDataFrame) -> GeoDataFrame:
+        warn(
+            f"{self.__repr_name__()} algorithm result contains invalid geometries.",
+            UserWarning,
+            stacklevel=2,
+        )
+
         if self.repair_result_geometries == "no":
             return data
 

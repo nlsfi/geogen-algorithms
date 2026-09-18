@@ -621,9 +621,11 @@ def test_repair_result_geometries(
         repair_result_geometries=mode,
     )
 
-    result = alg._repair_result_geometries(
-        input_gdf.set_index(input_gdf.index.astype("string"))
-    )
+    with pytest.warns(UserWarning, match="contains invalid geometries"):
+        result = alg._repair_result_geometries(
+            input_gdf.set_index(input_gdf.index.astype("string"))
+        )
+
     assert_geodataframe_equal(
         result,
         expected_gdf.set_index(expected_gdf.index.astype("string")),
