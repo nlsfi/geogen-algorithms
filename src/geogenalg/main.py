@@ -462,6 +462,7 @@ def build_app() -> None:
         "shared_paths": GeneralizeSharedPaths,
         "power_lines": GeneralizePowerLines,
         "building_areas": GeneralizeBuildingAreas,
+        "tall_building_areas": GeneralizeTallBuildingAreas,
         "dissolve_polygons": DissolvePolygons,
         "conservation_areas": GeneralizeConservationAreas,
         "railroads": GeneralizeRailroads,
