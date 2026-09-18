@@ -538,4 +538,4 @@ class GeneralizeBuildings(BaseAlgorithm):
         """
         gdf = input_gdf.copy()
         gdf.geometry = gdf.geometry.apply(make_valid_ensure_polygon)
-        return gdf.loc[~gdf.geometry.is_valid]
+        return gdf.loc[gdf.geometry.is_valid]
