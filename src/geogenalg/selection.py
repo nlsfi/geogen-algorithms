@@ -16,6 +16,7 @@ from shapely.geometry import LineString, Point
 from geogenalg.continuity import find_all_endpoints
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import line_mean_direction, remove_holes
+from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -40,6 +41,9 @@ def remove_disconnected_short_lines(
             connectivity criteria.
 
     """
+    if input_gdf.empty:
+        return copy_gdf_as_empty(input_gdf)
+
     lines = list(input_gdf.geometry)
     endpoints = find_all_endpoints(lines, force_point_to_2d=True)
     min_connections = 2
