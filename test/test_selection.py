@@ -32,6 +32,7 @@ from geogenalg.selection import (
 @pytest.mark.parametrize(
     ("input_lines", "threshold", "expected_num_lines"),
     [
+        ([], 2.0, 0),
         ([LineString([(0, 0), (5, 0)])], 2.0, 1),
         ([LineString([(0, 0), (1.9, 0)])], 2.0, 0),
         (
@@ -54,6 +55,7 @@ from geogenalg.selection import (
         ),
     ],
     ids=[
+        "empty",
         "line_length_over_threshold",
         "line_length_under_threshold",
         "three_connected_lines_two_removed",
@@ -72,6 +74,7 @@ def test_remove_disconnected_short_lines(
     )
     result = remove_disconnected_short_lines(lines_gdf, threshold)
     assert len(result) == expected_num_lines
+    assert isinstance(result, GeoDataFrame)
 
 
 @pytest.mark.parametrize(
