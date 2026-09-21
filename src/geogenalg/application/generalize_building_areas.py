@@ -291,7 +291,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             ]
         )
 
-        result = result.explode(as_index=False).reset_index(drop=True)
+        result = explode_and_hash_id(result, "buildingareas")
 
         result = assign_nearest_z(data, result)
         return hash_index_from_geometry(result, "buildingareas")
