@@ -12,7 +12,8 @@ from warnings import catch_warnings
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
-from numpy import isclose, pi
+from numpy import array, empty, isclose, ndarray, pi
+from numpy.testing import assert_allclose
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 from shapely import (
@@ -51,6 +52,7 @@ from geogenalg.core.geometry import (
     chaikin_smooth_conditional,
     chaikin_smooth_keep_topology,
     concatenate_lines,
+    create_crossing_line_at_vertex,
     elongation,
     ensure_geoms,
     equalize_z,
@@ -59,6 +61,8 @@ from geogenalg.core.geometry import (
     extend_line_to_nearest,
     extract_interior_rings,
     extract_interior_rings_gdf,
+    get_connected_segments,
+    get_connected_unit_vectors,
     get_topological_points,
     insert_vertex,
     largest_part,
@@ -3780,3 +3784,283 @@ def test_make_valid_extract_linestrings(
             result = make_valid_extract_linestrings(input_geom)
 
     assert result == expected
+
+
+@pytest.mark.parametrize(
+    ("line", "vertex", "expected_segments"),
+    [
+        (
+            LineString(),
+            Point(),
+            empty((0, 2, 2)),
+        ),
+        (
+            LineString(),
+            Point(0, 0),
+            empty((0, 2, 2)),
+        ),
+        (
+            LineString([[0, 0], [0, 0]]),
+            Point(),
+            empty((0, 2, 2)),
+        ),
+        (
+            LineString([(0, 0), (1, 0)]),
+            Point(0, 0),
+            array([[[0.0, 0.0], [1.0, 0.0]]]),
+        ),
+        (
+            LineString([(0, 0), (1, 0)]),
+            Point(1, 0),
+            array([[[1.0, 0.0], [0.0, 0.0]]]),
+        ),
+        (
+            LineString([(0, 0), (1, 0), (1, 2)]),
+            Point(1, 0),
+            array(
+                [
+                    [[1.0, 0.0], [1.0, 2.0]],
+                    [[1.0, 0.0], [0.0, 0.0]],
+                ]
+            ),
+        ),
+        (
+            LineString([(0, 0), (1, 0), (1, 2), (2, 2)]),
+            Point(1, 2),
+            array(
+                [
+                    [[1.0, 2.0], [2.0, 2.0]],
+                    [[1.0, 2.0], [1.0, 0.0]],
+                ]
+            ),
+        ),
+        (
+            LineString([(0, 0), (1, 1)]),
+            Point(10, 10),
+            empty((0, 2, 2)),
+        ),
+        (
+            LineString([(0, 0, 0), (0, 1, 5)]),
+            Point(0, 0, 0),
+            array([[[0.0, 0.0, 0.0], [0.0, 1.0, 5.0]]]),
+        ),
+    ],
+    ids=[
+        "both_empty",
+        "empty_line",
+        "empty_point",
+        "start",
+        "end",
+        "interior_2_segments",
+        "interior_3_segments",
+        "tolerance",
+        "3d",
+    ],
+)
+def test_get_connected_segments(
+    line: LineString | MultiLineString,
+    vertex: Point,
+    expected_segments: ndarray,
+) -> None:
+    assert_allclose(get_connected_segments(line, vertex), expected_segments)
+
+
+@pytest.mark.parametrize(
+    ("line", "vertex"),
+    [
+        (
+            LineString([(0, 0), (1, 1)]),
+            Point(0, 0, 0),
+        ),
+        (
+            LineString([(0, 0, 0), (1, 1, 1)]),
+            Point(0, 0),
+        ),
+    ],
+    ids=[
+        "2d_line_3d_vertex",
+        "3d_line_2d_vertex",
+    ],
+)
+def test_get_connected_segments_raises(
+    line: LineString | MultiLineString,
+    vertex: Point,
+) -> None:
+    with pytest.raises(GeometryOperationError, match="Input dimensions must match!"):
+        get_connected_segments(line, vertex)
+
+
+@pytest.mark.parametrize(
+    ("line", "vertex", "expected_vectors"),
+    [
+        (
+            LineString(),
+            Point(),
+            empty((0, 2)),
+        ),
+        (
+            LineString(),
+            Point(0, 0),
+            empty((0, 2)),
+        ),
+        (
+            LineString([[0, 0], [0, 0]]),
+            Point(),
+            empty((0, 2)),
+        ),
+        (
+            LineString([(0, 0), (1, 0)]),
+            Point(0, 0),
+            array([[1.0, 0.0]]),
+        ),
+        (
+            LineString([(0, 0), (1, 0)]),
+            Point(1, 0),
+            array([[-1.0, 0.0]]),
+        ),
+        (
+            LineString([(0, 0), (1, 0), (1, 2)]),
+            Point(1, 0),
+            array(
+                [
+                    [0.0, 1.0],
+                    [-1.0, 0.0],
+                ]
+            ),
+        ),
+        (
+            LineString([(0, 0), (1, 0), (1, 2), (2, 2)]),
+            Point(1, 2),
+            array(
+                [
+                    [1.0, 0.0],
+                    [0.0, -1.0],
+                ]
+            ),
+        ),
+        (
+            LineString([(0, 0), (1, 1)]),
+            Point(10, 10),
+            empty((0, 2)),
+        ),
+        (
+            LineString([(0.5, 0.5, 0.5), (0, 1, 5)]),
+            Point(0.5, 0.5, 0.5),
+            array([[-0.707107, 0.707107, 6.36396]]),
+        ),
+    ],
+    ids=[
+        "both_empty",
+        "empty_line",
+        "empty_point",
+        "start",
+        "end",
+        "interior_2_segments",
+        "interior_3_segments",
+        "tolerance",
+        "3d",
+    ],
+)
+def test_get_connected_unit_vectors(
+    line: LineString | MultiLineString,
+    vertex: Point,
+    expected_vectors: ndarray,
+) -> None:
+    res = get_connected_unit_vectors(line, vertex)
+
+    assert res.shape == expected_vectors.shape
+
+    if expected_vectors.size > 0:
+        assert_allclose(res, expected_vectors, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("geom", "point", "length", "expected"),
+    [
+        (
+            LineString(),
+            Point(0, 0),
+            1.0,
+            LineString(),
+        ),
+        (
+            LineString([(0, 0), (10, 0)]),
+            Point(),
+            1.0,
+            LineString(),
+        ),
+        (
+            LineString([(0, 0), (1, 0)]),
+            Point(0, 0),
+            1.0,
+            LineString([(0.0, -0.5), (0.0, 0.0), (0.0, 0.5)]),
+        ),
+        (
+            LineString([(-1, 0), (0, 0), (1, 0)]),
+            Point(0, 0),
+            2.0,
+            LineString([(0.0, -1.0), (0.0, 0.0), (0.0, 1.0)]),
+        ),
+        (
+            LineString([(-1, 0), (0, 0), (0, -1)]),
+            Point(0, 0),
+            1.0,
+            LineString(
+                [
+                    (-0.3535, -0.3535),
+                    (0.0, 0.0),
+                    (0.3535, 0.3535),
+                ]
+            ),
+        ),
+        (
+            MultiLineString(
+                [
+                    [(0, 0), (10, 0)],
+                    [(0, 0), (0, 10)],
+                    [(0, 0), (0, -10)],
+                ]
+            ),
+            Point(0, 0),
+            2.0,
+            LineString(
+                [
+                    (-0.7071, -0.7071),
+                    (0.0, 0.0),
+                    (0.7071, 0.7071),
+                ]
+            ),
+        ),
+        (
+            LineString([(0, 0, 5), (10, 0, 15)]),
+            Point(0, 0, 5),
+            2.0,
+            LineString([(0.0, -1.0), (0.0, 0.0), (0.0, 1.0)]),
+        ),
+        (
+            LineString([(10, 10), (20, 20)]),
+            Point(0, 0),
+            1.0,
+            LineString(),
+        ),
+    ],
+    ids=[
+        "empty_line",
+        "empty_point",
+        "start_point",
+        "interior_straight_line",
+        "right_angle",
+        "three_segments",
+        "3d",
+        "tolerance",
+    ],
+)
+def test_create_crossing_line_at_vertex(
+    geom: LineString | MultiLineString,
+    point: Point,
+    length: float,
+    expected: LineString,
+):
+    assert create_crossing_line_at_vertex(geom, point, length=length).equals_exact(
+        expected, tolerance=0.5
+    )

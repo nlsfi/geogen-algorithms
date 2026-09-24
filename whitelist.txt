@@ -64,6 +64,7 @@ hypot
 idx
 inplace
 isclose
+keepdims
 landcover
 linalg
 linemerge
@@ -114,6 +115,8 @@ typer
 unary
 unsplit
 utils
+vec
+vecs
 visvalingam
 vstack
 wkb
