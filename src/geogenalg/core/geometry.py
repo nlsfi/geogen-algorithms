@@ -9,23 +9,30 @@ from collections.abc import Iterable
 from copy import deepcopy
 from enum import Enum
 from itertools import chain, pairwise
-from math import atan2, degrees, isclose
+from math import atan2, isclose
 from statistics import mean
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 from warnings import warn
 
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import (  # noqa: SC200
+    append,
+    arctan2,
+    argmax,
     array,
     asarray,
     column_stack,
+    cos,
+    degrees,
     empty,
     float64,
     fromiter,
     linalg,
     ndarray,
     pi,
+    sin,
     sqrt,
+    stack,
     vstack,
     where,
     zeros,
@@ -44,6 +51,7 @@ from shapely import (
     count_coordinates,
     force_2d,
     get_coordinates,
+    get_parts,
     get_point,
     length,
     make_valid,
@@ -2262,3 +2270,188 @@ def node_non_simple(
         return geom
 
     return node(geom)
+
+
+def get_connected_segments(
+    geom: LineString | MultiLineString,
+    vertex: Point,
+    tolerance: float = 1e-7,
+) -> ndarray:
+    """Find segments connected to a vertex.
+
+    Args:
+    ----
+        geom: (Multi)LineString to process.
+        vertex: Vertex to find connected line segments for.
+        tolerance: Distance threshold for finding if vertex is part of a segment.
+
+    Returns:
+    -------
+        3D NumPy array of segment coordinate pairs.
+
+    Raises:
+        GeometryOperationError: If input geometries have mismatched dimensions.
+
+    """
+    if geom.has_z != vertex.has_z:
+        msg = (
+            f"Input dimensions must match! geom.has_z={geom.has_z}, "
+            "vertex.has_z={vertex.has_z}"
+        )
+        raise GeometryOperationError(msg)
+
+    parts = get_parts(geom)
+    coords, line_ids = get_coordinates(parts, return_index=True, include_z=geom.has_z)
+
+    if len(coords) < 2 or vertex.is_empty:  # noqa: PLR2004
+        return empty((0, 2, coords.shape[1]))
+
+    # Extracting coordinates from a MultiLineString flattens them into a
+    # contiguous array. This means there'll be "fake" segments between the
+    # linestring parts -> remove them.
+    start_points = coords[:-1]
+    end_points = coords[1:]
+
+    # Remove pairs which go across two linestrings.
+    same_line = line_ids[:-1] == line_ids[1:]
+
+    segment_start_points = start_points[same_line]
+    segment_end_points = end_points[same_line]
+
+    # Determine connected segments by calculating whether the distance from the
+    # segment start or end points is within the tolerance.
+    vertex_coords = asarray(vertex.coords[0])
+
+    connected_to_start = (
+        linalg.norm(segment_start_points - vertex_coords, axis=1) < tolerance
+    )
+    connected_to_end = (
+        linalg.norm(segment_end_points - vertex_coords, axis=1) < tolerance
+    )
+
+    # Orient segments so that in the output the vertex point will be at index 0
+    starts_at_vertex = stack(
+        [
+            segment_start_points[connected_to_start],
+            segment_end_points[connected_to_start],
+        ],
+        axis=1,
+    )
+    ends_at_vertex = stack(
+        [
+            segment_end_points[connected_to_end],
+            segment_start_points[connected_to_end],
+        ],
+        axis=1,
+    )
+
+    return vstack([starts_at_vertex, ends_at_vertex])
+
+
+def get_connected_unit_vectors(
+    geom: LineString | MultiLineString,
+    vertex: Point,
+    tolerance: float = 1e-7,
+) -> ndarray:
+    """Find unit vectors connected to a vertex.
+
+    Z coordinates are ignored and discarded.
+
+    Args:
+    ----
+        geom: (Multi)LineString to process.
+        vertex: Vertex to find connected line segments for.
+        tolerance: Distance threshold for finding if vertex is part of a segment.
+
+    Returns:
+    -------
+        2D NumPy array of unit vectors.
+
+    """
+    segments = get_connected_segments(geom, vertex, tolerance)
+
+    if segments.size == 0:
+        return empty((0, 3 if vertex.has_z else 2))
+    vecs = (
+        segments[:, 1, :]  # End points
+        - segments[:, 0, :]  # Vertex
+    )
+
+    # We are dealing with 2D maps, so let's not make Z ruin lengths
+    vecs_2d = (
+        segments[:, 1, :2]  # End points
+        - segments[:, 0, :2]  # Vertex
+    )
+
+    norms = linalg.norm(vecs_2d, axis=1, keepdims=True)
+
+    # Ensure we don't divide by 0
+    valid = (norms > tolerance).ravel()
+
+    # Normalize vectors
+    return vecs[valid] / norms[valid]
+
+
+def create_crossing_line_at_vertex(
+    geom: LineString | MultiLineString,
+    point: Point,
+    length: float,
+    tolerance: float = 1e-7,
+) -> LineString:
+    """Create a new line which travels through given point without overlapping geom.
+
+    Args:
+    ----
+        geom: (Multi)LineString to process.
+        point: Vertex to find connected line segments for.
+        length: Length of new line.
+        tolerance: Distance threshold for finding if vertex is part of a segment.
+
+    Returns:
+    -------
+        LineString which travels through the given point such that there is no
+            overlap with geom segments. Always consists of three vertices.
+
+    """
+    vectors = get_connected_unit_vectors(geom, point, tolerance=tolerance)
+
+    if vectors.shape[0] == 0:
+        return LineString()
+
+    vertex_coords = array(point.coords[0][:2])  # Take only x and y
+
+    if vectors.shape[0] == 1:
+        # Only 1 segment -> just use perpendicular angle.
+        vec = vectors[0, :2]
+        crossing_unit_vector = array([-vec[1], vec[0]])
+    else:
+        # 2+ segments -> we find the largest open angle between segments and
+        # cut through it.
+        angles = arctan2(vectors[:, 1], vectors[:, 0])
+
+        # Change all angles between 0-pi
+        axial_angles = angles % pi
+
+        # Sort, this ends up with sorting counter-clockwise.
+        axial_angles.sort()
+
+        gaps_between_angles = axial_angles[1:] - axial_angles[:-1]
+        leftover_gap = (axial_angles[0] + pi) - axial_angles[-1]
+
+        gaps = append(gaps_between_angles, leftover_gap)
+        largest_gap_index = argmax(gaps)
+
+        start_angle = axial_angles[largest_gap_index % len(axial_angles)]
+        largest_gap_bisecting_angle = start_angle + (gaps[largest_gap_index] / 2.0)
+
+        crossing_unit_vector = array(
+            [
+                cos(largest_gap_bisecting_angle),
+                sin(largest_gap_bisecting_angle),
+            ]
+        )
+
+    start_point = vertex_coords - (length / 2.0 * crossing_unit_vector)
+    end_point = vertex_coords + (length / 2.0 * crossing_unit_vector)
+
+    return LineString([start_point, vertex_coords, end_point])
