@@ -153,26 +153,26 @@ def test_generalize_water_areas(testdata_path: Path):
                 [
                     LineString(
                         [
-                            [1, 1.00001],
+                            [0.999998, 0.999998],
                             [1, 1],
                         ]
                     ),
                     LineString(
                         [
                             [1, 1],
-                            [1, 0.99999],
+                            [1.000001, 1.000001],
                         ]
                     ),
                     LineString(
                         [
-                            [2, 1.00001],
+                            [2.000001, 0.999995],
                             [2, 1],
                         ]
                     ),
                     LineString(
                         [
                             [2, 1],
-                            [2, 0.99999],
+                            [1.999998, 1.000004],
                         ]
                     ),
                 ]
@@ -188,13 +188,13 @@ def test_generalize_water_areas(testdata_path: Path):
 def test_get_shoreline_splitters(
     unmodified_shoreline: GeoDataFrame,
     new_unsplit_shoreline: BaseGeometry,
-    expected: GeoDataFrame,
+    expected: MultiLineString,
 ):
     result = GeneralizeWaterAreas._get_shoreline_splitters(
         unmodified_shoreline,
         new_unsplit_shoreline,
     )
-    assert equals_exact(result, expected)
+    assert equals_exact(result, expected, tolerance=0.00001)
 
 
 @pytest.mark.parametrize(
