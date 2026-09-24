@@ -33,6 +33,7 @@ from geogenalg.core.geometry import (
     LineExtendFrom,
     assign_nearest_z,
     chaikin_smooth_keep_topology,
+    create_crossing_line_at_vertex,
     ensure_geoms,
     extend_line_by,
     extract_interior_rings,
@@ -77,7 +78,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
     min_area: float = Field(4000.0, gt=0)
     """Features under this area will be removed."""
-    area_simplification_tolerance: float = Field(10.0, gt=0)
+    area_simplification_tolerance: float = Field(100.0, gt=0)
     """Simplification tolerance used for water areas."""
     thin_section_width: float = Field(20.0, gt=0)
     """Sections under this width will be exaggerated."""
@@ -93,7 +94,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     """Islands under this elongation will be considered for exaggeration."""
     island_exaggerate_by: float = Field(3.0, gt=0)
     """By how many CRS units thin islands will be exaggerated."""
-    island_simplification_tolerance: float = Field(10.0, gt=0)
+    island_simplification_tolerance: float = Field(50.0, gt=0)
     """Simplification tolerance used for islands."""
     smoothing_passes: int = Field(3, ge=0)
     """How many smoothing passes will be performed. Each smoothing passes
@@ -190,19 +191,12 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                     continue
 
                 if line.length == 0:
-                    # This means the point is directly on a vertex. In order
-                    # for the splitting to function we need the splitter
-                    # geometries to be lines which cut through the
-                    # line-to-split. Therefore create a tiny line around the
-                    # vertex.
                     lines.append(
-                        LineString(
-                            [
-                                [p.x, p.y + 0.00001],
-                                [p.x, p.y],
-                                [p.x, p.y - 0.00001],
-                            ]
-                        ),
+                        create_crossing_line_at_vertex(
+                            new_unsplit_shoreline,
+                            p,
+                            length=0.00001,
+                        )
                     )
                     continue
 
