@@ -191,13 +191,16 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                     continue
 
                 if line.length == 0:
-                    lines.append(
-                        create_crossing_line_at_vertex(
-                            new_unsplit_shoreline,
-                            p,
-                            length=0.00001,
-                        )
+                    crossing = create_crossing_line_at_vertex(
+                        new_unsplit_shoreline,
+                        p,
+                        length=0.00001,
                     )
+
+                    if crossing.is_empty:
+                        continue
+
+                    lines.append(crossing)
                     continue
 
                 lines.append(
@@ -207,7 +210,8 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                         LineExtendFrom.END,
                     )
                 )
-            return MultiLineString(lines)
+
+            return MultiLineString(lines) if lines else MultiLineString()
 
         splitters = unmodified_shoreline.copy()
         splitters.geometry = splitters.boundary
