@@ -59,7 +59,7 @@ class GeneralizeFences(BaseAlgorithm):
     """Tolerance used for geometry simplification."""
     gap_threshold: float = Field(25.0, gt=0)
     """Maximum gap between two fence lines to be connected with a helper line."""
-    attribute_for_line_merge: str = "kohdeluokka"
+    attribute_for_line_merge: str = "fence_type"
     """Name of the attribute to determine which line features can be merged."""
     # TODO: this might not have to be strictly necessary in the general use case
     reference_key: str = "masts"
