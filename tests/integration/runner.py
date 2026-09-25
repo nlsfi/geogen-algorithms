@@ -1,0 +1,421 @@
+#  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
+#
+#  This file is part of geogen-algorithms.
+#
+#  SPDX-License-Identifier: MIT
+import os
+from copy import deepcopy
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from tempfile import gettempdir
+from typing import Any, Literal
+from uuid import uuid4
+from warnings import warn
+
+import pytest
+from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
+
+from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
+from geogenalg.testing import (
+    AlgorithmTestInput,
+    AssertFunctionParameter,
+    TestGeoDataFrames,
+    TestReportWarning,
+    assert_gdf_equal_save_diff,
+    assert_geoseries_coordinates_equal,
+    dummy_geometry,
+    get_test_gdfs,
+)
+from geogenalg.utility.validation import geometry_string_to_type
+
+
+@dataclass(frozen=True)
+class ExpectedResultColumns:
+    """Class for defining expected columns in test result."""
+
+    inherit: Literal["input", "none"] = "input"
+    inherit_from_reference_key: str | None = None
+    mandatory_extra_columns: frozenset[str] = frozenset()
+
+
+GEOMETRY_TYPE_STRINGS = (
+    "Point",
+    "LineString",
+    "LinearRing",
+    "Polygon",
+    "MultiPoint",
+    "MultiLineString",
+    "MultiPolygon",
+    "GeometryCollection",
+)
+
+DEFAULT_EXPECTED_RESULT_COLUMNS = ExpectedResultColumns()
+
+
+@dataclass(frozen=True, kw_only=True)
+class IntegrationTest:
+    """Class for defining an integration test for a specific algorithm."""
+
+    algorithm_input: AlgorithmTestInput
+    """Object containing data describing where to read algorithm input data from."""
+    check_missing_reference: bool
+    """If True, test will check that algorithm will raise a MissingReferenceError."""
+    expected_result_columns: ExpectedResultColumns = DEFAULT_EXPECTED_RESULT_COLUMNS
+    """Describes what columns result data should have."""
+    assert_function_arguments: dict[AssertFunctionParameter, Any] = field(
+        default_factory=dict
+    )
+    """Any arguments to pass to geopandas.testing.assert_geodataframe_equal."""
+    dummy_data_mandatory_columns: frozenset[str] = frozenset()
+    """For defining columns which are required for algorithm to pass."""
+    dummy_reference_data_mandatory_columns: frozenset[str] = frozenset()
+    """For defining columns for reference data which are required for algorithm
+    to pass."""
+
+    def get_test_gdfs(self, *, geometry_column: str | None = None) -> TestGeoDataFrames:
+        """Get GeoDataFrames used in test.
+
+        Defined as a separate method for ease in debugging, allows inspecting
+        results etc. without errors being raised.
+
+        Returns:
+        -------
+            All GeoDataFrames used in the test.
+
+        """
+
+        return get_test_gdfs(
+            input_uri=self.algorithm_input.input_uri,
+            control_uri=self.algorithm_input.control_uri,
+            alg=self.algorithm_input.algorithm,
+            unique_id_column=self.algorithm_input.unique_id_column,
+            reference_uris=self.algorithm_input.reference_uris,
+            rename_geometry=geometry_column,
+        )
+
+    def _assert_and_save_report(
+        self,
+        result: GeoDataFrame,
+        control: GeoDataFrame,
+    ) -> None:
+        report_dir: Path | str | None = os.environ.get("GEOGENALG_TEST_REPORT_DIR")
+        dir_specific = os.environ.get("GEOGENALG_TEST_REPORT_DIR_SPECIFIC")
+        dir_is_specific = dir_specific is not None and dir_specific.lower() in {
+            "true",
+            "1",
+            "on",
+        }
+
+        if report_dir is None:
+            warn(
+                "No directory specified for report. Using temporary directory by default. "
+                "You can set the GEOGENALG_TEST_REPORT_DIR environment variable to save to "
+                "a set location. By default the report will be saved to a subdirectory according "
+                "to algorithm name and a timestamp. To save specifically to the set directory "
+                "and overwrite contents, set GEOGENALG_TEST_REPORT_DIR_SPECIFIC=true.",
+                category=TestReportWarning,
+                stacklevel=1,
+            )
+            report_dir = Path(gettempdir()) / "geogenalg_tests"
+        else:
+            report_dir = Path(report_dir)
+
+        if not dir_is_specific:
+            tz = datetime.now().astimezone().tzinfo
+            timestamp = datetime.now(tz=tz).strftime("%Y_%m_%d-%H_%M_%S")
+            prefix = self.algorithm_input.algorithm.__class__.__name__ + "_"
+            report_dir /= f"{prefix}{timestamp}"
+
+        try:
+            assert_gdf_equal_save_diff(
+                result,
+                control,
+                assert_function_arguments=self.assert_function_arguments,
+                directory=report_dir,
+            )
+        except:
+            script_path = (
+                Path(__file__).parent.parent.parent / "tools/tests/write_layer.py"
+            ).resolve()
+            warn(
+                "If the result is okay, you can make it the new control data by running: \n\n"
+                f"python {script_path} {report_dir}/result.gpkg {self.algorithm_input.control_uri.file}@{self.algorithm_input.control_uri.layer_name}\n\n",
+                category=TestReportWarning,
+                stacklevel=1,
+            )
+
+            raise
+
+    def run(self) -> None:
+        """Run integration test.
+
+        Raises
+        ------
+            AssertionError: If a check fails.
+
+        """
+        algorithm_before = deepcopy(self.algorithm_input.algorithm)
+
+        self._check_algorithm_passes_with_dummy_data()
+        test_gdfs = self.get_test_gdfs()
+
+        assert self.algorithm_input.algorithm == algorithm_before
+
+        self._check_columns(
+            test_gdfs.input_data,
+            test_gdfs.reference_data,
+            test_gdfs.result,
+        )
+
+        if any(test_gdfs.result.index.duplicated()):
+            msg = "Duplicate indices found in result GeoDataFrame."
+            raise AssertionError(msg)
+
+        if any(test_gdfs.result.geometry.duplicated()):
+            msg = "Duplicate geometries found in result GeoDataFrame."
+            raise AssertionError(msg)
+
+        # Run this first so if report saving is on you can see the result (provided
+        # no errors happen during algorithm execution).
+        report_env = os.environ.get("GEOGENALG_TEST_REPORT_SAVE")
+        save_report = report_env is not None and report_env.lower() in {
+            "true",
+            "1",
+            "on",
+        }
+
+        if not save_report:
+            assert_geodataframe_equal(
+                test_gdfs.result,
+                test_gdfs.control,
+                **self.assert_function_arguments,
+            )
+
+            # Test GeoSeries Zs separately, because assert_geodataframe_equal
+            # does not check that Z values are equal.
+            assert_geoseries_coordinates_equal(
+                test_gdfs.result.geometry,
+                test_gdfs.control.geometry,
+                tolerance=5e-07
+                if self.assert_function_arguments.get("check_less_precise")
+                else 0,
+            )
+        else:
+            self._assert_and_save_report(test_gdfs.result, test_gdfs.control)
+
+        assert test_gdfs.input_data.crs == test_gdfs.result.crs
+        assert test_gdfs.input_data.crs == test_gdfs.control.crs
+
+        # Ensure input and reference data was not modified.
+        assert_geodataframe_equal(test_gdfs.input_data, test_gdfs.input_data_before)
+        for key in test_gdfs.reference_data:
+            assert_geodataframe_equal(
+                test_gdfs.reference_data[key],
+                test_gdfs.reference_data_before[key],
+            )
+
+        self._check_test_data_has_z_coordinates(
+            test_gdfs.input_data, test_gdfs.control, test_gdfs.result
+        )
+        self._check_test_data_geometries(test_gdfs.input_data, test_gdfs.result)
+
+        if self.check_missing_reference:
+            with pytest.raises(
+                MissingReferenceError, match="Algorithm has required reference data key"
+            ):
+                self.algorithm_input.algorithm.execute(test_gdfs.input_data)
+
+        for string in GEOMETRY_TYPE_STRINGS:
+            if string in self.algorithm_input.algorithm.valid_input_geometry_types:
+                continue
+
+            geom_type = geometry_string_to_type(string)
+
+            with pytest.raises(GeometryTypeError):
+                self.algorithm_input.algorithm.execute(
+                    GeoDataFrame(geometry=[geom_type()]),
+                )
+
+        # TODO: test reference data geom types?
+
+        # By default run the algorithm twice with same data, to test that it
+        # produces the same results with different geometry column names. Allow
+        # disabling this by environment variable to speed up tests during
+        # development.
+        geom_column = os.environ.get("GEOGENALG_TEST_ONE_GEOM_COLUMN")
+        test_geom_column = geom_column is None or geom_column.lower() not in {
+            "true",
+            "1",
+            "on",
+        }
+
+        if test_geom_column:
+            _, _, _, _, result_from_geom_column, control_from_geom_column = (
+                self.get_test_gdfs(geometry_column="geom")
+            )
+            if not save_report:
+                assert_geodataframe_equal(
+                    result_from_geom_column,
+                    control_from_geom_column,
+                    **self.assert_function_arguments,
+                )
+            else:
+                self._assert_and_save_report(
+                    result_from_geom_column, control_from_geom_column
+                )
+        else:
+            warn(
+                "Testing with two different geometry columns is disabled.",
+                category=TestReportWarning,
+                stacklevel=1,
+            )
+
+    def _check_test_data_has_z_coordinates(
+        self,
+        input_data: GeoDataFrame,
+        control: GeoDataFrame,
+        result: GeoDataFrame,
+    ) -> None:
+        """Check that test data and results have z coordinates.
+
+        Raises
+        ------
+            AssertionError: If a check fails.
+
+        """
+        if not input_data.has_z.all():
+            msg = "Input data for integation test must have geometries with Z values."
+            raise AssertionError(msg)
+
+        if not control.has_z.all():
+            msg = "Control data for integation test must have geometries with Z values."
+            raise AssertionError(msg)
+
+        if input_data.has_z.any() and not input_data.has_z.all():
+            msg = "Input data has mixed 2.5D and 2D geometries."
+            raise AssertionError(msg)
+
+        if result.has_z.any() and not result.has_z.all():
+            msg = "Result has mixed 2.5D and 2D geometries."
+            raise AssertionError(msg)
+
+        if control.has_z.any() and not control.has_z.all():
+            msg = "Control data has mixed 2.5D and 2D geometries."
+            raise AssertionError(msg)
+
+        if control.has_z.all() != result.has_z.all():
+            msg = "Control or result data has z when other does not."
+            raise AssertionError(msg)
+
+    def _check_test_data_geometries(
+        self,
+        input_data: GeoDataFrame,
+        result: GeoDataFrame,
+    ) -> None:
+        """Check that if input data has only single geometries, result does also.
+
+        Raises
+        ------
+            AssertionError: If a check fails.
+
+        """
+        input_has_only_single_geometries = all(
+            "Multi" not in geom_type
+            for geom_type in input_data.geometry.geom_type.to_numpy()
+        )
+        result_has_only_single_geometries = all(
+            "Multi" not in geom_type
+            for geom_type in result.geometry.geom_type.to_numpy()
+        )
+
+        if input_has_only_single_geometries and not result_has_only_single_geometries:
+            msg = "Input has only single geometries but result does not."
+            raise AssertionError(msg)
+
+        if result.geometry.is_empty.any():
+            msg = "Result has empty geometries."
+            raise AssertionError(msg)
+
+    def _check_algorithm_passes_with_dummy_data(
+        self,
+    ) -> None:
+        attribute_data = {column: [1] for column in self.dummy_data_mandatory_columns}
+        attribute_data["field_1"] = [1]
+        data = GeoDataFrame(
+            attribute_data,
+            index=[str(uuid4())],
+            geometry=[
+                dummy_geometry(
+                    min(self.algorithm_input.algorithm.valid_input_geometry_types)
+                ),
+            ],
+            crs="EPSG:3857",
+        )
+
+        reference_data = {}
+        for key, ref in self.algorithm_input.algorithm.reference_data_schema.items():
+            reference_attributes = {
+                column: [1] for column in self.dummy_reference_data_mandatory_columns
+            }
+            reference_attributes["reference_field_1"] = [1]
+            reference_data[getattr(self.algorithm_input.algorithm, key)] = GeoDataFrame(
+                reference_attributes,
+                index=[str(uuid4())],
+                geometry=[dummy_geometry(min(ref.valid_geometry_types))],
+                crs="EPSG:3857",
+            )
+
+        result = self.algorithm_input.algorithm.execute(
+            data,
+            reference_data,
+        )
+
+        self._check_columns(data, reference_data, result)
+
+    def _check_columns(
+        self,
+        input_data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+        result: GeoDataFrame,
+    ) -> None:
+        mandatory_extra_columns = self.expected_result_columns.mandatory_extra_columns
+        result_columns = set(result.columns)
+
+        match self.expected_result_columns.inherit:
+            case "input":
+                if self.expected_result_columns.inherit_from_reference_key is not None:
+                    reference_key = (
+                        self.expected_result_columns.inherit_from_reference_key
+                    )
+                    expected_columns = set(input_data.columns) | set(
+                        reference_data[reference_key].columns
+                    )
+                else:
+                    expected_columns = set(input_data.columns)
+            case "none":
+                columns = [
+                    column
+                    for column in result.columns
+                    if column != result.geometry.name
+                ]
+                if columns:
+                    msg = f"Expected no columns in result, found: {columns}"
+                    raise AssertionError(msg)
+                return
+
+        for column in mandatory_extra_columns:
+            if column not in result_columns:
+                msg = f"Result does not have mandatory extra column: {column}"
+                raise AssertionError(msg)
+
+        missing_columns = expected_columns - result_columns
+        if missing_columns:
+            msg = f"Output data is missing columns: {sorted(missing_columns)}"
+            raise AssertionError(msg)
+
+        unexpected_columns = result_columns - expected_columns - mandatory_extra_columns
+        if unexpected_columns:
+            msg = f"Output data has unexpected columns: {sorted(unexpected_columns)}"
+            raise AssertionError(msg)
