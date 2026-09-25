@@ -3,7 +3,9 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from dataclasses import dataclass
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory, gettempdir
@@ -50,6 +52,9 @@ AssertFunctionParameter = Literal[
     "check_crs",
     "normalize",
 ]
+
+
+RaisesCallable = Callable[[type[BaseException]], AbstractContextManager[Any]]
 
 
 class TestReportWarning(UserWarning):  # noqa: D101
@@ -288,6 +293,62 @@ def get_alg_results_from_geopackage(
     )
 
 
+def read_algorithm_data(
+    input_uri: GeoPackageInput | list[GeoPackageInput],
+    unique_id_column: str,
+    reference_uris: dict[str, GeoPackageInput] | None = None,
+    *,
+    rename_geometry: str | None = None,
+) -> tuple[GeoDataFrame, dict[str, GeoDataFrame]]:
+    """Read algorithm input and reference data from files.
+
+    Args:
+    ----
+        input_uri: Object pointing to input dataset(s) and the correct layer(s) therein.
+        control_uri: Object pointing to control dataset and the correct layer therein.
+        alg: Instance of an algorithm to execute.
+        unique_id_column: Column to set as GeoDataFrame index.
+        reference_uris: Dictionary of GeoPackageURIs, which is used to
+            construct matching reference_data dictionary to pass to algorithm's
+            execute function.
+        rename_geometry: If not None, rename the geometry column of input and reference
+            GeoDataFrames. This can be used to test that an algorithm produces the
+            same results with different geometry column names.
+
+    Returns:
+    -------
+        Algorithm input data and reference data dictionary.
+
+    """
+
+    def _read_gdf(uri: GeoPackageInput) -> GeoDataFrame:
+        if rename_geometry is None:
+            return read_gdf_from_file_and_set_index(
+                uri.file,
+                unique_id_column,
+                layer=uri.layer_name,
+            )
+
+        return read_gdf_from_file_and_set_index(
+            uri.file,
+            unique_id_column,
+            layer=uri.layer_name,
+        ).rename_geometry(rename_geometry, inplace=False)
+
+    reference_data = {}
+    if reference_uris is not None:
+        for key, uri in reference_uris.items():
+            reference_data[key] = _read_gdf(uri)
+
+    if isinstance(input_uri, list):
+        gdfs = [_read_gdf(uri) for uri in input_uri]
+        input_data = combine_gdfs(gdfs)
+    else:
+        input_data = _read_gdf(input_uri)
+
+    return input_data, reference_data
+
+
 def get_test_gdfs(  # noqa: PLR0913
     input_uri: GeoPackageInput | list[GeoPackageInput],
     control_uri: GeoPackageInput,
@@ -317,50 +378,12 @@ def get_test_gdfs(  # noqa: PLR0913
         Input, input before, reference, result and control GeoDataFrames, in that order.
 
     """
-    reference_data = {}
-
-    def read_gdf(
-        path: Path,
-        id_column: str,
-        layer: str | None,
-    ) -> GeoDataFrame:
-        if rename_geometry is None:
-            return read_gdf_from_file_and_set_index(
-                path,
-                id_column,
-                layer=layer,
-            )
-
-        return read_gdf_from_file_and_set_index(
-            path,
-            id_column,
-            layer=layer,
-        ).rename_geometry(rename_geometry, inplace=False)
-
-    if reference_uris is not None:
-        for key, uri in reference_uris.items():
-            reference_data[key] = read_gdf(
-                uri.file,
-                unique_id_column,
-                layer=uri.layer_name,
-            )
-
-    if isinstance(input_uri, list):
-        gdfs = [
-            read_gdf(
-                uri.file,
-                unique_id_column,
-                layer=uri.layer_name,
-            )
-            for uri in input_uri
-        ]
-        input_data = combine_gdfs(gdfs)
-    else:
-        input_data = read_gdf(
-            input_uri.file,
-            unique_id_column,
-            layer=input_uri.layer_name,
-        )
+    input_data, reference_data = read_algorithm_data(
+        input_uri,
+        unique_id_column,
+        reference_uris,
+        rename_geometry=rename_geometry,
+    )
 
     input_data_before = input_data.copy()
     reference_data_before = {key: data.copy() for key, data in reference_data.items()}
@@ -441,3 +464,19 @@ def dummy_geometry(geom_type: ShapelyGeometryTypeString) -> BaseGeometry:  # noq
                     dummy_geometry("MultiPolygon"),
                 ]
             )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AlgorithmTestInput:
+    """Base class for defining tests which read data for an algorithm to run."""
+
+    input_uri: GeoPackageInput | list[GeoPackageInput]
+    """Path and layer for algorithm's input data."""
+    control_uri: GeoPackageInput
+    """Path and layer for test's control data."""
+    algorithm: BaseAlgorithm
+    """Algorithm instance."""
+    unique_id_column: str
+    """Name of column in input and reference data to set as GeoDataFrame index."""
+    reference_uris: dict[str, GeoPackageInput] = field(default_factory=dict)
+    """Paths and layers of algorithm's reference data."""

@@ -1,0 +1,510 @@
+#  Copyright (c) 2025 National Land Survey of Finland (Maanmittauslaitos)
+#
+#  This file is part of geogen-algorithms.
+#
+#  SPDX-License-Identifier: MIT
+
+import pytest
+from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
+from shapely import equals_exact
+from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
+from shapely.geometry.base import BaseGeometry
+
+from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
+from geogenalg.testing import AlgorithmTestInput
+from tests.integration.runner import ExpectedResultColumns, IntegrationTest
+
+
+def test_generalize_water_areas(water_areas_input: AlgorithmTestInput):
+    IntegrationTest(
+        algorithm_input=water_areas_input,
+        check_missing_reference=False,
+        dummy_data_mandatory_columns=frozenset(["shoreline_type_id"]),
+        expected_result_columns=ExpectedResultColumns(inherit="input"),
+    ).run()
+
+
+@pytest.mark.parametrize(
+    (
+        "unmodified_shoreline",
+        "new_unsplit_shoreline",
+        "expected",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[],
+            ),
+            MultiLineString(),
+            MultiLineString(),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 1],
+                            [10, 1],
+                        ]
+                    ),
+                ],
+            ),
+            MultiLineString(
+                [
+                    LineString(
+                        [
+                            [-10, 0],
+                            [20, 0],
+                        ]
+                    ),
+                ]
+            ),
+            MultiLineString(
+                [
+                    LineString(
+                        [
+                            [0, 1],
+                            [0, 0],
+                            [0, -0.00001],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 1],
+                            [10, 0],
+                            [10, -0.00001],
+                        ]
+                    ),
+                ]
+            ),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [-100, 1],
+                            [1, 1],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [1, 1],
+                            [2, 1],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [2, 1],
+                            [100, 1],
+                        ]
+                    ),
+                ],
+            ),
+            MultiLineString(
+                [
+                    LineString(
+                        [
+                            [0, 2],
+                            [1, 1],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [1, 1],
+                            [2, 1],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [2, 1],
+                            [3, 2],
+                        ]
+                    ),
+                ]
+            ),
+            MultiLineString(
+                [
+                    LineString(
+                        [
+                            [0.999998, 0.999998],
+                            [1, 1],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [1, 1],
+                            [1.000001, 1.000001],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [2.000001, 0.999995],
+                            [2, 1],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [2, 1],
+                            [1.999998, 1.000004],
+                        ]
+                    ),
+                ]
+            ),
+        ),
+    ],
+    ids=[
+        "empty",
+        "segment",
+        "vertex",
+    ],
+)
+def test_get_shoreline_splitters(
+    unmodified_shoreline: GeoDataFrame,
+    new_unsplit_shoreline: BaseGeometry,
+    expected: MultiLineString,
+):
+    result = GeneralizeWaterAreas._get_shoreline_splitters(
+        unmodified_shoreline,
+        new_unsplit_shoreline,
+    )
+    assert equals_exact(result, expected, tolerance=0.00001)
+
+
+@pytest.mark.parametrize(
+    (
+        "algorithm",
+        "data",
+        "expected_shoreline_gdf",
+        "expected_segments",
+        "expected_skip_coords",
+    ),
+    [
+        (
+            GeneralizeWaterAreas(),
+            GeoDataFrame(
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 0],
+                            [10, 0],
+                            [10, 10],
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [10, 10],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [10, 10],
+                        ]
+                    ),
+                ],
+                index=[1, 2],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+            ),
+            MultiPoint(
+                [
+                    Point(0, 0),
+                    Point(0, 10),
+                    Point(10, 0),
+                    Point(10, 10),
+                ]
+            ),
+        ),
+        (
+            GeneralizeWaterAreas(),
+            GeoDataFrame(
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 0],
+                            [10, 0],
+                            [10, 10],
+                            [0, 10],
+                            [0, 0],
+                        ],
+                    ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+                index=[1, 2, 3, 4],
+            ),
+            GeoDataFrame(
+                geometry=[],
+            ),
+            MultiPoint(),
+        ),
+        (
+            GeneralizeWaterAreas(
+                preserve_shoreline_sections_column="preserve",
+                preserve_shoreline_sections_values=frozenset([1]),
+            ),
+            GeoDataFrame(
+                {"preserve": [None, 1.0, 0, 0, 0]},
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 0],
+                            [10, 0],
+                            [10, 10],
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                {"preserve": [1.0, 0, 0, 0]},
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+                index=[1, 2, 3, 4],
+            ),
+            GeoDataFrame(
+                geometry=[],
+            ),
+            MultiPoint(
+                [
+                    Point(0, 0),
+                    Point(10, 0),
+                ]
+            ),
+        ),
+        (
+            GeneralizeWaterAreas(
+                preserve_shoreline_sections_column="preserve",
+                preserve_shoreline_sections_values=frozenset([1]),
+            ),
+            GeoDataFrame(
+                {"preserve": [None, 0, 0, 0, 0]},
+                geometry=[
+                    Polygon(
+                        [
+                            [0, 0],
+                            [10, 0],
+                            [10, 10],
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+            ),
+            GeoDataFrame(
+                {"preserve": [0.0, 0, 0, 0]},
+                geometry=[
+                    LineString(
+                        [
+                            [0, 0],
+                            [10, 0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 0],
+                            [10, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [10, 10],
+                            [0, 10],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ),
+                ],
+                index=[1, 2, 3, 4],
+            ),
+            GeoDataFrame(
+                geometry=[],
+            ),
+            MultiPoint(),
+        ),
+    ],
+    ids=[
+        "only_shoreline",
+        "no_segments_found",
+        "preserve_column",
+        "preserve_column_but_no_preserved_features",
+    ],
+)
+def test_get_shoreline_gdf_segments_and_skip_coords(
+    algorithm: GeneralizeWaterAreas,
+    data: GeoDataFrame,
+    expected_shoreline_gdf: GeoDataFrame,
+    expected_segments: GeoDataFrame,
+    expected_skip_coords: MultiPoint,
+):
+    result_shoreline_gdf, result_segments, result_skip_coords = (
+        algorithm._get_shoreline_gdf_segments_and_skip_coords(
+            data,
+        )
+    )
+
+    assert_geodataframe_equal(result_segments, expected_segments)
+    assert_geodataframe_equal(result_shoreline_gdf, expected_shoreline_gdf)
+    assert equals_exact(result_skip_coords, expected_skip_coords)
