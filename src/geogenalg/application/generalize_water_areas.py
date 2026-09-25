@@ -325,9 +325,10 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 thin_sections.geometry.area > self.thin_section_min_size
             ].buffer(self.thin_section_exaggerate_by)
 
-            # Skip exaggerating near coordinates which should be preserved
+            # Skip exaggerating near sections which should be preserved
             thin_sections = thin_sections.loc[
-                thin_sections.geometry.disjoint(skip_coords)
+                thin_sections.geometry.disjoint(non_shoreline_segments.union_all())
+                & thin_sections.geometry.disjoint(skip_coords)
             ]
             # TODO: fix this issue by removing the generated overlap?
             # A straightforward intersection removal would move the edge however.
