@@ -425,7 +425,7 @@ class TestInputData:
 
     input_uri: GeoPackageInput | list[GeoPackageInput]
     """Path and layer for algorithm's input data."""
-    control_uri: GeoPackageInput | None
+    control_uri: GeoPackageInput | None = None
     """Path and layer for test's control data."""
     unique_id_column: str | None = None
     """Name of column in input and reference data to set as GeoDataFrame index."""
