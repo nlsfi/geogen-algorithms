@@ -432,6 +432,8 @@ class TestInputData:
     reference_uris: dict[str, GeoPackageInput] = field(default_factory=dict)
     """Paths and layers of algorithm's reference data."""
 
+    __test__ = False
+
     def read(
         self,
         *,
