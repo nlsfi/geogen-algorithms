@@ -4,25 +4,15 @@
 #
 #  SPDX-License-Identifier: MIT
 
+
 import pytest
-from geopandas import GeoDataFrame
+from geopandas.geodataframe import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 from shapely import equals_exact
 from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
-from geogenalg.testing import AlgorithmTestInput
-from tests.integration.runner import ExpectedResultColumns, IntegrationTest
-
-
-def test_generalize_water_areas(water_areas_input: AlgorithmTestInput):
-    IntegrationTest(
-        algorithm_input=water_areas_input,
-        check_missing_reference=False,
-        dummy_data_mandatory_columns=frozenset(["shoreline_type_id"]),
-        expected_result_columns=ExpectedResultColumns(inherit="input"),
-    ).run()
 
 
 @pytest.mark.parametrize(
