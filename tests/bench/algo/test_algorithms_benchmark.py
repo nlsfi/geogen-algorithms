@@ -17,6 +17,7 @@ from geogenalg.testing import GeoPackagePath, TestInputData
 from tests.bench.algo.runner import AlgorithmBenchmark
 
 
+@pytest.mark.benchmark
 def test_dissolve_polygons(
     benchmark: BenchmarkFixture,
     dissolve_polygons_input: TestInputData,
@@ -28,6 +29,7 @@ def test_dissolve_polygons(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_building_areas(
     benchmark: BenchmarkFixture,
     building_areas_input: TestInputData,
@@ -39,6 +41,7 @@ def test_generalize_building_areas(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_buildings_50k(
     benchmark: BenchmarkFixture,
     buildings_50k_input: TestInputData,
@@ -50,6 +53,7 @@ def test_generalize_buildings_50k(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_buildings_100k(
     benchmark: BenchmarkFixture,
     buildings_100k_input: TestInputData,
@@ -61,6 +65,7 @@ def test_generalize_buildings_100k(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_cliffs(
     benchmark: BenchmarkFixture,
     cliffs_input: TestInputData,
@@ -72,6 +77,7 @@ def test_generalize_cliffs(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_conservation_areas(
     benchmark: BenchmarkFixture,
     conservation_areas_input: TestInputData,
@@ -83,6 +89,7 @@ def test_generalize_conservation_areas(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_contours(
     benchmark: BenchmarkFixture,
     contours_input: TestInputData,
@@ -94,6 +101,7 @@ def test_generalize_contours(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_fences(
     benchmark: BenchmarkFixture,
     fences_input: TestInputData,
@@ -105,6 +113,7 @@ def test_generalize_fences(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_landcover(
     benchmark: BenchmarkFixture,
     landcover_input: TestInputData,
@@ -116,6 +125,7 @@ def test_generalize_landcover(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_polygons_to_points(
     benchmark: BenchmarkFixture,
     polygons_to_points_input: TestInputData,
@@ -127,6 +137,7 @@ def test_generalize_polygons_to_points(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_power_lines(
     benchmark: BenchmarkFixture,
     power_lines_input: TestInputData,
@@ -138,6 +149,7 @@ def test_generalize_power_lines(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_railroads(
     benchmark: BenchmarkFixture,
     railroads_input: TestInputData,
@@ -149,6 +161,7 @@ def test_generalize_railroads(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_roads(
     benchmark: BenchmarkFixture,
     roads_input: TestInputData,
@@ -160,6 +173,7 @@ def test_generalize_roads(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_shared_paths(
     benchmark: BenchmarkFixture,
     shared_paths_input: TestInputData,
@@ -171,6 +185,7 @@ def test_generalize_shared_paths(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_slopelines(
     benchmark: BenchmarkFixture,
     slopelines_input: TestInputData,
@@ -182,6 +197,7 @@ def test_generalize_slopelines(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_water_areas(
     benchmark: BenchmarkFixture,
     water_areas_input: TestInputData,
@@ -193,6 +209,7 @@ def test_generalize_water_areas(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 def test_generalize_watercourse_areas(
     benchmark: BenchmarkFixture,
     watercourse_areas_input: TestInputData,
@@ -204,6 +221,7 @@ def test_generalize_watercourse_areas(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 @pytest.mark.parametrize(
     ("layer_suffix"),
     [
@@ -238,6 +256,7 @@ def test_keep_intersection(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 @pytest.mark.parametrize(
     ("layer_suffix"),
     [
@@ -272,6 +291,7 @@ def test_remove_overlap(
     ).run(benchmark)
 
 
+@pytest.mark.benchmark
 @pytest.mark.parametrize(
     (
         "input_layer",
