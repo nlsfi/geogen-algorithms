@@ -21,6 +21,7 @@ from numpy import (  # noqa: SC200
     argmax,
     array,
     asarray,
+    bincount,
     column_stack,
     cos,
     degrees,
@@ -47,6 +48,7 @@ from shapely import (
     MultiPolygon,
     Point,
     Polygon,
+    STRtree,
     area,
     count_coordinates,
     force_2d,
@@ -342,9 +344,9 @@ def chaikin_smooth_conditional(
 
 
 def get_topological_points(
-    geoseries: GeoSeries,
+    input_data: GeoDataFrame | GeoSeries,
     *,
-    force_2d: bool = True,
+    force_to_2d: bool = True,
 ) -> list[Point]:
     """Find all topological points in a GeoSeries.
 
@@ -353,44 +355,38 @@ def get_topological_points(
 
     Args:
     ----
-        geoseries: The GeoSeries to find topological points in.
-        force_2d: Whether to find and return points as 2d geometries.
+        input_data: The GeoDataFrame or GeoSeries to find topological points in.
+        force_to_2d: Whether to find and return points as 2d geometries.
 
     Returns:
     -------
         List of all the topological points (if any).
 
-    Raises:
-    ------
-        GeometryOperationError: If union could not be performed on unique points
-        in the GeoSeries.
-
     """
-    if geoseries.empty:
+    if input_data.empty:
         return []
 
-    if force_2d:
-        unique_points = geoseries.force_2d().extract_unique_points().union_all()
-    else:
-        unique_points = geoseries.extract_unique_points().union_all()
+    if isinstance(input_data, GeoDataFrame):
+        input_data = input_data.geometry
 
-    if isinstance(unique_points, Point):
-        unique_points = MultiPoint([unique_points])
+    unique_points = input_data.extract_unique_points().union_all()
 
-    if not isinstance(unique_points, MultiPoint):
-        msg = "Unique points not a Point or a MultiPoint"
-        raise GeometryOperationError(msg)
+    if force_to_2d:
+        unique_points = force_2d(unique_points)
 
-    # TODO: maybe there's a faster way to do this
-    topo_points: list[Point] = []
-    for point in unique_points.geoms:
-        intersections = geoseries.intersects(point)
+    points = get_parts(unique_points)
+    if points.size == 0:
+        return []
 
-        # If there are more than 1 intersections
-        if len(intersections.loc[intersections]) > 1:
-            topo_points.append(point)
+    tree = STRtree(input_data)
+    point_indexes, _ = tree.query(points, predicate="intersects")
 
-    return topo_points
+    # Calculate how many times an index is present in the spatial tree query
+    # result (= how many other points each point intersects).
+    counts = bincount(point_indexes, minlength=points.size)
+
+    # Return points which intersect more than one other point.
+    return points[counts > 1].tolist()
 
 
 def chaikin_smooth_keep_topology(
