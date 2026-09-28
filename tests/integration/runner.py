@@ -17,11 +17,12 @@ import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 
+from geogenalg.application import BaseAlgorithm
 from geogenalg.core.exceptions import GeometryTypeError, MissingReferenceError
 from geogenalg.testing import (
-    AlgorithmTestInput,
     AssertFunctionParameter,
     TestGeoDataFrames,
+    TestInputData,
     TestReportWarning,
     assert_gdf_equal_save_diff,
     assert_geoseries_coordinates_equal,
@@ -58,7 +59,9 @@ DEFAULT_EXPECTED_RESULT_COLUMNS = ExpectedResultColumns()
 class IntegrationTest:
     """Class for defining an integration test for a specific algorithm."""
 
-    algorithm_input: AlgorithmTestInput
+    algorithm: BaseAlgorithm
+    """Algorithm to run."""
+    input_data: TestInputData
     """Object containing data describing where to read algorithm input data from."""
     check_missing_reference: bool
     """If True, test will check that algorithm will raise a MissingReferenceError."""
@@ -87,11 +90,11 @@ class IntegrationTest:
         """
 
         return get_test_gdfs(
-            input_uri=self.algorithm_input.input_uri,
-            control_uri=self.algorithm_input.control_uri,
-            alg=self.algorithm_input.algorithm,
-            unique_id_column=self.algorithm_input.unique_id_column,
-            reference_uris=self.algorithm_input.reference_uris,
+            input_uri=self.input_data.input_uri,
+            control_uri=self.input_data.control_uri,
+            alg=self.algorithm,
+            unique_id_column=self.input_data.unique_id_column,
+            reference_uris=self.input_data.reference_uris,
             rename_geometry=geometry_column,
         )
 
@@ -125,7 +128,7 @@ class IntegrationTest:
         if not dir_is_specific:
             tz = datetime.now().astimezone().tzinfo
             timestamp = datetime.now(tz=tz).strftime("%Y_%m_%d-%H_%M_%S")
-            prefix = self.algorithm_input.algorithm.__class__.__name__ + "_"
+            prefix = self.algorithm.__class__.__name__ + "_"
             report_dir /= f"{prefix}{timestamp}"
 
         try:
@@ -141,7 +144,7 @@ class IntegrationTest:
             ).resolve()
             warn(
                 "If the result is okay, you can make it the new control data by running: \n\n"
-                f"python {script_path} {report_dir}/result.gpkg {self.algorithm_input.control_uri.file}@{self.algorithm_input.control_uri.layer_name}\n\n",
+                f"python {script_path} {report_dir}/result.gpkg {self.input_data.control_uri.file}@{self.input_data.control_uri.layer_name}\n\n",
                 category=TestReportWarning,
                 stacklevel=1,
             )
@@ -156,12 +159,12 @@ class IntegrationTest:
             AssertionError: If a check fails.
 
         """
-        algorithm_before = deepcopy(self.algorithm_input.algorithm)
+        algorithm_before = deepcopy(self.algorithm)
 
         self._check_algorithm_passes_with_dummy_data()
         test_gdfs = self.get_test_gdfs()
 
-        assert self.algorithm_input.algorithm == algorithm_before
+        assert self.algorithm == algorithm_before
 
         self._check_columns(
             test_gdfs.input_data,
@@ -225,16 +228,16 @@ class IntegrationTest:
             with pytest.raises(
                 MissingReferenceError, match="Algorithm has required reference data key"
             ):
-                self.algorithm_input.algorithm.execute(test_gdfs.input_data)
+                self.algorithm.execute(test_gdfs.input_data)
 
         for string in GEOMETRY_TYPE_STRINGS:
-            if string in self.algorithm_input.algorithm.valid_input_geometry_types:
+            if string in self.algorithm.valid_input_geometry_types:
                 continue
 
             geom_type = geometry_string_to_type(string)
 
             with pytest.raises(GeometryTypeError):
-                self.algorithm_input.algorithm.execute(
+                self.algorithm.execute(
                     GeoDataFrame(geometry=[geom_type()]),
                 )
 
@@ -347,27 +350,25 @@ class IntegrationTest:
             attribute_data,
             index=[str(uuid4())],
             geometry=[
-                dummy_geometry(
-                    min(self.algorithm_input.algorithm.valid_input_geometry_types)
-                ),
+                dummy_geometry(min(self.algorithm.valid_input_geometry_types)),
             ],
             crs="EPSG:3857",
         )
 
         reference_data = {}
-        for key, ref in self.algorithm_input.algorithm.reference_data_schema.items():
+        for key, ref in self.algorithm.reference_data_schema.items():
             reference_attributes = {
                 column: [1] for column in self.dummy_reference_data_mandatory_columns
             }
             reference_attributes["reference_field_1"] = [1]
-            reference_data[getattr(self.algorithm_input.algorithm, key)] = GeoDataFrame(
+            reference_data[getattr(self.algorithm, key)] = GeoDataFrame(
                 reference_attributes,
                 index=[str(uuid4())],
                 geometry=[dummy_geometry(min(ref.valid_geometry_types))],
                 crs="EPSG:3857",
             )
 
-        result = self.algorithm_input.algorithm.execute(
+        result = self.algorithm.execute(
             data,
             reference_data,
         )

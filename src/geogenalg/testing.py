@@ -467,16 +467,14 @@ def dummy_geometry(geom_type: ShapelyGeometryTypeString) -> BaseGeometry:  # noq
 
 
 @dataclass(frozen=True, kw_only=True)
-class AlgorithmTestInput:
+class TestInputData:
     """Base class for defining tests which read data for an algorithm to run."""
 
     input_uri: GeoPackageInput | list[GeoPackageInput]
     """Path and layer for algorithm's input data."""
     control_uri: GeoPackageInput
     """Path and layer for test's control data."""
-    algorithm: BaseAlgorithm
-    """Algorithm instance."""
-    unique_id_column: str
+    unique_id_column: str | None = None
     """Name of column in input and reference data to set as GeoDataFrame index."""
     reference_uris: dict[str, GeoPackageInput] = field(default_factory=dict)
     """Paths and layers of algorithm's reference data."""
