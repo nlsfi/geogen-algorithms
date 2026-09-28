@@ -205,6 +205,9 @@ filterwarnings = [
     "ignore:Non-conformant content for record:RuntimeWarning",
 ]
 addopts = "--ignore=tests/bench"
+markers = [
+    "benchmark: test is a performance benchmark",
+]
 
 [tool.coverage.paths]
 source = ["src", "**/site-packages"]
