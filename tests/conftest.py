@@ -30,7 +30,7 @@ from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.application.generalize_watercourse_areas import (
     GeneralizeWaterCourseAreas,
 )
-from geogenalg.testing import AlgorithmTestInput, GeoPackagePath
+from geogenalg.testing import GeoPackagePath, TestInputData
 
 
 @pytest.fixture
@@ -39,44 +39,40 @@ def testdata_path() -> Path:
 
 
 @pytest.fixture
-def dissolve_polygons_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "dissolve_polygons.gpkg")
-    return AlgorithmTestInput(
+def algorithm_testdata_path(testdata_path: Path) -> Path:
+    return testdata_path / "algo"
+
+
+@pytest.fixture
+def bench_testdata_path(testdata_path: Path) -> Path:
+    return testdata_path / "bench"
+
+
+@pytest.fixture
+def dissolve_polygons_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "dissolve_polygons.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("data"),
         control_uri=gpkg.to_input("control"),
-        algorithm=DissolvePolygons(
-            hash_prefix="dissolvepolygons",
-            by_column=frozenset(),
-            inherit_from="most_intersection",
-        ),
         unique_id_column="id",
     )
 
 
 @pytest.fixture
-def building_areas_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "building_areas.gpkg")
-    return AlgorithmTestInput(
+def dissolve_polygons_algorithm() -> DissolvePolygons:
+    return DissolvePolygons(
+        hash_prefix="dissolvepolygons",
+        by_column=frozenset(),
+        inherit_from="most_intersection",
+    )
+
+
+@pytest.fixture
+def building_areas_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "building_areas.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("buildings"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeBuildingAreas(
-            building_size_filter_threshold=4000.0,
-            parcel_coverage_threshold=5.0,
-            parcel_buffer_distance=20.0,
-            building_filter_column="building_function_id",
-            classes_for_filtering=frozenset([1]),
-            buildings_simplify_tolerance=10.0,
-            roads_buffer_distance=10.0,
-            threshold_building_area_far=20000.0,
-            threshold_building_area_near=4000.0,
-            near_area_distance=50.0,
-            reference_key_parcels="parcels",
-            reference_key_roads="roads",
-            positive_buffer=10.0,
-            negative_buffer=-10.0,
-            simplification_tolerance=4.0,
-            hole_threshold=7500,
-        ),
         unique_id_column="mtk_id",
         reference_uris={
             "parcels": gpkg.to_input("parcels"),
@@ -86,59 +82,84 @@ def building_areas_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def buildings_50k_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "buildings.gpkg")
-    return AlgorithmTestInput(
+def building_areas_algorithm() -> GeneralizeBuildingAreas:
+    return GeneralizeBuildingAreas(
+        building_size_filter_threshold=4000.0,
+        parcel_coverage_threshold=5.0,
+        parcel_buffer_distance=20.0,
+        building_filter_column="building_function_id",
+        classes_for_filtering=frozenset([1]),
+        buildings_simplify_tolerance=10.0,
+        roads_buffer_distance=10.0,
+        threshold_building_area_far=20000.0,
+        threshold_building_area_near=4000.0,
+        near_area_distance=50.0,
+        reference_key_parcels="parcels",
+        reference_key_roads="roads",
+        positive_buffer=10.0,
+        negative_buffer=-10.0,
+        simplification_tolerance=4.0,
+        hole_threshold=7500,
+    )
+
+
+@pytest.fixture
+def buildings_50k_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "buildings.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("buildings"),
         control_uri=gpkg.to_input("control_50k"),
-        algorithm=GeneralizeBuildings(
-            point_size=15,
-            minimum_distance_to_isolated_building=200,
-            hole_threshold=75,
-            classes_for_low_priority_buildings=frozenset([6, 4]),
-            classes_for_point_buildings=frozenset([8]),
-            classes_for_always_kept_buildings=frozenset(),
-            building_class_column="kayttotarkoitus",
-            main_angle_column="main_angle",
-        ),
         unique_id_column="mtk_id",
     )
 
 
 @pytest.fixture
-def buildings_100k_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "buildings.gpkg")
-    return AlgorithmTestInput(
+def buildings_50k_algorithm() -> GeneralizeBuildings:
+    return GeneralizeBuildings(
+        point_size=15,
+        minimum_distance_to_isolated_building=200,
+        hole_threshold=75,
+        classes_for_low_priority_buildings=frozenset([6, 4]),
+        classes_for_point_buildings=frozenset([8]),
+        classes_for_always_kept_buildings=frozenset(),
+        building_class_column="kayttotarkoitus",
+        main_angle_column="main_angle",
+    )
+
+
+@pytest.fixture
+def buildings_100k_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "buildings.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("control_50k"),
         control_uri=gpkg.to_input("control_100k"),
-        algorithm=GeneralizeBuildings(
-            area_threshold_for_all_buildings=10,
-            area_threshold_for_low_priority_buildings=500,
-            side_threshold=70,
-            point_size=30,
-            minimum_distance_to_isolated_building=400,
-            hole_threshold=150,
-            classes_for_low_priority_buildings=frozenset([6, 4]),
-            classes_for_point_buildings=frozenset([8]),
-            classes_for_always_kept_buildings=frozenset(),
-            building_class_column="kayttotarkoitus",
-            main_angle_column="main_angle",
-        ),
         unique_id_column="mtk_id",
     )
 
 
 @pytest.fixture
-def cliffs_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "cliffs.gpkg")
-    return AlgorithmTestInput(
+def buildings_100k_algorithm() -> GeneralizeBuildings:
+    return GeneralizeBuildings(
+        area_threshold_for_all_buildings=10,
+        area_threshold_for_low_priority_buildings=500,
+        side_threshold=70,
+        point_size=30,
+        minimum_distance_to_isolated_building=400,
+        hole_threshold=150,
+        classes_for_low_priority_buildings=frozenset([6, 4]),
+        classes_for_point_buildings=frozenset([8]),
+        classes_for_always_kept_buildings=frozenset(),
+        building_class_column="kayttotarkoitus",
+        main_angle_column="main_angle",
+    )
+
+
+@pytest.fixture
+def cliffs_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "cliffs.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("cliffs_source"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeCliffs(
-            buffer_size=20.0,
-            length_threshold=50.0,
-            reference_key="roads",
-        ),
         unique_id_column="mtk_id",
         reference_uris={
             "roads": gpkg.to_input("roads"),
@@ -147,23 +168,20 @@ def cliffs_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def conservation_areas_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "conservation_areas.gpkg")
-    return AlgorithmTestInput(
+def cliffs_algorithm() -> GeneralizeCliffs:
+    return GeneralizeCliffs(
+        buffer_size=20.0,
+        length_threshold=50.0,
+        reference_key="roads",
+    )
+
+
+@pytest.fixture
+def conservation_areas_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "conservation_areas.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("conservation_areas"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeConservationAreas(
-            positive_buffer_coastal_areas=25,
-            negative_buffer_coastal_areas=-5,
-            positive_buffer_inland_areas=5,
-            negative_buffer_inland_areas=-5,
-            simplification_tolerance=3,
-            area_threshold=1000,
-            hole_threshold=2000,
-            smoothing=False,
-            group_by=frozenset(["layer"]),
-            reference_key="water_areas",
-        ),
         unique_id_column="mtk_id",
         reference_uris={
             "water_areas": gpkg.to_input("water_areas"),
@@ -172,18 +190,27 @@ def conservation_areas_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def contours_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "contours.gpkg")
-    return AlgorithmTestInput(
+def conservation_areas_algorithm() -> GeneralizeConservationAreas:
+    return GeneralizeConservationAreas(
+        positive_buffer_coastal_areas=25,
+        negative_buffer_coastal_areas=-5,
+        positive_buffer_inland_areas=5,
+        negative_buffer_inland_areas=-5,
+        simplification_tolerance=3,
+        area_threshold=1000,
+        hole_threshold=2000,
+        smoothing=False,
+        group_by=frozenset(["layer"]),
+        reference_key="water_areas",
+    )
+
+
+@pytest.fixture
+def contours_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "contours.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("contour"),
         control_uri=gpkg.to_input("contour_control"),
-        algorithm=GeneralizeContours(
-            interval=5,
-            gaussian_filter_strength=8,
-            length_threshold=200,
-            level_attribute="n60_elevation_value",
-            reference_key="slope_line",
-        ),
         unique_id_column="kmtk_id",
         reference_uris={
             "slope_line": gpkg.to_input("slope_line"),
@@ -192,20 +219,22 @@ def contours_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def fences_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "fences.gpkg")
-    return AlgorithmTestInput(
+def contours_algorithm() -> GeneralizeContours:
+    return GeneralizeContours(
+        interval=5,
+        gaussian_filter_strength=8,
+        length_threshold=200,
+        level_attribute="n60_elevation_value",
+        reference_key="slope_line",
+    )
+
+
+@pytest.fixture
+def fences_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "fences.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("fences"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeFences(
-            closing_fence_area_threshold=2000,
-            closing_fence_area_with_mast_threshold=8000,
-            fence_length_threshold=80,
-            fence_length_threshold_in_closed_area=300,
-            simplification_tolerance=4,
-            gap_threshold=25,
-            attribute_for_line_merge="kohdeluokka",
-        ),
         unique_id_column="mtk_id",
         reference_uris={
             "masts": gpkg.to_input("masts"),
@@ -214,55 +243,65 @@ def fences_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def landcover_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "landcover.gpkg")
+def fences_algorithm() -> GeneralizeFences:
+    return GeneralizeFences(
+        closing_fence_area_threshold=2000,
+        closing_fence_area_with_mast_threshold=8000,
+        fence_length_threshold=80,
+        fence_length_threshold_in_closed_area=300,
+        simplification_tolerance=4,
+        gap_threshold=25,
+        attribute_for_line_merge="kohdeluokka",
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def landcover_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "landcover.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("marsh"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeLandcover(
-            positive_buffer=25,
-            negative_buffer=-10,
-            simplification_tolerance=15,
-            area_threshold=5000,
-            hole_threshold=5000,
-            smoothing=True,
-            buffer_join_style="bevel",
-            group_by=frozenset(),
-        ),
         unique_id_column="mtk_id",
     )
 
 
 @pytest.fixture
-def polygons_to_points_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "polygons_to_points.gpkg")
+def landcover_algorithm() -> GeneralizeLandcover:
+    return GeneralizeLandcover(
+        positive_buffer=25,
+        negative_buffer=-10,
+        simplification_tolerance=15,
+        area_threshold=5000,
+        hole_threshold=5000,
+        smoothing=True,
+        buffer_join_style="bevel",
+        group_by=frozenset(),
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def polygons_to_points_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "polygons_to_points.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("boulders_in_water"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizePolygonsToPoints(polygon_min_area=1000.0),
         unique_id_column="kmtk_id",
     )
 
 
 @pytest.fixture
-def power_lines_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "power_lines.gpkg")
+def polygons_to_points_algorithm() -> GeneralizePolygonsToPoints:
+    return GeneralizePolygonsToPoints(
+        polygon_min_area=1000.0,
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def power_lines_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "power_lines.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("power_lines"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizePowerLines(
-            distance_threshold_for_parallel_lines=50.0,
-            classes_for_merge_parallel_lines=frozenset([22311]),
-            classes_for_higher_priority_lines=frozenset([22311]),
-            class_column="kohdeluokka",
-            length_threshold=100.0,
-            simplification_tolerance=0.0,
-            reference_key_fences="fences",
-            reference_key_substations="substations",
-        ),
         unique_id_column="mtk_id",
         reference_uris={
             "substations": gpkg.to_input("substations"),
@@ -272,34 +311,45 @@ def power_lines_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def railroads_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "railroads.gpkg")
+def power_lines_algorithm() -> GeneralizePowerLines:
+    return GeneralizePowerLines(
+        distance_threshold_for_parallel_lines=50.0,
+        classes_for_merge_parallel_lines=frozenset([22311]),
+        classes_for_higher_priority_lines=frozenset([22311]),
+        class_column="kohdeluokka",
+        length_threshold=100.0,
+        simplification_tolerance=0.0,
+        reference_key_fences="fences",
+        reference_key_substations="substations",
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def railroads_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "railroads.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("railroads"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeRailroads(
-            fan_minimum_length=400,
-            fan_rail_parallel_distance=6,
-            pack_cluster_length_threshold=200,
-            pack_track_maximum_length=1000,
-        ),
         unique_id_column="mtk_id",
     )
 
 
 @pytest.fixture
-def roads_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "roads.gpkg")
+def railroads_algorithm() -> GeneralizeRailroads:
+    return GeneralizeRailroads(
+        fan_minimum_length=400,
+        fan_rail_parallel_distance=6,
+        pack_cluster_length_threshold=200,
+        pack_track_maximum_length=1000,
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def roads_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "roads.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("road_link"),
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeRoads(
-            threshold_distance=10.0,
-            threshold_length=75.0,
-            reference_key="network",
-        ),
         unique_id_column="kmtk_id",
         reference_uris={
             "network": gpkg.to_input("path"),
@@ -308,17 +358,20 @@ def roads_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def shared_paths_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "roads.gpkg")
+def roads_algorithm() -> GeneralizeRoads:
+    return GeneralizeRoads(
+        threshold_distance=10.0,
+        threshold_length=75.0,
+        reference_key="network",
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def shared_paths_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "roads.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("shared_path_link"),
         control_uri=gpkg.to_input("control_shared_paths"),
-        algorithm=GeneralizeSharedPaths(
-            detection_distance=25.0,
-            minimum_percentage=90.0,
-            reference_key="roads",
-        ),
         unique_id_column="kmtk_id",
         # Use control from GeneralizeRoads test as reference, as these are intended
         # to be used sequentially.
@@ -329,16 +382,20 @@ def shared_paths_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def slopelines_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "contours.gpkg")
+def shared_paths_algorithm() -> GeneralizeSharedPaths:
+    return GeneralizeSharedPaths(
+        detection_distance=25.0,
+        minimum_percentage=90.0,
+        reference_key="roads",
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def slopelines_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "contours.gpkg")
+    return TestInputData(
         input_uri=gpkg.to_input("slope_line"),
         control_uri=gpkg.to_input("slope_line_control"),
-        algorithm=GeneralizeSlopeLines(
-            tolerance=1.0,
-            reference_key="contour_control",
-        ),
         unique_id_column="kmtk_id",
         reference_uris={
             "contour_control": gpkg.to_input("contour_control"),
@@ -347,61 +404,75 @@ def slopelines_input(testdata_path: Path) -> AlgorithmTestInput:
 
 
 @pytest.fixture
-def water_areas_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "water_areas.gpkg")
+def slopelines_algorithm() -> GeneralizeSlopeLines:
+    return GeneralizeSlopeLines(
+        tolerance=1.0,
+        reference_key="contour_control",
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def water_areas_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "water_areas.gpkg")
+    return TestInputData(
         input_uri=[
             gpkg.to_input("areas"),
             gpkg.to_input("shoreline"),
         ],
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeWaterAreas(
-            min_area=4000.0,
-            area_simplification_tolerance=10.0,
-            thin_section_width=20.0,
-            thin_section_min_size=200.0,
-            thin_section_exaggerate_by=3.0,
-            island_min_area=100.0,
-            island_min_width=185.0,
-            island_min_elongation=0.25,
-            island_exaggerate_by=3.0,
-            island_simplification_tolerance=10.0,
-            smoothing_passes=3,
-            preserve_shoreline_sections_column="shoreline_type_id",
-            preserve_shoreline_sections_values=frozenset([3]),
-        ),
         unique_id_column="kmtk_id",
     )
 
 
 @pytest.fixture
-def watercourse_areas_input(testdata_path: Path) -> AlgorithmTestInput:
-    gpkg = GeoPackagePath(testdata_path / "watercourse_areas.gpkg")
+def water_areas_algorithm() -> GeneralizeWaterAreas:
+    return GeneralizeWaterAreas(
+        min_area=4000.0,
+        area_simplification_tolerance=10.0,
+        thin_section_width=20.0,
+        thin_section_min_size=200.0,
+        thin_section_exaggerate_by=3.0,
+        island_min_area=100.0,
+        island_min_width=185.0,
+        island_min_elongation=0.25,
+        island_exaggerate_by=3.0,
+        island_simplification_tolerance=10.0,
+        smoothing_passes=3,
+        preserve_shoreline_sections_column="shoreline_type_id",
+        preserve_shoreline_sections_values=frozenset([3]),
+    )
 
-    return AlgorithmTestInput(
+
+@pytest.fixture
+def watercourse_areas_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "watercourse_areas.gpkg")
+    return TestInputData(
         input_uri=[
             gpkg.to_input("watercourse_part_area"),
             gpkg.to_input("shoreline"),
         ],
         control_uri=gpkg.to_input("control"),
-        algorithm=GeneralizeWaterCourseAreas(
-            min_area=4000.0,
-            area_simplification_tolerance=10.0,
-            thin_section_width=20.0,
-            thin_section_min_size=200.0,
-            thin_section_exaggerate_by=0.0,
-            island_min_area=100.0,
-            island_min_width=185.0,
-            island_min_elongation=0.25,
-            island_exaggerate_by=3.0,
-            island_simplification_tolerance=10.0,
-            smoothing_passes=3,
-            line_transform_width=30.0,
-            line_min_length=200.0,
-            min_new_section_length=200.0,
-            width_check_distance=10.0,
-            feature_type_column="feature_type",
-        ),
         unique_id_column="kmtk_id",
+    )
+
+
+@pytest.fixture
+def watercourse_areas_algorithm() -> GeneralizeWaterCourseAreas:
+    return GeneralizeWaterCourseAreas(
+        min_area=4000.0,
+        area_simplification_tolerance=10.0,
+        thin_section_width=20.0,
+        thin_section_min_size=200.0,
+        thin_section_exaggerate_by=0.0,
+        island_min_area=100.0,
+        island_min_width=185.0,
+        island_min_elongation=0.25,
+        island_exaggerate_by=3.0,
+        island_simplification_tolerance=10.0,
+        smoothing_passes=3,
+        line_transform_width=30.0,
+        line_min_length=200.0,
+        min_new_section_length=200.0,
+        width_check_distance=10.0,
+        feature_type_column="feature_type",
     )
