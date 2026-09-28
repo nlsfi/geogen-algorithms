@@ -204,7 +204,10 @@ filterwarnings = [
     # Occurs in pyogrio (or really GDAL), caused by test data having timestamps with non-UTC timezone.
     "ignore:Non-conformant content for record:RuntimeWarning",
 ]
-addopts = "--ignore=tests/bench"
+addopts = [
+    "--ignore=tests/bench",
+    "--benchmark-group-by=param",
+]
 markers = [
     "benchmark: test is a performance benchmark",
 ]
