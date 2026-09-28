@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory, gettempdir
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 from warnings import warn
 
-from geopandas import GeoDataFrame
+from geopandas import GeoDataFrame, read_file
 from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from numpy import allclose
@@ -293,13 +293,14 @@ def get_alg_results_from_geopackage(
     )
 
 
-def read_algorithm_data(
+def read_test_input_data(
     input_uri: GeoPackageInput | list[GeoPackageInput],
-    unique_id_column: str,
+    control_uri: GeoPackageInput | None,
+    unique_id_column: str | None,
     reference_uris: dict[str, GeoPackageInput] | None = None,
     *,
-    rename_geometry: str | None = None,
-) -> tuple[GeoDataFrame, dict[str, GeoDataFrame]]:
+    rename_input_geometry: str | None = None,
+) -> tuple[GeoDataFrame, GeoDataFrame | None, dict[str, GeoDataFrame]]:
     """Read algorithm input and reference data from files.
 
     Args:
@@ -311,9 +312,9 @@ def read_algorithm_data(
         reference_uris: Dictionary of GeoPackageURIs, which is used to
             construct matching reference_data dictionary to pass to algorithm's
             execute function.
-        rename_geometry: If not None, rename the geometry column of input and reference
-            GeoDataFrames. This can be used to test that an algorithm produces the
-            same results with different geometry column names.
+        rename_input_geometry: If not None, rename the geometry column of input
+            and reference GeoDataFrames. This can be used to test that an algorithm
+            produces the same results with different geometry column names.
 
     Returns:
     -------
@@ -321,19 +322,27 @@ def read_algorithm_data(
 
     """
 
-    def _read_gdf(uri: GeoPackageInput) -> GeoDataFrame:
-        if rename_geometry is None:
-            return read_gdf_from_file_and_set_index(
+    def _read_func(uri: GeoPackageInput) -> GeoDataFrame:
+        return (
+            read_file(
+                uri.file,
+                layer=uri.layer_name,
+            )
+            if unique_id_column is None
+            else read_gdf_from_file_and_set_index(
                 uri.file,
                 unique_id_column,
                 layer=uri.layer_name,
             )
+        )
 
-        return read_gdf_from_file_and_set_index(
-            uri.file,
-            unique_id_column,
-            layer=uri.layer_name,
-        ).rename_geometry(rename_geometry, inplace=False)
+    def _read_gdf(uri: GeoPackageInput) -> GeoDataFrame:
+        gdf = _read_func(uri)
+
+        if rename_input_geometry is None:
+            return gdf
+
+        return gdf.rename_geometry(rename_input_geometry, inplace=False)
 
     reference_data = {}
     if reference_uris is not None:
@@ -346,7 +355,9 @@ def read_algorithm_data(
     else:
         input_data = _read_gdf(input_uri)
 
-    return input_data, reference_data
+    control = _read_func(control_uri) if control_uri is not None else None
+
+    return input_data, control, reference_data
 
 
 def get_test_gdfs(  # noqa: PLR0913
@@ -356,7 +367,7 @@ def get_test_gdfs(  # noqa: PLR0913
     unique_id_column: str,
     reference_uris: dict[str, GeoPackageInput] | None = None,
     *,
-    rename_geometry: str | None = None,
+    rename_input_geometry: str | None = None,
 ) -> TestGeoDataFrames:
     """Get input, reference, result and control GeoDataFrame.
 
@@ -369,21 +380,30 @@ def get_test_gdfs(  # noqa: PLR0913
         reference_uris: Dictionary of GeoPackageURIs, which is used to
             construct matching reference_data dictionary to pass to algorithm's
             execute function.
-        rename_geometry: If not None, rename the geometry column of input and reference
-            GeoDataFrames. This can be used to test that an algorithm produces the
-            same results with different geometry column names.
+        rename_input_geometry: If not None, rename the geometry column of input
+            and reference GeoDataFrames. This can be used to test that an algorithm
+            produces the same results with different geometry column names.
 
     Returns:
     -------
         Input, input before, reference, result and control GeoDataFrames, in that order.
 
+    Raises:
+    ------
+        ValueError: If control data is None.
+
     """
-    input_data, reference_data = read_algorithm_data(
+    input_data, control, reference_data = read_test_input_data(
         input_uri,
+        control_uri,
         unique_id_column,
         reference_uris,
-        rename_geometry=rename_geometry,
+        rename_input_geometry=rename_input_geometry,
     )
+
+    if control is None:
+        msg = "Could not read control data correctly."
+        raise ValueError(msg)
 
     input_data_before = input_data.copy()
     reference_data_before = {key: data.copy() for key, data in reference_data.items()}
@@ -393,12 +413,6 @@ def get_test_gdfs(  # noqa: PLR0913
         input_data,
         unique_id_column,
         reference_data,
-    )
-
-    control = read_gdf_from_file_and_set_index(
-        control_uri.file,
-        unique_id_column,
-        layer=control_uri.layer_name,
     )
 
     return TestGeoDataFrames(
@@ -472,9 +486,31 @@ class TestInputData:
 
     input_uri: GeoPackageInput | list[GeoPackageInput]
     """Path and layer for algorithm's input data."""
-    control_uri: GeoPackageInput
+    control_uri: GeoPackageInput | None
     """Path and layer for test's control data."""
     unique_id_column: str | None = None
     """Name of column in input and reference data to set as GeoDataFrame index."""
     reference_uris: dict[str, GeoPackageInput] = field(default_factory=dict)
     """Paths and layers of algorithm's reference data."""
+
+    def read_data(
+        self,
+    ) -> tuple[
+        GeoDataFrame,
+        GeoDataFrame | None,
+        dict[str, GeoDataFrame],
+    ]:
+        """Read test input data from files.
+
+        Returns
+        -------
+            Input GeoDataFrame, control GeoDataFrame (if given, else None), dictionary
+            of reference GeoDataFrames.
+
+        """
+        return read_test_input_data(
+            self.input_uri,
+            self.control_uri,
+            self.unique_id_column,
+            self.reference_uris,
+        )

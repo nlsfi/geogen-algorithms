@@ -87,7 +87,19 @@ class IntegrationTest:
         -------
             All GeoDataFrames used in the test.
 
+        Raises:
+        ------
+            ValueError: if control or unique id column are None.
+
         """
+
+        if self.input_data.control_uri is None:
+            msg = "Integration test must have a valid control input."
+            raise ValueError(msg)
+
+        if self.input_data.unique_id_column is None:
+            msg = "Integration test must have a valid unique id column."
+            raise ValueError(msg)
 
         return get_test_gdfs(
             input_uri=self.input_data.input_uri,
@@ -95,7 +107,7 @@ class IntegrationTest:
             alg=self.algorithm,
             unique_id_column=self.input_data.unique_id_column,
             reference_uris=self.input_data.reference_uris,
-            rename_geometry=geometry_column,
+            rename_input_geometry=geometry_column,
         )
 
     def _assert_and_save_report(
