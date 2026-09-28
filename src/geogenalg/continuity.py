@@ -467,8 +467,8 @@ def flag_connections(
     n = len(input_gdf)
 
     gdf = input_gdf.copy()
-    gdf[start_connected_column] = bincount(start_indexes, minlength=n) - 1
-    gdf[end_connected_column] = bincount(end_indexes, minlength=n) - 1
+    gdf[start_connected_column] = bincount(start_indexes, minlength=n) > 1
+    gdf[end_connected_column] = bincount(end_indexes, minlength=n) > 1
 
     return gdf
 
@@ -499,23 +499,42 @@ def flag_connections_to_reference(
         connected to the reference dataset, if any.
 
     """
-    reference_union = reference_gdf.union_all()
+    if input_gdf.empty:
+        return copy_gdf_as_empty(
+            input_gdf,
+            add_columns={
+                start_connected_column: "bool",
+                end_connected_column: "bool",
+            },
+        )
 
-    def _is_start_connected(geom: LineString) -> bool:
-        return Point(geom.coords[0]).intersects(reference_union)
+    if reference_gdf.empty:
+        return copy_gdf_as_empty(
+            input_gdf,
+            add_columns={
+                start_connected_column: "bool",
+                end_connected_column: "bool",
+            },
+        )
 
-    def _is_end_connected(geom: LineString) -> bool:
-        return Point(geom.coords[-1]).intersects(reference_union)
+    in_geoms = input_gdf.geometry.to_numpy()
+    reference_geoms = reference_gdf.geometry.to_numpy()
+
+    start_points = get_point(in_geoms, 0)
+    end_points = get_point(in_geoms, -1)
+
+    tree = STRtree(reference_geoms)
+
+    start_indexes, _ = tree.query(start_points, predicate="intersects")
+    end_indexes, _ = tree.query(end_points, predicate="intersects")
+
+    n = len(input_gdf)
+    start_connected = bincount(start_indexes, minlength=n) > 0
+    end_connected = bincount(end_indexes, minlength=n) > 0
 
     gdf = input_gdf.copy()
-    gdf[start_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[0]))
-    gdf[end_connected_column] = gdf.geometry.apply(lambda geom: Point(geom.coords[-1]))
-    gdf[start_connected_column] = Series(
-        gdf[start_connected_column].intersects(reference_union)
-    )
-    gdf[end_connected_column] = Series(
-        gdf[end_connected_column].intersects(reference_union)
-    )
+    gdf[start_connected_column] = start_connected
+    gdf[end_connected_column] = end_connected
 
     return gdf
 
