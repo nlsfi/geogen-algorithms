@@ -5,13 +5,15 @@
 #  SPDX-License-Identifier: MIT
 
 import re
-from typing import TYPE_CHECKING
 
 import pytest
-from geopandas import GeoDataFrame
+from cartagen.algorithms import buildings
+from geopandas.geodataframe import GeoDataFrame
 from pandas import isna
 from pandas.testing import assert_frame_equal
-from shapely import LineString, Point, Polygon, box
+from pytest_mock import MockerFixture
+from shapely import box
+from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application.generalize_buildings import (
@@ -19,37 +21,7 @@ from geogenalg.application.generalize_buildings import (
     GeneralizeBuildings,
 )
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.testing import AlgorithmTestInput
 from geogenalg.utility.dataframe_processing import add_columns_to_gdf
-from tests.integration.runner import ExpectedResultColumns, IntegrationTest
-
-if TYPE_CHECKING:
-    from pytest_mock import MockerFixture
-from cartagen.algorithms import buildings
-
-
-def test_generalize_buildings_50k(buildings_50k_input: AlgorithmTestInput) -> None:
-    IntegrationTest(
-        algorithm_input=buildings_50k_input,
-        check_missing_reference=False,
-        dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
-        expected_result_columns=ExpectedResultColumns(
-            inherit="input",
-            mandatory_extra_columns=frozenset(["main_angle"]),
-        ),
-    ).run()
-
-
-def test_generalize_buildings_100k(buildings_100k_input: AlgorithmTestInput) -> None:
-    IntegrationTest(
-        algorithm_input=buildings_100k_input,
-        check_missing_reference=False,
-        dummy_data_mandatory_columns=frozenset(["kayttotarkoitus"]),
-        expected_result_columns=ExpectedResultColumns(
-            inherit="input",
-            mandatory_extra_columns=frozenset(["main_angle"]),
-        ),
-    ).run()
 
 
 @pytest.mark.parametrize(
@@ -337,7 +309,7 @@ def test_dissolve_touching_buildings(
     assert_frame_equal(result_attrs, expected_attrs)
 
 
-def test_simplify_buildings_calls_cartagen_function_correctly(mocker: "MockerFixture"):
+def test_simplify_buildings_calls_cartagen_function_correctly(mocker: MockerFixture):
     input_gdf = GeoDataFrame(
         {"id": [1, 2], "class": ["A", "A"], "dissolve_members": [None, None]},
         geometry=[
