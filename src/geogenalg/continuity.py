@@ -25,7 +25,11 @@ from geogenalg.core.geometry import (
     get_topological_points,
     smooth_around_connection_point_of_two_lines,
 )
-from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
+from geogenalg.utility.dataframe_processing import (
+    add_columns_to_gdf,
+    combine_gdfs,
+    copy_gdf_as_empty,
+)
 
 
 def find_all_endpoints(
@@ -509,7 +513,7 @@ def flag_connections_to_reference(
         )
 
     if reference_gdf.empty:
-        return copy_gdf_as_empty(
+        return add_columns_to_gdf(
             input_gdf,
             add_columns={
                 start_connected_column: "bool",
