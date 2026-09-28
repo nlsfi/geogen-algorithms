@@ -54,6 +54,11 @@ def line_network_input(bench_testdata_path: Path) -> GeoPackagePath:
 
 
 @pytest.fixture
+def line_network_with_reference_input(bench_testdata_path: Path) -> GeoPackagePath:
+    return GeoPackagePath(file=bench_testdata_path / "line_network_with_reference.gpkg")
+
+
+@pytest.fixture
 def dissolve_polygons_input(algorithm_testdata_path: Path) -> TestInputData:
     gpkg = GeoPackagePath(algorithm_testdata_path / "dissolve_polygons.gpkg")
     return TestInputData(
