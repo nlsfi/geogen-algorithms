@@ -391,7 +391,7 @@ def test_get_test_gdfs(
         MockAlg(mock_attribute="result"),
         "id",
         reference_uris={"ref": ref_path},
-        rename_geometry=geometry_column,
+        rename_input_geometry=geometry_column,
     )
 
     assert_geodataframe_equal(input_data.set_index("id"), input_before)
