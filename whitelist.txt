@@ -13,6 +13,7 @@ atol
 basealgorithm
 basemetadata
 bbox
+bincount
 boffet
 bools
 cartagen
@@ -71,6 +72,7 @@ linemerge
 linestring
 linestrings
 loc
+minlength
 multigeometries
 multilinestring
 multipolygon
@@ -89,6 +91,7 @@ rdp
 rect
 rglob
 rtol
+Rtree
 ruas
 segmentize
 segmentized
