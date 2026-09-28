@@ -260,7 +260,7 @@ def assert_gdf_equal_save_diff(  # noqa: C901
 def get_alg_results_from_geopackage(
     alg: BaseAlgorithm,
     input_data: GeoDataFrame,
-    unique_id_column: str,
+    unique_id_column: str | None,
     reference_data: dict[str, GeoDataFrame] | None = None,
 ) -> GeoDataFrame:
     """Execute algorithm, write to and read from GeoPackage.
@@ -286,10 +286,14 @@ def get_alg_results_from_geopackage(
 
     alg.execute(input_data, reference_data).to_file(output_path, layer="result")
 
-    return read_gdf_from_file_and_set_index(
-        output_path,
-        unique_id_column,
-        layer="result",
+    return (
+        read_gdf_from_file_and_set_index(
+            output_path,
+            unique_id_column,
+            layer="result",
+        )
+        if unique_id_column is not None
+        else read_file(output_path, layer="result")
     )
 
 
@@ -360,71 +364,6 @@ def read_test_input_data(
     return input_data, control, reference_data
 
 
-def get_test_gdfs(  # noqa: PLR0913
-    input_uri: GeoPackageInput | list[GeoPackageInput],
-    control_uri: GeoPackageInput,
-    alg: BaseAlgorithm,
-    unique_id_column: str,
-    reference_uris: dict[str, GeoPackageInput] | None = None,
-    *,
-    rename_input_geometry: str | None = None,
-) -> TestGeoDataFrames:
-    """Get input, reference, result and control GeoDataFrame.
-
-    Args:
-    ----
-        input_uri: Object pointing to input dataset(s) and the correct layer(s) therein.
-        control_uri: Object pointing to control dataset and the correct layer therein.
-        alg: Instance of an algorithm to execute.
-        unique_id_column: Column to set as GeoDataFrame index.
-        reference_uris: Dictionary of GeoPackageURIs, which is used to
-            construct matching reference_data dictionary to pass to algorithm's
-            execute function.
-        rename_input_geometry: If not None, rename the geometry column of input
-            and reference GeoDataFrames. This can be used to test that an algorithm
-            produces the same results with different geometry column names.
-
-    Returns:
-    -------
-        Input, input before, reference, result and control GeoDataFrames, in that order.
-
-    Raises:
-    ------
-        ValueError: If control data is None.
-
-    """
-    input_data, control, reference_data = read_test_input_data(
-        input_uri,
-        control_uri,
-        unique_id_column,
-        reference_uris,
-        rename_input_geometry=rename_input_geometry,
-    )
-
-    if control is None:
-        msg = "Could not read control data correctly."
-        raise ValueError(msg)
-
-    input_data_before = input_data.copy()
-    reference_data_before = {key: data.copy() for key, data in reference_data.items()}
-
-    result = get_alg_results_from_geopackage(
-        alg,
-        input_data,
-        unique_id_column,
-        reference_data,
-    )
-
-    return TestGeoDataFrames(
-        input_data,
-        input_data_before,
-        reference_data,
-        reference_data_before,
-        result,
-        control,
-    )
-
-
 def dummy_geometry(geom_type: ShapelyGeometryTypeString) -> BaseGeometry:  # noqa: PLR0911
     """Give dummy geometry for testing purposes according to given type.
 
@@ -493,24 +432,112 @@ class TestInputData:
     reference_uris: dict[str, GeoPackageInput] = field(default_factory=dict)
     """Paths and layers of algorithm's reference data."""
 
-    def read_data(
+    def read(
         self,
-    ) -> tuple[
-        GeoDataFrame,
-        GeoDataFrame | None,
-        dict[str, GeoDataFrame],
-    ]:
-        """Read test input data from files.
+        *,
+        rename_input_geometry: str | None = None,
+    ) -> tuple[GeoDataFrame, GeoDataFrame | None, dict[str, GeoDataFrame]]:
+        """Read algorithm input and reference data from files.
 
-        Returns
+        Args:
+        ----
+            rename_input_geometry: If not None, rename the geometry column of input
+                and reference GeoDataFrames. This can be used to test that an algorithm
+                produces the same results with different geometry column names.
+
+        Returns:
         -------
-            Input GeoDataFrame, control GeoDataFrame (if given, else None), dictionary
-            of reference GeoDataFrames.
+            Algorithm input data and reference data dictionary.
 
         """
-        return read_test_input_data(
-            self.input_uri,
-            self.control_uri,
-            self.unique_id_column,
-            self.reference_uris,
-        )
+
+        def _read_func(uri: GeoPackageInput) -> GeoDataFrame:
+            return (
+                read_file(
+                    uri.file,
+                    layer=uri.layer_name,
+                )
+                if self.unique_id_column is None
+                else read_gdf_from_file_and_set_index(
+                    uri.file,
+                    self.unique_id_column,
+                    layer=uri.layer_name,
+                )
+            )
+
+        def _read_gdf(uri: GeoPackageInput) -> GeoDataFrame:
+            gdf = _read_func(uri)
+
+            if rename_input_geometry is None:
+                return gdf
+
+            return gdf.rename_geometry(rename_input_geometry, inplace=False)
+
+        reference_data = {}
+        if self.reference_uris is not None:
+            for key, uri in self.reference_uris.items():
+                reference_data[key] = _read_gdf(uri)
+
+        if isinstance(self.input_uri, list):
+            gdfs = [_read_gdf(uri) for uri in self.input_uri]
+            input_data = combine_gdfs(gdfs)
+        else:
+            input_data = _read_gdf(self.input_uri)
+
+        control = _read_func(self.control_uri) if self.control_uri is not None else None
+
+        return input_data, control, reference_data
+
+
+def get_test_gdfs(
+    test_input: TestInputData,
+    alg: BaseAlgorithm,
+    *,
+    rename_input_geometry: str | None = None,
+) -> TestGeoDataFrames:
+    """Get input, reference, result and control GeoDataFrame.
+
+    Args:
+    ----
+        test_input: Object pointing to input dataset(s) and the correct
+            layer(s) therein.
+        alg: Instance of an algorithm to execute.
+        rename_input_geometry: If not None, rename the geometry column of input
+            and reference GeoDataFrames. This can be used to test that an algorithm
+            produces the same results with different geometry column names.
+
+    Returns:
+    -------
+        Input, input before, reference, result and control GeoDataFrames, in that order.
+
+    Raises:
+    ------
+        ValueError: If control data is None.
+
+    """
+    input_data, control, reference_data = test_input.read(
+        rename_input_geometry=rename_input_geometry,
+    )
+
+    if control is None:
+        msg = "Could not read control data correctly."
+        raise ValueError(msg)
+
+    input_data_before = input_data.copy()
+    reference_data_before = {key: data.copy() for key, data in reference_data.items()}
+
+    result = get_alg_results_from_geopackage(
+        alg,
+        input_data,
+        test_input.unique_id_column,
+        reference_data,
+    )
+
+    return TestGeoDataFrames(
+        input_data,
+        input_data_before,
+        reference_data,
+        reference_data_before,
+        result,
+        control,
+    )

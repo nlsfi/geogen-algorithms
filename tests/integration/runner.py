@@ -102,11 +102,8 @@ class IntegrationTest:
             raise ValueError(msg)
 
         return get_test_gdfs(
-            input_uri=self.input_data.input_uri,
-            control_uri=self.input_data.control_uri,
+            self.input_data,
             alg=self.algorithm,
-            unique_id_column=self.input_data.unique_id_column,
-            reference_uris=self.input_data.reference_uris,
             rename_input_geometry=geometry_column,
         )
 
