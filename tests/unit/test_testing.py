@@ -23,6 +23,7 @@ from geogenalg.application import (
 )
 from geogenalg.testing import (
     GeoPackageInput,
+    TestInputData,
     TestReportWarning,
     assert_gdf_equal_save_diff,
     assert_geoseries_coordinates_equal,
@@ -386,11 +387,13 @@ def test_get_test_gdfs(
     control_data.to_file(control_path.file, layer=control_path.layer_name)
 
     other_input, input_before, other_ref, ref_before, result, control = get_test_gdfs(
-        input_path,
-        control_path,
+        TestInputData(
+            input_uri=input_path,
+            control_uri=control_path,
+            unique_id_column="id",
+            reference_uris={"ref": ref_path},
+        ),
         MockAlg(mock_attribute="result"),
-        "id",
-        reference_uris={"ref": ref_path},
         rename_input_geometry=geometry_column,
     )
 
