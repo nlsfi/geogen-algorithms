@@ -11,8 +11,9 @@ from warnings import warn
 
 from geopandas import GeoDataFrame
 from networkx.classes.graph import Graph
+from numpy import bincount
 from pandas import Series
-from shapely import force_2d, get_point
+from shapely import STRtree, force_2d, get_point
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
@@ -444,28 +445,30 @@ def flag_connections(
         connected to the reference dataset, if any.
 
     """
-    topological_points = get_topological_points(input_gdf.geometry)
+    if input_gdf.empty:
+        return copy_gdf_as_empty(
+            input_gdf,
+            add_columns={
+                start_connected_column: "bool",
+                end_connected_column: "bool",
+            },
+        )
 
-    # TODO: refactor to use count_connections()? (should be more efficient)
-    # or do a similar implementation?
+    geoms = input_gdf.geometry.to_numpy()
+
+    start_points = get_point(geoms, 0)
+    end_points = get_point(geoms, -1)
+
+    tree = STRtree(geoms)
+
+    start_indexes, _ = tree.query(start_points, predicate="intersects")
+    end_indexes, _ = tree.query(end_points, predicate="intersects")
+
+    n = len(input_gdf)
 
     gdf = input_gdf.copy()
-    gdf[start_connected_column] = gdf.geometry.apply(
-        lambda geom: force_2d(Point(geom.coords[0]))
-    )
-    gdf[end_connected_column] = gdf.geometry.apply(
-        lambda geom: force_2d(Point(geom.coords[-1]))
-    )
-    gdf[start_connected_column] = Series(
-        gdf[start_connected_column].apply(
-            lambda geom: geom in topological_points,
-        )
-    )
-    gdf[end_connected_column] = Series(
-        gdf[end_connected_column].apply(
-            lambda geom: geom in topological_points,
-        )
-    )
+    gdf[start_connected_column] = bincount(start_indexes, minlength=n) - 1
+    gdf[end_connected_column] = bincount(end_indexes, minlength=n) - 1
 
     return gdf
 
@@ -1015,7 +1018,7 @@ def smooth_linestring_connections(
     # unique index for assigning smoothed geometry
     gdf = gdf.reset_index(drop=True)
 
-    points = get_topological_points(input_gdf.geometry, force_2d=False)
+    points = get_topological_points(input_gdf, force_to_2d=False)
 
     for point in points:
         intersecting_lines = gdf.loc[gdf.geometry.intersects(point)]
@@ -1062,32 +1065,33 @@ def count_connections(
         GeoDataFrame with Series added, telling how many connections each line end is
         connected to.
 
-    Raises:
-    ------
-        ValueError: If there are duplicate indices in the input GeoDataFrame.
-
     """
-    if input_gdf.index.has_duplicates:
-        msg = "Input GeoDataFrame cannot have duplicate indices."
-        raise ValueError(msg)
+    if input_gdf.empty:
+        return copy_gdf_as_empty(
+            input_gdf,
+            add_columns={
+                start_connections_column: "int64",
+                end_connections_column: "int64",
+            },
+        )
 
-    start = input_gdf.geometry.apply(lambda geom: Point(geom.coords[0])).to_frame()
-    end = input_gdf.geometry.apply(lambda geom: Point(geom.coords[-1])).to_frame()
+    geoms = input_gdf.geometry.to_numpy()
 
-    start_count = cast("GeoDataFrame", start.sjoin(input_gdf))
-    end_count = cast("GeoDataFrame", end.sjoin(input_gdf))
+    start_points = get_point(geoms, 0)
+    end_points = get_point(geoms, -1)
 
-    index = "index_"
+    tree = STRtree(geoms)
 
-    start_count[index] = start_count.index
-    end_count[index] = end_count.index
+    start_indexes, _ = tree.query(start_points, predicate="intersects")
+    end_indexes, _ = tree.query(end_points, predicate="intersects")
 
-    start_count = start_count.groupby(index).size().to_frame()
-    end_count = end_count.groupby(index).size().to_frame()
+    n = len(input_gdf)
+    start_counts = bincount(start_indexes, minlength=n) - 1
+    end_counts = bincount(end_indexes, minlength=n) - 1
 
     gdf = input_gdf.copy()
-    gdf[start_connections_column] = start_count[0] - 1
-    gdf[end_connections_column] = end_count[0] - 1
+    gdf[start_connections_column] = start_counts
+    gdf[end_connections_column] = end_counts
 
     return gdf
 
