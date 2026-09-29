@@ -63,6 +63,7 @@ from geogenalg.core.geometry import (
     extract_interior_rings_gdf,
     get_connected_segments,
     get_connected_unit_vectors,
+    get_line_connection_points,
     get_topological_points,
     insert_vertex,
     largest_part,
@@ -4064,3 +4065,87 @@ def test_create_crossing_line_at_vertex(
     assert create_crossing_line_at_vertex(geom, point, length=length).equals_exact(
         expected, tolerance=0.5
     )
+
+
+@pytest.mark.parametrize(
+    ("input_data", "precision", "expected"),
+    [
+        pytest.param(
+            GeoDataFrame(geometry=[]),
+            6,
+            [],
+            id="empty_gdf",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 1)])],
+            ),
+            6,
+            [],
+            id="single_line",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[LineString([(0, 0), (1, 1), (0, 0)])],
+            ),
+            6,
+            [],
+            id="closed_line",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 1)]),
+                    LineString([(1, 1), (2, 2)]),
+                ],
+            ),
+            6,
+            [Point(1, 1)],
+            id="two_connected",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1, 1)]),
+                    LineString([(1, 1), (2, 2)]),
+                    LineString([(1, 1), (3, 3)]),
+                ],
+            ),
+            6,
+            [Point(1, 1)],
+            id="three_connected",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0.0000001), (1, 1)]),
+                    LineString([(0, 0.0000002), (2, 2)]),
+                ],
+            ),
+            6,
+            [Point(0, 0)],
+            id="precision_matches",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0.0000001), (1, 1)]),
+                    LineString([(0, 0.0000002), (2, 2)]),
+                ],
+            ),
+            None,
+            [],
+            id="precision_does_not_match",
+        ),
+    ],
+)
+def test_get_line_connection_points(
+    input_data: GeoDataFrame,
+    precision: int | None,
+    expected: list[Point],
+):
+    result = get_line_connection_points(input_data, precision=precision)
+    assert len(result) == len(expected)
+
+    for i in range(len(result)):
+        assert result[i].equals_exact(expected[i])

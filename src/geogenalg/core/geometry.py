@@ -17,16 +17,19 @@ from warnings import warn
 from geopandas import GeoDataFrame, GeoSeries
 from numpy import (  # noqa: SC200
     append,
+    arange,
     arctan2,
     argmax,
     array,
     array_equal,
     asarray,
-    bincount,
+    ascontiguousarray,
     column_stack,
     concatenate,
     cos,
+    cumsum,
     degrees,
+    dtype,
     empty,
     float64,
     fromiter,
@@ -36,10 +39,14 @@ from numpy import (  # noqa: SC200
     sin,
     sqrt,
     stack,
+    tile,
+    unique,
+    void,
     vstack,
     where,
     zeros,
 )
+from numpy import round as np_round
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -50,18 +57,20 @@ from shapely import (
     MultiPolygon,
     Point,
     Polygon,
-    STRtree,
     area,
     count_coordinates,
     force_2d,
     force_3d,
     get_coordinates,
+    get_num_coordinates,
     get_parts,
     get_point,
+    has_z,
     length,
     linestrings,
     make_valid,
     node,
+    points,
     polygonize,
     shortest_line,
 )
@@ -345,102 +354,6 @@ def chaikin_smooth_conditional(
 
     msg = f"Expected LineString or Polygon, got '{type(geom)}'"
     raise TypeError(msg)
-
-
-def get_topological_points(
-    input_data: GeoDataFrame | GeoSeries,
-    *,
-    force_to_2d: bool = True,
-) -> list[Point]:
-    """Find all topological points in a GeoSeries.
-
-    Topological point referring to a point which is shared by two or more
-    geometries in the GeoSeries.
-
-    Args:
-    ----
-        input_data: The GeoDataFrame or GeoSeries to find topological points in.
-        force_to_2d: Whether to find and return points as 2d geometries.
-
-    Returns:
-    -------
-        List of all the topological points (if any).
-
-    """
-    if input_data.empty:
-        return []
-
-    if isinstance(input_data, GeoDataFrame):
-        input_data = input_data.geometry
-
-    unique_points = input_data.extract_unique_points().union_all()
-
-    if force_to_2d:
-        unique_points = force_2d(unique_points)
-
-    points = get_parts(unique_points)
-    if points.size == 0:
-        return []
-
-    tree = STRtree(input_data)
-    point_indexes, _ = tree.query(points, predicate="intersects")
-
-    # Calculate how many times an index is present in the spatial tree query
-    # result (= how many other points each point intersects).
-    counts = bincount(point_indexes, minlength=points.size)
-
-    # Return points which intersect more than one other point.
-    return points[counts > 1].tolist()
-
-
-def chaikin_smooth_keep_topology(
-    geoseries: GeoSeries,
-    iterations: int = 3,
-    *,
-    extra_skip_coords: SkipCoordsInput,
-    distance_threshold: float | None = None,
-) -> GeoSeries:
-    """Apply smoothing algorithm while keeping topological points unchanged.
-
-    Args:
-    ----
-        geoseries: GeoSeries to be smoothed.
-        iterations: Number of smoothing passes, increase for a smoother result.
-            Note that each pass roughly doubles the number of vertices, so
-            growth will be exponential. Anything above 6-7 is unlikely to
-            produce cartographically meaningful differences and therefore
-            unnecessarily increase vertex count.
-        extra_skip_coords: Any additional coordinates in addition to
-            topological points which should not be smoothed.
-        distance_threshold: Segments longer than this threshold skip smoothing.
-
-    Returns:
-    -------
-        GeoSeries with smoothed geometries, with shared topological points
-        unchanged.
-
-    Note:
-    ----
-        If the input has 3D geometries, they will be changed to 2D geometries.
-
-    """
-    copy = geoseries.copy()
-
-    skipped_coords = {(point.x, point.y) for point in get_topological_points(copy)}
-
-    extra_skip_coords = _normalize_skip_coords(extra_skip_coords)
-
-    if extra_skip_coords:
-        skipped_coords.update((point[0], point[1]) for point in extra_skip_coords)
-
-    return copy.apply(
-        lambda geom: chaikin_smooth_conditional(
-            force_2d(geom),
-            iterations=iterations,
-            skip_coords=skipped_coords,
-            distance_threshold=distance_threshold,
-        ),
-    )
 
 
 def perforate_polygon_with_gdf_exteriors(
@@ -2457,3 +2370,198 @@ def create_crossing_line_at_vertex(
     end_point = vertex_coords + (length / 2.0 * crossing_unit_vector)
 
     return LineString([start_point, vertex_coords, end_point])
+
+
+def _get_shared_points(
+    coords: ndarray,
+    geom_idx: ndarray,
+    *,
+    precision: int | None = None,
+) -> list[Point]:
+    if coords.size == 0:
+        return []
+
+    if precision is not None:
+        coords = np_round(coords, precision)
+
+    # We use a numpy memory trick to deduplicate duplicate coordinates. This is
+    # faster than using just np.unique(). Doing this requires setting potential
+    # -0.0 value explicitly to 0.0.
+    # ref: https://stackoverflow.com/a/16973510
+    coords[coords == 0.0] = 0.0
+
+    # First we remove duplicate coordinates inside a single geometry. This eliminates
+    # straight up invalid duplicate vertices, but also valid self-loops, which should
+    # not be counted as shared.
+    stacked = column_stack([coords, geom_idx])
+    stacked_contiguous = ascontiguousarray(stacked)
+    bytes_per_row = stacked_contiguous.dtype.itemsize * stacked_contiguous.shape[1]
+    void_view = stacked_contiguous.view(dtype((void, bytes_per_row))).ravel()
+    _, unique_pair_indexes = unique(void_view, return_index=True)
+
+    # Now we disregard the geometry indices and find duplicated coordinates.
+    cleaned_coords = coords[unique_pair_indexes]
+    coords_contiguous = ascontiguousarray(cleaned_coords)
+    bytes_per_row = coords_contiguous.dtype.itemsize * coords_contiguous.shape[1]
+    void_view = coords_contiguous.view(dtype((void, bytes_per_row))).ravel()
+
+    # Get the count of each coordinate pair.
+    _, unique_indexes, counts = unique(void_view, return_index=True, return_counts=True)
+
+    shared_coords = cleaned_coords[unique_indexes[counts > 1]]
+
+    if shared_coords.size == 0:
+        return []
+
+    return points(shared_coords).tolist()
+
+
+def get_topological_points(
+    input_data: GeoDataFrame | GeoSeries,
+    *,
+    force_to_2d: bool = True,
+    precision: int | None = None,
+) -> list[Point]:
+    """Find all topological points in a GeoSeries or GeoDataFrame.
+
+    Topological point referring to a point which is shared by two or more
+    geometries in the GeoSeries.
+
+    Args:
+    ----
+        input_data: The GeoDataFrame or GeoSeries to find topological points in.
+        force_to_2d: Whether to find and return points as 2d geometries.
+        precision: Optional decimal precision to determine vertex matches.
+
+    Returns:
+    -------
+        List of all the topological points (if any).
+
+    Note:
+    ----
+        If you dealing with a linestring network the lines are split into
+        separate features at junctions you might want to consider using
+        get_line_connection_points(), which is slightly more efficient.
+
+
+    """
+    if input_data.empty:
+        return []
+
+    geoms = input_data.geometry.to_numpy()
+
+    if geoms.size == 0:
+        return []
+
+    include_z = False if force_to_2d else has_z(geoms).any()
+
+    coords, geom_idx = get_coordinates(
+        geoms,
+        include_z=include_z,
+        return_index=True,
+    )
+
+    return _get_shared_points(coords, geom_idx, precision=precision)
+
+
+def get_line_connection_points(
+    input_data: GeoDataFrame | GeoSeries,
+    *,
+    force_to_2d: bool = True,
+    precision: int | None = None,
+) -> list[Point]:
+    """Find all line endpoints which connect to another line endpoint(s).
+
+    Args:
+    ----
+        input_data: The GeoDataFrame or GeoSeries to find connection points in.
+        force_to_2d: Whether to find and return points as 2d geometries.
+        precision: Optional decimal precision to determine vertex matches.
+
+    Returns:
+    -------
+        List of all the connection points (if any).
+
+
+    """
+    if input_data.empty:
+        return []
+
+    geoms = input_data.geometry.to_numpy()
+
+    if geoms.size == 0:
+        return []
+
+    include_z = False if force_to_2d else has_z(geoms).any()
+
+    # Extract start and end coordinates of each geometry as raw coordinates.
+    # This avoid the overhead of constructing Point geometries which you'd
+    # get with get_point().
+    coords = get_coordinates(geoms, include_z=include_z)
+
+    if coords.size == 0:
+        return []
+
+    # We find the breadth of each geometry's coordinates index positions by
+    # calculating the cumulative sum of the number of coordinates.
+    n_coords = get_num_coordinates(geoms)
+    cumulative_sum = cumsum(n_coords)
+    start_indexes = cumulative_sum - n_coords
+    end_indexes = cumulative_sum - 1
+
+    # Reshape coordinates to a 2d array and generate geometry indexes
+    coords = vstack([coords[start_indexes], coords[end_indexes]])
+    geom_indexes = tile(arange(len(geoms)), 2)
+
+    return _get_shared_points(coords, geom_indexes, precision=precision)
+
+
+def chaikin_smooth_keep_topology(
+    geoseries: GeoSeries,
+    iterations: int = 3,
+    *,
+    extra_skip_coords: SkipCoordsInput,
+    distance_threshold: float | None = None,
+) -> GeoSeries:
+    """Apply smoothing algorithm while keeping topological points unchanged.
+
+    Args:
+    ----
+        geoseries: GeoSeries to be smoothed.
+        iterations: Number of smoothing passes, increase for a smoother result.
+            Note that each pass roughly doubles the number of vertices, so
+            growth will be exponential. Anything above 6-7 is unlikely to
+            produce cartographically meaningful differences and therefore
+            unnecessarily increase vertex count.
+        extra_skip_coords: Any additional coordinates in addition to
+            topological points which should not be smoothed.
+        distance_threshold: Segments longer than this threshold skip smoothing.
+
+    Returns:
+    -------
+        GeoSeries with smoothed geometries, with shared topological points
+        unchanged.
+
+    Note:
+    ----
+        If the input has 3D geometries, they will be changed to 2D geometries.
+
+    """
+    # TODO: move this to a different module, probably continuity
+    copy = geoseries.copy()
+
+    skipped_coords = {(point.x, point.y) for point in get_topological_points(copy)}
+
+    extra_skip_coords = _normalize_skip_coords(extra_skip_coords)
+
+    if extra_skip_coords:
+        skipped_coords.update((point[0], point[1]) for point in extra_skip_coords)
+
+    return copy.apply(
+        lambda geom: chaikin_smooth_conditional(
+            force_2d(geom),
+            iterations=iterations,
+            skip_coords=skipped_coords,
+            distance_threshold=distance_threshold,
+        ),
+    )
