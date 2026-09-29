@@ -100,6 +100,7 @@ starmap
 subdivs
 substring
 substrings
+swe
 testdata
 tol
 tolist
