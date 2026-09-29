@@ -20,9 +20,11 @@ from numpy import (  # noqa: SC200
     arctan2,
     argmax,
     array,
+    array_equal,
     asarray,
     bincount,
     column_stack,
+    concatenate,
     cos,
     degrees,
     empty,
@@ -57,6 +59,7 @@ from shapely import (
     get_parts,
     get_point,
     length,
+    linestrings,
     make_valid,
     node,
     polygonize,
@@ -2095,14 +2098,16 @@ def concatenate_lines(
         are connected but have reverse orientation.
 
     """
-    a_coords = list(a.coords)
-    b_coords = list(b.coords)
+    has_z = a.has_z or b.has_z
+    ca = get_coordinates(a, include_z=has_z)
+    cb = get_coordinates(b, include_z=has_z)
 
-    # If lines are already connected, avoid adding duplicate vertex
-    if a_coords[-1] == b_coords[0]:
-        return LineString(a_coords + b_coords[1:])
+    if array_equal(ca[-1], cb[0]):
+        coords = concatenate((ca, cb[1:]))
+    else:
+        coords = concatenate((ca, cb))
 
-    return LineString(a_coords + b_coords)
+    return linestrings(coords)
 
 
 def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
