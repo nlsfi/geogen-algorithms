@@ -5,9 +5,11 @@
 #  SPDX-License-Identifier: MIT
 
 import pytest
+from geopandas.geodataframe import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
+from shapely.geometry import Point
 
-from geogenalg.core.geometry import get_topological_points
+from geogenalg.core.geometry import assign_z_from_attribute, get_topological_points
 from geogenalg.testing import GeoPackagePath, TestInputData
 
 
@@ -40,3 +42,14 @@ def test_get_topological_points(
     result = benchmark(get_topological_points, gdf)
 
     assert len(result) == expected_points
+
+
+def test_assign_z_from_attribute(benchmark: BenchmarkFixture):
+    points = [Point(i, i) for i in range(10000)]
+    z = list(range(10000))
+
+    gdf = GeoDataFrame({"z": z}, geometry=points)
+
+    result = benchmark(assign_z_from_attribute, gdf, "z")
+
+    assert result.geometry.has_z.all()

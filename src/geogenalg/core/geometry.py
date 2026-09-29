@@ -52,6 +52,7 @@ from shapely import (
     area,
     count_coordinates,
     force_2d,
+    force_3d,
     get_coordinates,
     get_parts,
     get_point,
@@ -1003,7 +1004,10 @@ def assign_nearest_z(
 
 
 def assign_z_from_attribute(
-    gdf: GeoDataFrame, z_attribute: str, *, overwrite_z: bool = False
+    gdf: GeoDataFrame,
+    z_attribute: str,
+    *,
+    overwrite_z: bool = False,
 ) -> GeoDataFrame:
     """Assign Z values to geometries from a GeoDataFrame attribute.
 
@@ -1022,20 +1026,17 @@ def assign_z_from_attribute(
         A copy of `gdf` with Z values assigned from the attribute.
 
     """
+    if gdf.empty:
+        return gdf.copy()
 
-    def _with_z(geom: BaseGeometry, z: float) -> BaseGeometry:
-        if not overwrite_z and geom.has_z:
-            return geom
-        if hasattr(geom, "geoms"):
-            return type(geom)([_with_z(part, z) for part in geom.geoms])
-        return type(geom)([(x, y, z) for x, y, *_ in geom.coords])
-
-    geom_col = gdf.geometry.name
     result_gdf = gdf.copy()
-    result_gdf.geometry = result_gdf.apply(
-        lambda row: _with_z(row[geom_col], row[z_attribute]),
-        axis=1,
-    )
+    geoms = result_gdf.geometry.to_numpy()
+    z = result_gdf[z_attribute].to_numpy()
+
+    if overwrite_z:
+        geoms = force_2d(geoms)
+
+    result_gdf.geometry = force_3d(geoms, z=z)
     return result_gdf
 
 
