@@ -10,6 +10,7 @@ arctan2
 argmax
 argspec
 asarray
+ascontiguousarray
 atan2
 atol
 basealgorithm
@@ -68,6 +69,7 @@ hypot
 idx
 inplace
 isclose
+itemsize
 keepdims
 landcover
 linalg

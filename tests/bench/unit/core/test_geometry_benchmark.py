@@ -13,6 +13,7 @@ from shapely.geometry import LineString, Point
 from geogenalg.core.geometry import (
     assign_z_from_attribute,
     concatenate_lines,
+    get_line_connection_points,
     get_topological_points,
 )
 from geogenalg.testing import GeoPackagePath, TestInputData
@@ -68,3 +69,64 @@ def test_concatenate_lines(benchmark: BenchmarkFixture):
     result = benchmark(concatenate_lines, a, b)
 
     assert get_num_coordinates(result) == 199999
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    ("layer", "expected_points"),
+    [
+        ("100", 46),
+        ("1000", 469),
+        ("5000", 2036),
+        ("10000", 3881),
+    ],
+    ids=[
+        "100",
+        "1000",
+        "5000",
+        "10000",
+    ],
+)
+def test_get_line_connection_points(
+    benchmark: BenchmarkFixture,
+    line_network_input: GeoPackagePath,
+    layer: str,
+    expected_points: int,
+):
+    test_input = TestInputData(input_uri=line_network_input.to_input(layer))
+
+    gdf, _, _ = test_input.read()
+
+    result = benchmark(get_line_connection_points, gdf)
+
+    assert len(result) == expected_points
+
+
+def test_get_topological_points_roads(
+    benchmark: BenchmarkFixture,
+    roads_input: TestInputData,
+):
+    # Test with road data to get a comparison against
+    # get_line_connection_points(), as the synthetic benchmark data
+    # consists of straight lines anyway largely eliminating the performance
+    # benefit of it with datasets which have linestrings with more vertices.
+    gdf, _, _ = roads_input.read()
+
+    result = benchmark(get_topological_points, gdf)
+
+    assert len(result) == 1050
+
+
+def test_get_line_connection_points_roads(
+    benchmark: BenchmarkFixture,
+    roads_input: TestInputData,
+):
+    # Test with road data to get a comparison against get_topological_points(),
+    # as the synthetic benchmark data consists of straight lines anyway largely
+    # eliminating the performance benefit of this with datasets which have
+    # linestrings with more vertices.
+    gdf, _, _ = roads_input.read()
+
+    result = benchmark(get_line_connection_points, gdf)
+
+    assert len(result) == 1050
