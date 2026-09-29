@@ -8,6 +8,7 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 
 from geogenalg.continuity import (
+    add_contiguous_lines_information,
     count_connections,
     flag_connections,
     flag_connections_to_reference,
@@ -102,3 +103,36 @@ def test_flag_connections_to_reference(
 
     assert result["_start_connected"].sum() == 4485
     assert result["_end_connected"].sum() == 4113
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    ("layer", "deadend_sum", "disconnected_sum"),
+    [
+        ("100", 39, 2),
+        ("1000", 236, 20),
+        ("5000", 315, 100),
+        ("10000", 314, 200),
+    ],
+    ids=[
+        "100",
+        "1000",
+        "5000",
+        "10000",
+    ],
+)
+def test_add_contiguous_lines_information(
+    benchmark: BenchmarkFixture,
+    line_network_input: GeoPackagePath,
+    layer: str,
+    deadend_sum: int,
+    disconnected_sum: int,
+):
+    test_input = TestInputData(input_uri=line_network_input.to_input(layer))
+
+    gdf, _, _ = test_input.read()
+
+    result = benchmark(add_contiguous_lines_information, gdf)
+
+    assert result["contiguous_dead_end"].sum() == deadend_sum
+    assert result["contiguous_disconnected"].sum() == disconnected_sum
