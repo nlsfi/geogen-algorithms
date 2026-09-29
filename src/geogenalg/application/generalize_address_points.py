@@ -112,17 +112,10 @@ class GeneralizeAddressPoints(BaseAlgorithm):
         reference_join_column = self.reference_join_column or self.join_column
 
         if self.join_column not in data.columns:
-            msg = (
-                "Specified `join_column` "
-                + f"({self.join_column}) not found in input GeoDataFrame."
-            )
+            msg = "`join_column` not found in input GeoDataFrame."
             raise KeyError(msg)
         if reference_join_column not in buildings.columns:
-            msg = (
-                "Specified `reference_join_column` "
-                + f"({reference_join_column}) not found in reference "
-                + "building GeoDataFrame."
-            )
+            msg = "`reference_join_column` not found in buildings."
             raise KeyError(msg)
 
         index_name = data.index.name
