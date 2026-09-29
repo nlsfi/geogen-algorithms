@@ -4,6 +4,7 @@ aggfunc
 alg
 algs
 allclose
+arange
 arctan2
 argmax
 argspec
@@ -30,6 +31,7 @@ const
 coord
 coords
 crs
+csgraph
 dataframe
 dataset
 DBSCAN
@@ -93,6 +95,7 @@ rglob
 rtol
 Rtree
 ruas
+scipy
 segmentize
 segmentized
 shapelysmooth

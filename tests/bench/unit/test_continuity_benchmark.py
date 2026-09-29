@@ -12,6 +12,7 @@ from geogenalg.continuity import (
     count_connections,
     flag_connections,
     flag_connections_to_reference,
+    get_contiguous_lengths,
 )
 from geogenalg.testing import GeoPackagePath, TestInputData
 
@@ -136,3 +137,31 @@ def test_add_contiguous_lines_information(
 
     assert result["contiguous_dead_end"].sum() == deadend_sum
     assert result["contiguous_disconnected"].sum() == disconnected_sum
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    ("layer"),
+    [
+        ("100"),
+        ("1000"),
+        ("5000"),
+        ("10000"),
+    ],
+    ids=[
+        "100",
+        "1000",
+        "5000",
+        "10000",
+    ],
+)
+def test_get_contiguous_lengths(
+    benchmark: BenchmarkFixture,
+    line_network_input: GeoPackagePath,
+    layer: str,
+):
+    test_input = TestInputData(input_uri=line_network_input.to_input(layer))
+
+    gdf, _, _ = test_input.read()
+
+    benchmark(get_contiguous_lengths, gdf)

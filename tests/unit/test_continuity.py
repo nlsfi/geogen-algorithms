@@ -12,6 +12,8 @@ from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from geopandas.tools import overlay
 from networkx.classes.graph import Graph
+from numpy import array, ndarray
+from numpy.testing import assert_allclose
 from shapely import box
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
@@ -29,6 +31,7 @@ from geogenalg.continuity import (
     flag_connections_to_reference,
     flag_polygon_centerline_connections,
     gdf_to_networkx_graph,
+    get_contiguous_lengths,
     get_lines_along_reference_lines,
     get_segments_in_polygon_boundary_but_not_in_lines,
     inspect_dead_end_candidates,
@@ -2083,3 +2086,91 @@ def test_gdf_to_networkx_graph(
 
         for column in expected_data:
             assert edge_data[column] == expected_data[column]
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "precision",
+        "expected",
+    ),
+    [
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                ],
+            ),
+            6,
+            array([10.0, 10.0]),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                    LineString([(5, 1), (10, 1)]),
+                ],
+            ),
+            6,
+            array([1.0, 9.0, 5.0]),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 1), (5, 10)]),
+                    LineString([(5, 1), (10, 1)]),
+                    LineString([(-5, 1), (5, 1)]),
+                ],
+            ),
+            6,
+            array([1.0, 9.0, 5.0, 10.0]),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(5, 1), (5, 0)]),
+                    LineString([(5, 2), (5, 10)]),
+                ],
+            ),
+            6,
+            array([1.0, 8.0]),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[],
+            ),
+            6,
+            array([], dtype=float),
+        ),
+        (
+            GeoDataFrame(
+                geometry=[
+                    LineString([(0, 0), (1.0000001, 0)]),
+                    LineString([(1.0000002, 0), (2, 0)]),
+                ],
+            ),
+            None,
+            array([1.0000001, 0.9999998]),
+        ),
+    ],
+    ids=[
+        "continuous_chain",
+        "three_way_junction",
+        "four_way_junction",
+        "disconnected_lines",
+        "empty_gdf",
+        "precision_disabled",
+    ],
+)
+def test_get_contiguous_lengths(
+    input_gdf: GeoDataFrame,
+    precision: int | None,
+    expected: ndarray,
+):
+    assert_allclose(
+        get_contiguous_lengths(input_gdf, precision=precision),
+        expected,
+    )
