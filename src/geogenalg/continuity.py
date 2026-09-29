@@ -11,9 +11,21 @@ from warnings import warn
 
 from geopandas import GeoDataFrame
 from networkx.classes.graph import Graph
-from numpy import bincount
+from numpy import (
+    arange,
+    array,
+    bincount,
+    empty,
+    ndarray,
+    ones,
+    unique,
+    vstack,
+)
+from numpy import round as np_round
 from pandas import Series
-from shapely import STRtree, force_2d, get_point
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
+from shapely import STRtree, force_2d, get_coordinates, get_point, length
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
@@ -30,6 +42,65 @@ from geogenalg.utility.dataframe_processing import (
     combine_gdfs,
     copy_gdf_as_empty,
 )
+
+
+def _get_contiguous_line_components(  # noqa: PLR0914
+    geoms: ndarray,
+    precision: int | None = 6,
+) -> tuple[ndarray, ndarray]:
+    n = len(geoms)
+    if n == 0:
+        return array([], dtype="int64"), array([], dtype="int64")
+
+    start_coords = get_coordinates(get_point(geoms, 0))
+    end_coords = get_coordinates(get_point(geoms, -1))
+    coords = vstack([start_coords, end_coords])
+
+    if precision is not None:
+        coords = np_round(coords, precision)
+
+    structured_coords = empty(
+        len(coords), dtype=[("x", coords.dtype), ("y", coords.dtype)]
+    )
+    structured_coords["x"] = coords[:, 0]
+    structured_coords["y"] = coords[:, 1]
+
+    # Assign id to each coordinate pair, with duplicates sharing an id
+    _, node_ids = unique(structured_coords, return_inverse=True)
+
+    # Build graph edges from indices
+    u, v = node_ids[:n], node_ids[n:]
+
+    n_nodes = node_ids.max() + 1
+
+    node_degrees = bincount(node_ids, minlength=n_nodes)
+
+    # Split the graph at junctions and deadends by assigning a new unique node
+    # id, isolating contiguous line segments.
+    mask_u = node_degrees[u] != 2  # noqa: PLR2004
+    mask_v = node_degrees[v] != 2  # noqa: PLR2004
+
+    next_id = n_nodes
+
+    # Count how many new ids are overwritten
+    num_u = sum(mask_u)
+    num_v = sum(mask_v)
+
+    # Give junction and deadend nodes a new id
+    u[mask_u] = arange(next_id, next_id + num_u)
+    next_id += num_u
+    v[mask_v] = arange(next_id, next_id + num_v)
+    next_id += num_v
+
+    adjacency_matrix = coo_matrix(
+        (ones(n, dtype=bool), (u, v)),
+        shape=(next_id, next_id),
+    )
+
+    # Group contiguous line segments (components) with ids
+    _, component_ids = connected_components(adjacency_matrix, directed=False)
+
+    return component_ids[u], node_degrees
 
 
 def find_all_endpoints(
@@ -1183,3 +1254,36 @@ def gdf_to_networkx_graph(
         )
 
     return graph
+
+
+def get_contiguous_lengths(
+    input_gdf: GeoDataFrame,
+    *,
+    precision: int | None = 6,
+) -> ndarray:
+    """Calculate length of set of contiguous lines each feature belongs to.
+
+    Contiguous length here refers to sets of lines which are between either a
+    dead-end or a junction.
+
+    Args:
+    ----
+        input_gdf: Input GeoDataFrame with LineStrings.
+        precision: Decimal precision used to identify if two line endpoints are
+            connected.
+
+    Returns:
+    -------
+        ndarray of calculated lengths for each feature in the input GeoDataFrame.
+
+    """
+    geoms = input_gdf.geometry.to_numpy()
+
+    if len(geoms) == 0:
+        return array([], dtype="float64")
+
+    line_components, _ = _get_contiguous_line_components(geoms, precision=precision)
+    lengths = length(geoms)
+    component_lengths = bincount(line_components, weights=lengths)
+
+    return component_lengths[line_components]
