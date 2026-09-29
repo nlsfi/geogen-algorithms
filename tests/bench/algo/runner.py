@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from tempfile import NamedTemporaryFile
 
@@ -23,7 +24,11 @@ class AlgorithmBenchmark:
     input_data: TestInputData
     algorithm: BaseAlgorithm
 
-    def run(self, fixture: BenchmarkFixture) -> None:
+    def run(
+        self,
+        fixture: BenchmarkFixture,
+        record_property: Callable | None = None,
+    ) -> None:
         if self.input_data.unique_id_column is None:
             msg = "Unique id column must be set."
             raise ValueError(msg)
@@ -37,6 +42,13 @@ class AlgorithmBenchmark:
             iterations=1,
             warmup_rounds=1,
         )
+
+        feature_count = alg_data.shape[0]
+        mean_duration_s = fixture.stats.stats.mean
+
+        if mean_duration_s > 0 and record_property is not None:
+            features_per_s = feature_count / mean_duration_s
+            record_property("features_per_sec", str(round(features_per_s, 2)))
 
         # Save result to temp file and read again as a GDF so that column
         # dtypes etc. match with the control
