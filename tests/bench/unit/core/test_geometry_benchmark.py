@@ -7,9 +7,14 @@
 import pytest
 from geopandas.geodataframe import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
-from shapely.geometry import Point
+from shapely import get_num_coordinates
+from shapely.geometry import LineString, Point
 
-from geogenalg.core.geometry import assign_z_from_attribute, get_topological_points
+from geogenalg.core.geometry import (
+    assign_z_from_attribute,
+    concatenate_lines,
+    get_topological_points,
+)
 from geogenalg.testing import GeoPackagePath, TestInputData
 
 
@@ -53,3 +58,13 @@ def test_assign_z_from_attribute(benchmark: BenchmarkFixture):
     result = benchmark(assign_z_from_attribute, gdf, "z")
 
     assert result.geometry.has_z.all()
+
+
+def test_concatenate_lines(benchmark: BenchmarkFixture):
+    n = 100000
+    a = LineString([(i, i) for i in range(n)])
+    b = LineString([(i, i) for i in range(n - 1, 2 * n - 1)])
+
+    result = benchmark(concatenate_lines, a, b)
+
+    assert get_num_coordinates(result) == 199999
