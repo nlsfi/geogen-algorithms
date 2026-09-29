@@ -4,6 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -20,205 +21,222 @@ from tests.bench.algo.runner import AlgorithmBenchmark
 @pytest.mark.benchmark
 def test_dissolve_polygons(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     dissolve_polygons_input: TestInputData,
     dissolve_polygons_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=dissolve_polygons_input,
         algorithm=dissolve_polygons_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_building_areas(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     building_areas_input: TestInputData,
     building_areas_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=building_areas_input,
         algorithm=building_areas_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_buildings_50k(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     buildings_50k_input: TestInputData,
     buildings_50k_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=buildings_50k_input,
         algorithm=buildings_50k_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_buildings_100k(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     buildings_100k_input: TestInputData,
     buildings_100k_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=buildings_100k_input,
         algorithm=buildings_100k_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_cliffs(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     cliffs_input: TestInputData,
     cliffs_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=cliffs_input,
         algorithm=cliffs_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_conservation_areas(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     conservation_areas_input: TestInputData,
     conservation_areas_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=conservation_areas_input,
         algorithm=conservation_areas_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_contours(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     contours_input: TestInputData,
     contours_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=contours_input,
         algorithm=contours_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_fences(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     fences_input: TestInputData,
     fences_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=fences_input,
         algorithm=fences_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_landcover(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     landcover_input: TestInputData,
     landcover_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=landcover_input,
         algorithm=landcover_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_polygons_to_points(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     polygons_to_points_input: TestInputData,
     polygons_to_points_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=polygons_to_points_input,
         algorithm=polygons_to_points_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_power_lines(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     power_lines_input: TestInputData,
     power_lines_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=power_lines_input,
         algorithm=power_lines_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_railroads(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     railroads_input: TestInputData,
     railroads_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=railroads_input,
         algorithm=railroads_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_roads(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     roads_input: TestInputData,
     roads_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=roads_input,
         algorithm=roads_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_shared_paths(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     shared_paths_input: TestInputData,
     shared_paths_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=shared_paths_input,
         algorithm=shared_paths_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_slopelines(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     slopelines_input: TestInputData,
     slopelines_algorithm: BaseAlgorithm,
 ) -> None:
     AlgorithmBenchmark(
         input_data=slopelines_input,
         algorithm=slopelines_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_water_areas(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     water_areas_input: TestInputData,
     water_areas_algorithm: BaseAlgorithm,
 ):
     AlgorithmBenchmark(
         input_data=water_areas_input,
         algorithm=water_areas_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
 def test_generalize_watercourse_areas(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     watercourse_areas_input: TestInputData,
     watercourse_areas_algorithm: BaseAlgorithm,
 ):
     AlgorithmBenchmark(
         input_data=watercourse_areas_input,
         algorithm=watercourse_areas_algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
@@ -237,6 +255,7 @@ def test_generalize_watercourse_areas(
 )
 def test_keep_intersection(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     algorithm_testdata_path: Path,
     layer_suffix: str,
 ) -> None:
@@ -253,7 +272,7 @@ def test_keep_intersection(
         algorithm=KeepIntersection(
             reference_key="mask",
         ),
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
@@ -272,6 +291,7 @@ def test_keep_intersection(
 )
 def test_remove_overlap(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     algorithm_testdata_path: Path,
     layer_suffix: str,
 ) -> None:
@@ -288,7 +308,7 @@ def test_remove_overlap(
         algorithm=RemoveOverlap(
             reference_key="mask",
         ),
-    ).run(benchmark)
+    ).run(benchmark, record_property)
 
 
 @pytest.mark.benchmark
@@ -348,6 +368,7 @@ def test_remove_overlap(
 )
 def test_generalize_points(
     benchmark: BenchmarkFixture,
+    record_property: Callable,
     algorithm_testdata_path: Path,
     input_layer: str,
     control_layer: str,
@@ -361,4 +382,4 @@ def test_generalize_points(
             unique_id_column="kmtk_id",
         ),
         algorithm=algorithm,
-    ).run(benchmark)
+    ).run(benchmark, record_property)
