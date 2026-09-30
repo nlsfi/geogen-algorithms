@@ -390,11 +390,11 @@ def test_chaikin_smooth_conditional(
     [
         (
             GeoSeries(),
-            [],
+            array([], dtype="object"),
         ),
         (
             GeoSeries(Point(0, 0)),
-            [],
+            array([], dtype="object"),
         ),
         (
             GeoSeries(
@@ -403,7 +403,7 @@ def test_chaikin_smooth_conditional(
                     LineString([[0, 0], [0, -1]]),
                 ]
             ),
-            [Point(0, 0)],
+            array([Point(0, 0)]),
         ),
         (
             GeoSeries(
@@ -413,7 +413,7 @@ def test_chaikin_smooth_conditional(
                     LineString([[0, 0], [-1, 0]]),
                 ]
             ),
-            [Point(0, 0)],
+            array([Point(0, 0)]),
         ),
         (
             GeoSeries(
@@ -423,12 +423,14 @@ def test_chaikin_smooth_conditional(
                     box(0, 4, 2, 5),
                 ]
             ),
-            [
-                Point(0, 2),
-                Point(0, 4),
-                Point(2, 2),
-                Point(2, 4),
-            ],
+            array(
+                [
+                    Point(0, 2),
+                    Point(0, 4),
+                    Point(2, 2),
+                    Point(2, 4),
+                ]
+            ),
         ),
     ],
     ids=[
@@ -441,9 +443,9 @@ def test_chaikin_smooth_conditional(
 )
 def test_get_topological_points(
     input_geoseries: GeoSeries,
-    expected_points: list[Point],
+    expected_points: ndarray,
 ):
-    assert get_topological_points(input_geoseries) == expected_points
+    assert get_topological_points(input_geoseries).tolist() == expected_points.tolist()
 
 
 @pytest.mark.parametrize(
