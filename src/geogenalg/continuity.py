@@ -34,7 +34,7 @@ from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
     extend_line_to_nearest,
-    get_topological_points,
+    get_line_connection_points,
     smooth_around_connection_point_of_two_lines,
 )
 from geogenalg.utility.dataframe_processing import (
@@ -1106,32 +1106,28 @@ def smooth_linestring_connections(
         return copy_gdf_as_empty(input_gdf)
 
     gdf = input_gdf.copy()
-    old_index = gdf.index
 
-    # Reset index in case there's duplicate indices so we for sure have an
-    # unique index for assigning smoothed geometry
-    gdf = gdf.reset_index(drop=True)
-
-    points = get_topological_points(input_gdf, force_to_2d=False)
+    geometries = gdf.geometry.to_numpy()
+    points = get_line_connection_points(input_gdf, force_to_2d=False)
 
     for point in points:
-        intersecting_lines = gdf.loc[gdf.geometry.intersects(point)]
+        intersecting_indices = input_gdf.sindex.query(point, predicate="intersects")
 
-        if intersecting_lines.shape[0] != 2:  # noqa: PLR2004
+        if len(intersecting_indices) != 2:  # noqa: PLR2004
             continue
 
+        idx_1, idx_2 = intersecting_indices
+
         smoothed_line_1, smoothed_line_2 = smooth_around_connection_point_of_two_lines(
-            intersecting_lines.geometry.to_numpy()[0],
-            intersecting_lines.geometry.to_numpy()[1],
+            geometries[idx_1],
+            geometries[idx_2],
             point,
             smoothed_distance,
             spline_subdivisions=spline_subdivisions,
         )
 
-        gdf.geometry.at[intersecting_lines.index.to_numpy()[0]] = smoothed_line_1  # noqa: PD008
-        gdf.geometry.at[intersecting_lines.index.to_numpy()[1]] = smoothed_line_2  # noqa: PD008
-
-    gdf.index = old_index
+        geometries[idx_1] = smoothed_line_1
+        geometries[idx_2] = smoothed_line_2
 
     return gdf
 
