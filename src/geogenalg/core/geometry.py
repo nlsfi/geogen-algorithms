@@ -1849,11 +1849,11 @@ def smooth_around_connection_point_of_two_lines(  # noqa: PLR0914
         return line_1, line_2
 
     if distance <= 0:
-        msg = "distance must be greater than zero"
+        msg = "Distance must be greater than zero."
         raise ValueError(msg)
 
     if spline_subdivisions < 1:
-        msg = "subdivs must be >= 1"
+        msg = "Subdivisions must be 1 or above."
         raise ValueError(msg)
 
     # Check that given connection point can actually be used
@@ -2377,16 +2377,16 @@ def _get_shared_points(
     geom_idx: ndarray,
     *,
     precision: int | None = None,
-) -> list[Point]:
+) -> ndarray:
     if coords.size == 0:
-        return []
+        return array([], dtype="object")
 
     if precision is not None:
         coords = np_round(coords, precision)
 
-    # We use a numpy memory trick to deduplicate duplicate coordinates. This is
-    # faster than using just np.unique(). Doing this requires setting potential
-    # -0.0 value explicitly to 0.0.
+    # We use a numpy memory trick to deduplicate coordinates. This is faster
+    # than using just np.unique(). Doing this requires setting potential -0.0
+    # value explicitly to 0.0.
     # ref: https://stackoverflow.com/a/16973510
     coords[coords == 0.0] = 0.0
 
@@ -2411,9 +2411,9 @@ def _get_shared_points(
     shared_coords = cleaned_coords[unique_indexes[counts > 1]]
 
     if shared_coords.size == 0:
-        return []
+        return array([], dtype="object")
 
-    return points(shared_coords).tolist()
+    return points(shared_coords)
 
 
 def get_topological_points(
@@ -2421,7 +2421,7 @@ def get_topological_points(
     *,
     force_to_2d: bool = True,
     precision: int | None = None,
-) -> list[Point]:
+) -> ndarray:
     """Find all topological points in a GeoSeries or GeoDataFrame.
 
     Topological point referring to a point which is shared by two or more
@@ -2445,13 +2445,15 @@ def get_topological_points(
 
 
     """
+    # TODO: BEFORE RELEASE: is the name accurate? should topological points
+    # also include points situated on a segment?
     if input_data.empty:
-        return []
+        return array([], dtype="object")
 
     geoms = input_data.geometry.to_numpy()
 
     if geoms.size == 0:
-        return []
+        return array([], dtype="object")
 
     include_z = False if force_to_2d else has_z(geoms).any()
 
@@ -2469,7 +2471,7 @@ def get_line_connection_points(
     *,
     force_to_2d: bool = True,
     precision: int | None = None,
-) -> list[Point]:
+) -> ndarray:
     """Find all line endpoints which connect to another line endpoint(s).
 
     Args:
@@ -2485,12 +2487,12 @@ def get_line_connection_points(
 
     """
     if input_data.empty:
-        return []
+        return array([], dtype="object")
 
     geoms = input_data.geometry.to_numpy()
 
     if geoms.size == 0:
-        return []
+        return array([], dtype="object")
 
     include_z = False if force_to_2d else has_z(geoms).any()
 
@@ -2500,7 +2502,7 @@ def get_line_connection_points(
     coords = get_coordinates(geoms, include_z=include_z)
 
     if coords.size == 0:
-        return []
+        return array([], dtype="object")
 
     # We find the breadth of each geometry's coordinates index positions by
     # calculating the cumulative sum of the number of coordinates.
