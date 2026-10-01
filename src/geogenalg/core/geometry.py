@@ -37,6 +37,7 @@ from shapely import (
     has_z,
     is_closed,
     length,
+    line_interpolate_point,
     linestrings,
     make_valid,
     node,
@@ -47,7 +48,7 @@ from shapely import (
 from shapely.affinity import rotate, scale, translate
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
-from shapely.ops import linemerge, nearest_points, split, substring
+from shapely.ops import linemerge, nearest_points, split
 from shapelysmooth import catmull_rom_smooth
 
 from geogenalg.core.exceptions import (
@@ -63,6 +64,48 @@ if TYPE_CHECKING:
 
 PointLike: TypeAlias = Point | tuple[float, ...]  # noqa: UP040
 SkipCoordsInput: TypeAlias = MultiPoint | Iterable[PointLike] | None  # noqa: UP040
+
+
+def substring(
+    line: LineString,
+    start_distance: float,
+    end_distance: float,
+) -> LineString:
+    """Extract a portion of a LineString between two distances.
+
+    Args:
+    ----
+        line: LineString to extract from.
+        start_distance: Distance to start extraction from.
+        end_distance: Distance to end extraction at.
+
+    Returns:
+    -------
+        Extracted LineString.
+
+    """
+    coords = get_coordinates(line)
+
+    segment_vectors = np.diff(coords, axis=0)
+    segment_lengths = np.linalg.norm(segment_vectors, axis=1)
+    cumulative_distances = np.insert(np.cumsum(segment_lengths), 0, 0.0)
+
+    line_length = cumulative_distances[-1]
+    start_distance = max(0.0, min(start_distance, line_length))
+    end_distance = max(0.0, min(end_distance, line_length))
+
+    if start_distance > end_distance:
+        start_distance, end_distance = end_distance, start_distance
+
+    mask = (cumulative_distances > start_distance) & (
+        cumulative_distances < end_distance
+    )
+    coords_in_middle = coords[mask]
+
+    start_coord = get_coordinates(line_interpolate_point(line, start_distance))
+    end_coord = get_coordinates(line_interpolate_point(line, end_distance))
+
+    return LineString(np.vstack((start_coord, coords_in_middle, end_coord)))
 
 
 class LineExtendFrom(Enum):
