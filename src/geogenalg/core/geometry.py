@@ -2496,22 +2496,22 @@ def get_line_connection_points(
 
     include_z = False if force_to_2d else has_z(geoms).any()
 
-    # Extract start and end coordinates of each geometry as raw coordinates.
-    # This avoid the overhead of constructing Point geometries which you'd
-    # get with get_point().
+    # Extract raw coordinates. This avoids the overhead of constructing Point
+    # geometries which you'd get with get_point().
     coords = get_coordinates(geoms, include_z=include_z)
 
     if coords.size == 0:
         return array([], dtype="object")
 
-    # We find the breadth of each geometry's coordinates index positions by
-    # calculating the cumulative sum of the number of coordinates.
+    # We find the start and end index positions of each linestring in the array
+    # by calculating the cumulative sum of coordinate count.
     n_coords = get_num_coordinates(geoms)
     cumulative_sum = cumsum(n_coords)
     start_indexes = cumulative_sum - n_coords
     end_indexes = cumulative_sum - 1
 
-    # Reshape coordinates to a 2d array and generate geometry indexes
+    # Extract start and end coordinates to a 2d array and generate geometry
+    # indexes
     coords = vstack([coords[start_indexes], coords[end_indexes]])
     geom_indexes = tile(arange(len(geoms)), 2)
 
