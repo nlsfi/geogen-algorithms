@@ -15,7 +15,6 @@ from shapely import (
     MultiPolygon,
     Point,
     box,
-    equals_exact,
 )
 
 from geogenalg.split import (
@@ -323,7 +322,7 @@ def test_explode_and_hash_id_raises():
         "lines_gdf",
         "points_gdf",
         "max_distance",
-        "expected_geometries",
+        "expected_gdf",
     ),
     [
         (
@@ -343,10 +342,16 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             0.1,
-            [
-                LineString([[0, 0], [5, 0]]),
-                LineString([[5, 0], [10, 0]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    MultiLineString(
+                        [
+                            LineString([[0, 0], [5, 0]]),
+                            LineString([[5, 0], [10, 0]]),
+                        ]
+                    )
+                ],
+            ),
         ),
         (
             GeoDataFrame(
@@ -366,10 +371,16 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             0.1,
-            [
-                LineString([[0, 0], [5, 0]]),
-                LineString([[5, 0], [10, 0]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    MultiLineString(
+                        [
+                            LineString([[0, 0], [5, 0]]),
+                            LineString([[5, 0], [10, 0]]),
+                        ]
+                    )
+                ],
+            ),
         ),
         (
             GeoDataFrame(
@@ -389,11 +400,17 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             0.1,
-            [
-                LineString([[0, 0], [2, 0]]),
-                LineString([[2, 0], [7, 0]]),
-                LineString([[7, 0], [10, 0]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    MultiLineString(
+                        [
+                            LineString([[0, 0], [2, 0]]),
+                            LineString([[2, 0], [7, 0]]),
+                            LineString([[7, 0], [10, 0]]),
+                        ]
+                    )
+                ],
+            ),
         ),
         (
             GeoDataFrame(
@@ -412,10 +429,16 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             1.0,
-            [
-                LineString([[0, 0], [5, 0]]),
-                LineString([[5, 0], [10, 0]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    MultiLineString(
+                        [
+                            LineString([[0, 0], [5, 0]]),
+                            LineString([[5, 0], [10, 0]]),
+                        ]
+                    )
+                ],
+            ),
         ),
         (
             GeoDataFrame(
@@ -434,9 +457,11 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             1.0,
-            [
-                LineString([[0, 0], [10, 0]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                ],
+            ),
         ),
         (
             GeoDataFrame(
@@ -456,9 +481,11 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             0.1,
-            [
-                LineString([[0, 0], [10, 0]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                ],
+            ),
         ),
         (
             GeoDataFrame(
@@ -479,27 +506,23 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             0.1,
-            [
-                LineString([[0, 0], [5, 0]]),
-                LineString([[5, 0], [10, 0]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    MultiLineString(
+                        [
+                            LineString([[0, 0], [5, 0]]),
+                            LineString([[5, 0], [10, 0]]),
+                        ]
+                    )
+                ],
+            ),
         ),
         (
             GeoDataFrame(
                 geometry=[
-                    LineString(
-                        [
-                            [0, 0],
-                            [10, 0],
-                        ]
-                    ),
-                    LineString(
-                        [
-                            [0, 10],
-                            [10, 10],
-                        ]
-                    ),
-                ]
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 10], [10, 10]]),
+                ],
             ),
             GeoDataFrame(
                 geometry=[
@@ -508,12 +531,22 @@ def test_explode_and_hash_id_raises():
                 ]
             ),
             0.1,
-            [
-                LineString([[0, 0], [5, 0]]),
-                LineString([[5, 0], [10, 0]]),
-                LineString([[0, 10], [2, 10]]),
-                LineString([[2, 10], [10, 10]]),
-            ],
+            GeoDataFrame(
+                geometry=[
+                    MultiLineString(
+                        [
+                            LineString([[0, 0], [5, 0]]),
+                            LineString([[5, 0], [10, 0]]),
+                        ]
+                    ),
+                    MultiLineString(
+                        [
+                            LineString([[0, 10], [2, 10]]),
+                            LineString([[2, 10], [10, 10]]),
+                        ]
+                    ),
+                ],
+            ),
         ),
     ],
     ids=[
@@ -531,7 +564,7 @@ def test_split_lines_by_points(
     lines_gdf: GeoDataFrame,
     points_gdf: GeoDataFrame,
     max_distance: float,
-    expected_geometries: list[LineString],
+    expected_gdf: GeoDataFrame,
 ):
     result = split_lines_by_points(
         lines_gdf,
@@ -539,15 +572,4 @@ def test_split_lines_by_points(
         max_distance=max_distance,
     )
 
-    assert len(result) == len(expected_geometries)
-
-    for result_geom, expected_geom in zip(
-        result.geometry,
-        expected_geometries,
-        strict=True,
-    ):
-        assert equals_exact(
-            result_geom,
-            expected_geom,
-            tolerance=1e-9,
-        )
+    assert_geodataframe_equal(result, expected_gdf)
