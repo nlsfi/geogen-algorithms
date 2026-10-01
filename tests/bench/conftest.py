@@ -5,7 +5,9 @@
 #  SPDX-License-Identifier: MIT
 
 
+import numpy as np
 import pytest
+from shapely.geometry import LineString
 
 
 def pytest_terminal_summary(
@@ -35,3 +37,16 @@ def pytest_terminal_summary(
                     )
 
     terminalreporter.write_sep("-", cyan=True)
+
+
+@pytest.fixture
+def make_linestring():
+    def _factory(vertex_count: int, seed: int = 0) -> LineString:
+        rng = np.random.default_rng(seed=seed)
+
+        steps = rng.normal(loc=1.0, scale=0.5, size=(vertex_count, 2))
+        coords = np.cumsum(steps, axis=0)
+
+        return LineString(coords)
+
+    return _factory
