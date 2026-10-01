@@ -14,39 +14,8 @@ from statistics import mean
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 from warnings import warn
 
+import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
-from numpy import (  # noqa: SC200
-    append,
-    arange,
-    arctan2,
-    argmax,
-    array,
-    array_equal,
-    asarray,
-    ascontiguousarray,
-    column_stack,
-    concatenate,
-    cos,
-    cumsum,
-    degrees,
-    dtype,
-    empty,
-    float64,
-    fromiter,
-    linalg,
-    ndarray,
-    pi,
-    sin,
-    sqrt,
-    stack,
-    tile,
-    unique,
-    void,
-    vstack,
-    where,
-    zeros,
-)
-from numpy import round as np_round
 from pygeoops import centerline
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -186,12 +155,12 @@ def _normalize_skip_coords(
 
 
 def _chaikin_conditional_pass(
-    coords: ndarray,
+    coords: np.ndarray,
     skip_set: set[tuple[float, ...]],
     distance_threshold: float | None,
     *,
     is_linestring: bool,
-) -> ndarray:
+) -> np.ndarray:
     """Perform a single iteration of the Chaikin corner cutting algorithm.
 
     Potential conditions can be specified i.e. leaving specific vertices or
@@ -215,10 +184,10 @@ def _chaikin_conditional_pass(
     n = len(segment_start_points)
 
     # First mark all vertices as a no-skip
-    skip_vertex_mask = zeros(len(coords), dtype=bool)
+    skip_vertex_mask = np.zeros(len(coords), dtype=bool)
 
     if skip_set:
-        skip_mask = fromiter(
+        skip_mask = np.fromiter(
             (tuple(pt) in skip_set for pt in coords),
             dtype=bool,
             count=len(coords),
@@ -227,7 +196,7 @@ def _chaikin_conditional_pass(
 
     if distance_threshold is not None:
         # Measure distance from unsmoothed vertex to the cut points
-        cut_distances = 0.25 * linalg.norm(
+        cut_distances = 0.25 * np.linalg.norm(
             segment_end_points - segment_start_points,
             axis=1,
         )
@@ -244,7 +213,7 @@ def _chaikin_conditional_pass(
     skip_segment_start_points = skip_vertex_mask[:-1]
     skip_segment_end_points = skip_vertex_mask[1:]
 
-    first_segment_vertices = where(
+    first_segment_vertices = np.where(
         skip_segment_start_points[:, None],
         segment_start_points,
         q,
@@ -253,21 +222,21 @@ def _chaikin_conditional_pass(
     # Create space for double the points and interleave smoothed points.
     # Q (or original start) coordinates in the even indexes
     # R in the odd indices.
-    combined = empty((2 * n, coords.shape[1]), dtype=coords.dtype)
+    combined = np.empty((2 * n, coords.shape[1]), dtype=coords.dtype)
     combined[0::2] = first_segment_vertices
     combined[1::2] = r
 
     # Create mask to finally filter out skipped R coordinates
-    mask = empty(2 * n, dtype=bool)
+    mask = np.empty(2 * n, dtype=bool)
     mask[0::2] = True
     mask[1::2] = ~skip_segment_end_points
 
     smoothed_vertices = combined[mask]
 
     if is_linestring:
-        return vstack([coords[0:1], smoothed_vertices, coords[-1:]])
+        return np.vstack([coords[0:1], smoothed_vertices, coords[-1:]])
 
-    return vstack([smoothed_vertices, smoothed_vertices[0:1]])
+    return np.vstack([smoothed_vertices, smoothed_vertices[0:1]])
 
 
 def chaikin_smooth_conditional(
@@ -316,7 +285,7 @@ def chaikin_smooth_conditional(
     skip_set = _normalize_skip_coords(skip_coords)
 
     if isinstance(geom, LineString):
-        coords = asarray(geom.coords, dtype=float64)
+        coords = np.asarray(geom.coords, dtype=np.float64)
         for _ in range(iterations):
             coords = _chaikin_conditional_pass(
                 coords,
@@ -327,9 +296,9 @@ def chaikin_smooth_conditional(
         return LineString(coords)
 
     if isinstance(geom, Polygon):
-        exterior_coords = asarray(geom.exterior.coords, dtype=float64)
+        exterior_coords = np.asarray(geom.exterior.coords, dtype=np.float64)
         interior_coords_list = [
-            asarray(interior.coords, dtype=float64) for interior in geom.interiors
+            np.asarray(interior.coords, dtype=np.float64) for interior in geom.interiors
         ]
 
         for _ in range(iterations):
@@ -794,7 +763,7 @@ def extend_line_by(
 def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
     geometry: BaseGeometry,
     kd_tree: KDTree,  # noqa: SC200
-    source_z: ndarray,  # noqa: SC200
+    source_z: np.ndarray,  # noqa: SC200
 ) -> BaseGeometry:
     """Create new geometry using nearest Z and given KDTree.
 
@@ -821,7 +790,7 @@ def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
 
     def _coords_with_z(coords: CoordinateSequence) -> list[tuple[float, float, float]]:
         x_values, y_values = coords.xy  # Ignore possible pre-existing Z
-        _, idx = kd_tree.query(column_stack((x_values, y_values)))  # noqa: SC200
+        _, idx = kd_tree.query(np.column_stack((x_values, y_values)))  # noqa: SC200
         z_values = source_z[idx]
         return [
             (x, y, float(z))
@@ -903,7 +872,7 @@ def assign_nearest_z(
     if not coords_list:
         return target_gdf
 
-    source_coords = vstack(coords_list)  # noqa: SC200
+    source_coords = np.vstack(coords_list)  # noqa: SC200
 
     # Build KD-tree
     kd_tree = KDTree(source_coords[:, :2])  # noqa: SC200
@@ -1172,13 +1141,13 @@ def segment_bearing(segment: LineString) -> float:
         msg = "Segment has duplicate vertexes."
         raise GeometryOperationError(msg)
 
-    m = sqrt(dx**2 + dy**2)
-    direction = atan2(dx / m, dy / m)
+    m = np.sqrt(dx**2 + dy**2)
+    direction = np.atan2(dx / m, dy / m)
 
     if direction < 0:
-        return degrees(direction + 2 * pi)
+        return np.degrees(direction + 2 * np.pi)
 
-    return degrees(direction)
+    return np.degrees(direction)
 
 
 def segment_direction(
@@ -1219,9 +1188,9 @@ def segment_direction(
     angle = atan2(vertex_2[1] - vertex_1[1], vertex_2[0] - vertex_1[0])
 
     if unit == "degrees":
-        return degrees(angle) % 180
+        return np.degrees(angle) % 180
 
-    return angle % pi
+    return angle % np.pi
 
 
 def equalize_z(  # noqa: C901, PLR0911
@@ -1244,7 +1213,7 @@ def equalize_z(  # noqa: C901, PLR0911
     if not geom.has_z:
         return geom
 
-    z_values = array([coord[2] for coord in get_coordinates(geom, include_z=True)])
+    z_values = np.array([coord[2] for coord in get_coordinates(geom, include_z=True)])
 
     z_to_set = float(z_values.min() if method == "min" else z_values.max())
 
@@ -2015,10 +1984,10 @@ def concatenate_lines(
     ca = get_coordinates(a, include_z=has_z)
     cb = get_coordinates(b, include_z=has_z)
 
-    if array_equal(ca[-1], cb[0]):
-        coords = concatenate((ca, cb[1:]))
+    if np.array_equal(ca[-1], cb[0]):
+        coords = np.concatenate((ca, cb[1:]))
     else:
-        coords = concatenate((ca, cb))
+        coords = np.concatenate((ca, cb))
 
     return linestrings(coords)
 
@@ -2191,7 +2160,7 @@ def get_connected_segments(
     geom: LineString | MultiLineString,
     vertex: Point,
     tolerance: float = 1e-7,
-) -> ndarray:
+) -> np.ndarray:
     """Find segments connected to a vertex.
 
     Args:
@@ -2219,7 +2188,7 @@ def get_connected_segments(
     coords, line_ids = get_coordinates(parts, return_index=True, include_z=geom.has_z)
 
     if len(coords) < 2 or vertex.is_empty:  # noqa: PLR2004
-        return empty((0, 2, coords.shape[1]))
+        return np.empty((0, 2, coords.shape[1]))
 
     # Extracting coordinates from a MultiLineString flattens them into a
     # contiguous array. This means there'll be "fake" segments between the
@@ -2235,24 +2204,24 @@ def get_connected_segments(
 
     # Determine connected segments by calculating whether the distance from the
     # segment start or end points is within the tolerance.
-    vertex_coords = asarray(vertex.coords[0])
+    vertex_coords = np.asarray(vertex.coords[0])
 
     connected_to_start = (
-        linalg.norm(segment_start_points - vertex_coords, axis=1) < tolerance
+        np.linalg.norm(segment_start_points - vertex_coords, axis=1) < tolerance
     )
     connected_to_end = (
-        linalg.norm(segment_end_points - vertex_coords, axis=1) < tolerance
+        np.linalg.norm(segment_end_points - vertex_coords, axis=1) < tolerance
     )
 
     # Orient segments so that in the output the vertex point will be at index 0
-    starts_at_vertex = stack(
+    starts_at_vertex = np.stack(
         [
             segment_start_points[connected_to_start],
             segment_end_points[connected_to_start],
         ],
         axis=1,
     )
-    ends_at_vertex = stack(
+    ends_at_vertex = np.stack(
         [
             segment_end_points[connected_to_end],
             segment_start_points[connected_to_end],
@@ -2260,14 +2229,14 @@ def get_connected_segments(
         axis=1,
     )
 
-    return vstack([starts_at_vertex, ends_at_vertex])
+    return np.vstack([starts_at_vertex, ends_at_vertex])
 
 
 def get_connected_unit_vectors(
     geom: LineString | MultiLineString,
     vertex: Point,
     tolerance: float = 1e-7,
-) -> ndarray:
+) -> np.ndarray:
     """Find unit vectors connected to a vertex.
 
     Z coordinates are ignored and discarded.
@@ -2286,7 +2255,7 @@ def get_connected_unit_vectors(
     segments = get_connected_segments(geom, vertex, tolerance)
 
     if segments.size == 0:
-        return empty((0, 3 if vertex.has_z else 2))
+        return np.empty((0, 3 if vertex.has_z else 2))
     vecs = (
         segments[:, 1, :]  # End points
         - segments[:, 0, :]  # Vertex
@@ -2298,7 +2267,7 @@ def get_connected_unit_vectors(
         - segments[:, 0, :2]  # Vertex
     )
 
-    norms = linalg.norm(vecs_2d, axis=1, keepdims=True)
+    norms = np.linalg.norm(vecs_2d, axis=1, keepdims=True)
 
     # Ensure we don't divide by 0
     valid = (norms > tolerance).ravel()
@@ -2333,36 +2302,36 @@ def create_crossing_line_at_vertex(
     if vectors.shape[0] == 0:
         return LineString()
 
-    vertex_coords = array(point.coords[0][:2])  # Take only x and y
+    vertex_coords = np.array(point.coords[0][:2])  # Take only x and y
 
     if vectors.shape[0] == 1:
         # Only 1 segment -> just use perpendicular angle.
         vec = vectors[0, :2]
-        crossing_unit_vector = array([-vec[1], vec[0]])
+        crossing_unit_vector = np.array([-vec[1], vec[0]])
     else:
         # 2+ segments -> we find the largest open angle between segments and
         # cut through it.
-        angles = arctan2(vectors[:, 1], vectors[:, 0])
+        angles = np.arctan2(vectors[:, 1], vectors[:, 0])
 
         # Change all angles between 0-pi
-        axial_angles = angles % pi
+        axial_angles = angles % np.pi
 
         # Sort, this ends up with sorting counter-clockwise.
         axial_angles.sort()
 
         gaps_between_angles = axial_angles[1:] - axial_angles[:-1]
-        leftover_gap = (axial_angles[0] + pi) - axial_angles[-1]
+        leftover_gap = (axial_angles[0] + np.pi) - axial_angles[-1]
 
-        gaps = append(gaps_between_angles, leftover_gap)
-        largest_gap_index = argmax(gaps)
+        gaps = np.append(gaps_between_angles, leftover_gap)
+        largest_gap_index = np.argmax(gaps)
 
         start_angle = axial_angles[largest_gap_index % len(axial_angles)]
         largest_gap_bisecting_angle = start_angle + (gaps[largest_gap_index] / 2.0)
 
-        crossing_unit_vector = array(
+        crossing_unit_vector = np.array(
             [
-                cos(largest_gap_bisecting_angle),
-                sin(largest_gap_bisecting_angle),
+                np.cos(largest_gap_bisecting_angle),
+                np.sin(largest_gap_bisecting_angle),
             ]
         )
 
@@ -2373,16 +2342,16 @@ def create_crossing_line_at_vertex(
 
 
 def _get_shared_points(
-    coords: ndarray,
-    geom_idx: ndarray,
+    coords: np.ndarray,
+    geom_idx: np.ndarray,
     *,
     precision: int | None = None,
-) -> ndarray:
+) -> np.ndarray:
     if coords.size == 0:
-        return array([], dtype="object")
+        return np.array([], dtype="object")
 
     if precision is not None:
-        coords = np_round(coords, precision)
+        coords = np.round(coords, precision)
 
     # We use a numpy memory trick to deduplicate coordinates. This is faster
     # than using just np.unique(). Doing this requires setting potential -0.0
@@ -2393,25 +2362,27 @@ def _get_shared_points(
     # First we remove duplicate coordinates inside a single geometry. This eliminates
     # straight up invalid duplicate vertices, but also valid self-loops, which should
     # not be counted as shared.
-    stacked = column_stack([coords, geom_idx])
-    stacked_contiguous = ascontiguousarray(stacked)
+    stacked = np.column_stack([coords, geom_idx])
+    stacked_contiguous = np.ascontiguousarray(stacked)
     bytes_per_row = stacked_contiguous.dtype.itemsize * stacked_contiguous.shape[1]
-    void_view = stacked_contiguous.view(dtype((void, bytes_per_row))).ravel()
-    _, unique_pair_indexes = unique(void_view, return_index=True)
+    void_view = stacked_contiguous.view(np.dtype((np.void, bytes_per_row))).ravel()
+    _, unique_pair_indexes = np.unique(void_view, return_index=True)
 
     # Now we disregard the geometry indices and find duplicated coordinates.
     cleaned_coords = coords[unique_pair_indexes]
-    coords_contiguous = ascontiguousarray(cleaned_coords)
+    coords_contiguous = np.ascontiguousarray(cleaned_coords)
     bytes_per_row = coords_contiguous.dtype.itemsize * coords_contiguous.shape[1]
-    void_view = coords_contiguous.view(dtype((void, bytes_per_row))).ravel()
+    void_view = coords_contiguous.view(np.dtype((np.void, bytes_per_row))).ravel()
 
     # Get the count of each coordinate pair.
-    _, unique_indexes, counts = unique(void_view, return_index=True, return_counts=True)
+    _, unique_indexes, counts = np.unique(
+        void_view, return_index=True, return_counts=True
+    )
 
     shared_coords = cleaned_coords[unique_indexes[counts > 1]]
 
     if shared_coords.size == 0:
-        return array([], dtype="object")
+        return np.array([], dtype="object")
 
     return points(shared_coords)
 
@@ -2421,7 +2392,7 @@ def get_topological_points(
     *,
     force_to_2d: bool = True,
     precision: int | None = None,
-) -> ndarray:
+) -> np.ndarray:
     """Find all topological points in a GeoSeries or GeoDataFrame.
 
     Topological point referring to a point which is shared by two or more
@@ -2448,12 +2419,12 @@ def get_topological_points(
     # TODO: BEFORE RELEASE: is the name accurate? should topological points
     # also include points situated on a segment?
     if input_data.empty:
-        return array([], dtype="object")
+        return np.array([], dtype="object")
 
     geoms = input_data.geometry.to_numpy()
 
     if geoms.size == 0:
-        return array([], dtype="object")
+        return np.array([], dtype="object")
 
     include_z = False if force_to_2d else has_z(geoms).any()
 
@@ -2471,7 +2442,7 @@ def get_line_connection_points(
     *,
     force_to_2d: bool = True,
     precision: int | None = None,
-) -> ndarray:
+) -> np.ndarray:
     """Find all line endpoints which connect to another line endpoint(s).
 
     Args:
@@ -2487,12 +2458,12 @@ def get_line_connection_points(
 
     """
     if input_data.empty:
-        return array([], dtype="object")
+        return np.array([], dtype="object")
 
     geoms = input_data.geometry.to_numpy()
 
     if geoms.size == 0:
-        return array([], dtype="object")
+        return np.array([], dtype="object")
 
     include_z = False if force_to_2d else has_z(geoms).any()
 
@@ -2501,19 +2472,19 @@ def get_line_connection_points(
     coords = get_coordinates(geoms, include_z=include_z)
 
     if coords.size == 0:
-        return array([], dtype="object")
+        return np.array([], dtype="object")
 
     # We find the start and end index positions of each linestring in the array
     # by calculating the cumulative sum of coordinate count.
     n_coords = get_num_coordinates(geoms)
-    cumulative_sum = cumsum(n_coords)
+    cumulative_sum = np.cumsum(n_coords)
     start_indexes = cumulative_sum - n_coords
     end_indexes = cumulative_sum - 1
 
     # Extract start and end coordinates to a 2d array and generate geometry
     # indexes
-    coords = vstack([coords[start_indexes], coords[end_indexes]])
-    geom_indexes = tile(arange(len(geoms)), 2)
+    coords = np.vstack([coords[start_indexes], coords[end_indexes]])
+    geom_indexes = np.tile(np.arange(len(geoms)), 2)
 
     return _get_shared_points(coords, geom_indexes, precision=precision)
 

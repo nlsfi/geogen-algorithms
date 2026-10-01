@@ -9,11 +9,10 @@ from collections.abc import Callable
 from typing import Literal
 from warnings import catch_warnings
 
+import numpy as np
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
-from numpy import array, empty, isclose, ndarray, pi
-from numpy.testing import assert_allclose
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 from shapely import (
@@ -390,11 +389,11 @@ def test_chaikin_smooth_conditional(
     [
         (
             GeoSeries(),
-            array([], dtype="object"),
+            np.array([], dtype="object"),
         ),
         (
             GeoSeries(Point(0, 0)),
-            array([], dtype="object"),
+            np.array([], dtype="object"),
         ),
         (
             GeoSeries(
@@ -403,7 +402,7 @@ def test_chaikin_smooth_conditional(
                     LineString([[0, 0], [0, -1]]),
                 ]
             ),
-            array([Point(0, 0)]),
+            np.array([Point(0, 0)]),
         ),
         (
             GeoSeries(
@@ -413,7 +412,7 @@ def test_chaikin_smooth_conditional(
                     LineString([[0, 0], [-1, 0]]),
                 ]
             ),
-            array([Point(0, 0)]),
+            np.array([Point(0, 0)]),
         ),
         (
             GeoSeries(
@@ -423,7 +422,7 @@ def test_chaikin_smooth_conditional(
                     box(0, 4, 2, 5),
                 ]
             ),
-            array(
+            np.array(
                 [
                     Point(0, 2),
                     Point(0, 4),
@@ -443,7 +442,7 @@ def test_chaikin_smooth_conditional(
 )
 def test_get_topological_points(
     input_geoseries: GeoSeries,
-    expected_points: ndarray,
+    expected_points: np.ndarray,
 ):
     assert get_topological_points(input_geoseries).tolist() == expected_points.tolist()
 
@@ -3018,7 +3017,7 @@ def test_angle_difference_is_symmetric(
         (
             LineString([(0, 0), (1, 0), (1, 1)]),
             "radians",
-            pi / 4,
+            np.pi / 4,
         ),
         (
             MultiLineString(
@@ -3028,7 +3027,7 @@ def test_angle_difference_is_symmetric(
                 ]
             ),
             "radians",
-            pi / 4,
+            np.pi / 4,
         ),
     ],
     ids=[
@@ -3045,7 +3044,7 @@ def test_line_mean_direction(
     unit: Literal["degrees", "radians"],
     expected: float,
 ):
-    assert isclose(line_mean_direction(input_geom, unit=unit), expected)
+    assert np.isclose(line_mean_direction(input_geom, unit=unit), expected)
 
 
 @pytest.mark.parametrize(
@@ -3066,9 +3065,9 @@ def test_line_mean_direction(
         (LineString([(1, 1), (0, 0)]), "degrees", 45),
         (LineString([(-1, 1), (0, 0)]), "degrees", 135),
         (LineString([(0, 0), (1, 0)]), "radians", 0),
-        (LineString([(0, 0), (0, 1)]), "radians", pi / 2),
-        (LineString([(0, 0), (1, 1)]), "radians", pi / 4),
-        (LineString([(0, 0), (-1, 1)]), "radians", 3 * pi / 4),
+        (LineString([(0, 0), (0, 1)]), "radians", np.pi / 2),
+        (LineString([(0, 0), (1, 1)]), "radians", np.pi / 4),
+        (LineString([(0, 0), (-1, 1)]), "radians", 3 * np.pi / 4),
     ],
     ids=[
         "east",
@@ -3092,7 +3091,7 @@ def test_segment_direction(
     unit: Literal["degrees", "radians"],
     expected: float,
 ):
-    assert isclose(segment_direction(segment, unit=unit), expected)
+    assert np.isclose(segment_direction(segment, unit=unit), expected)
 
 
 @pytest.mark.parametrize(
@@ -3795,32 +3794,32 @@ def test_make_valid_extract_linestrings(
         (
             LineString(),
             Point(),
-            empty((0, 2, 2)),
+            np.empty((0, 2, 2)),
         ),
         (
             LineString(),
             Point(0, 0),
-            empty((0, 2, 2)),
+            np.empty((0, 2, 2)),
         ),
         (
             LineString([[0, 0], [0, 0]]),
             Point(),
-            empty((0, 2, 2)),
+            np.empty((0, 2, 2)),
         ),
         (
             LineString([(0, 0), (1, 0)]),
             Point(0, 0),
-            array([[[0.0, 0.0], [1.0, 0.0]]]),
+            np.array([[[0.0, 0.0], [1.0, 0.0]]]),
         ),
         (
             LineString([(0, 0), (1, 0)]),
             Point(1, 0),
-            array([[[1.0, 0.0], [0.0, 0.0]]]),
+            np.array([[[1.0, 0.0], [0.0, 0.0]]]),
         ),
         (
             LineString([(0, 0), (1, 0), (1, 2)]),
             Point(1, 0),
-            array(
+            np.array(
                 [
                     [[1.0, 0.0], [1.0, 2.0]],
                     [[1.0, 0.0], [0.0, 0.0]],
@@ -3830,7 +3829,7 @@ def test_make_valid_extract_linestrings(
         (
             LineString([(0, 0), (1, 0), (1, 2), (2, 2)]),
             Point(1, 2),
-            array(
+            np.array(
                 [
                     [[1.0, 2.0], [2.0, 2.0]],
                     [[1.0, 2.0], [1.0, 0.0]],
@@ -3840,12 +3839,12 @@ def test_make_valid_extract_linestrings(
         (
             LineString([(0, 0), (1, 1)]),
             Point(10, 10),
-            empty((0, 2, 2)),
+            np.empty((0, 2, 2)),
         ),
         (
             LineString([(0, 0, 0), (0, 1, 5)]),
             Point(0, 0, 0),
-            array([[[0.0, 0.0, 0.0], [0.0, 1.0, 5.0]]]),
+            np.array([[[0.0, 0.0, 0.0], [0.0, 1.0, 5.0]]]),
         ),
     ],
     ids=[
@@ -3863,9 +3862,9 @@ def test_make_valid_extract_linestrings(
 def test_get_connected_segments(
     line: LineString | MultiLineString,
     vertex: Point,
-    expected_segments: ndarray,
+    expected_segments: np.ndarray,
 ) -> None:
-    assert_allclose(get_connected_segments(line, vertex), expected_segments)
+    np.testing.assert_allclose(get_connected_segments(line, vertex), expected_segments)
 
 
 @pytest.mark.parametrize(
@@ -3899,32 +3898,32 @@ def test_get_connected_segments_raises(
         (
             LineString(),
             Point(),
-            empty((0, 2)),
+            np.empty((0, 2)),
         ),
         (
             LineString(),
             Point(0, 0),
-            empty((0, 2)),
+            np.empty((0, 2)),
         ),
         (
             LineString([[0, 0], [0, 0]]),
             Point(),
-            empty((0, 2)),
+            np.empty((0, 2)),
         ),
         (
             LineString([(0, 0), (1, 0)]),
             Point(0, 0),
-            array([[1.0, 0.0]]),
+            np.array([[1.0, 0.0]]),
         ),
         (
             LineString([(0, 0), (1, 0)]),
             Point(1, 0),
-            array([[-1.0, 0.0]]),
+            np.array([[-1.0, 0.0]]),
         ),
         (
             LineString([(0, 0), (1, 0), (1, 2)]),
             Point(1, 0),
-            array(
+            np.array(
                 [
                     [0.0, 1.0],
                     [-1.0, 0.0],
@@ -3934,7 +3933,7 @@ def test_get_connected_segments_raises(
         (
             LineString([(0, 0), (1, 0), (1, 2), (2, 2)]),
             Point(1, 2),
-            array(
+            np.array(
                 [
                     [1.0, 0.0],
                     [0.0, -1.0],
@@ -3944,12 +3943,12 @@ def test_get_connected_segments_raises(
         (
             LineString([(0, 0), (1, 1)]),
             Point(10, 10),
-            empty((0, 2)),
+            np.empty((0, 2)),
         ),
         (
             LineString([(0.5, 0.5, 0.5), (0, 1, 5)]),
             Point(0.5, 0.5, 0.5),
-            array([[-0.707107, 0.707107, 6.36396]]),
+            np.array([[-0.707107, 0.707107, 6.36396]]),
         ),
     ],
     ids=[
@@ -3967,14 +3966,14 @@ def test_get_connected_segments_raises(
 def test_get_connected_unit_vectors(
     line: LineString | MultiLineString,
     vertex: Point,
-    expected_vectors: ndarray,
+    expected_vectors: np.ndarray,
 ) -> None:
     res = get_connected_unit_vectors(line, vertex)
 
     assert res.shape == expected_vectors.shape
 
     if expected_vectors.size > 0:
-        assert_allclose(res, expected_vectors, atol=1e-5)
+        np.testing.assert_allclose(res, expected_vectors, atol=1e-5)
 
 
 @pytest.mark.parametrize(

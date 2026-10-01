@@ -6,8 +6,8 @@
 import operator
 from typing import Literal
 
+import numpy as np
 from geopandas import GeoDataFrame
-from numpy import zeros
 from pandas import Series
 from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
 from shapely.geometry import LineString, MultiLineString, Point
@@ -152,7 +152,7 @@ def dissolve_and_inherit_attributes(  # noqa: C901
 
     # Create a dummy column to get every row to the same group if no column(s)
     # was given.
-    by = zeros(len(gdf), dtype="int64") if by_column is None else by_column
+    by = np.zeros(len(gdf), dtype="int64") if by_column is None else by_column
 
     # This function works by first grouping rows by the given column(s) (or all
     # in the same group if nothing was given). Then we group rows by their

@@ -5,10 +5,10 @@
 #  SPDX-License-Identifier: MIT
 
 
+import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
-from numpy import nan
 from shapely import LineString, MultiPolygon, Polygon, box, union_all
 
 from geogenalg.transform import thin_polygon_sections_to_lines
@@ -39,7 +39,7 @@ from geogenalg.utility.dataframe_processing import add_columns_to_gdf
                 {
                     "id": [1],
                     "attribute": ["attribute"],
-                    "_olds_ids": [nan],
+                    "_olds_ids": [np.nan],
                 },
                 geometry=[
                     box(0, 0, 100, 20),

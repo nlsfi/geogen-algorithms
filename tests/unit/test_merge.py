@@ -7,9 +7,9 @@
 import re
 from typing import Literal
 
+import numpy as np
 import pytest
 from geopandas import GeoDataFrame
-from numpy.testing import assert_approx_equal
 from pandas.testing import assert_frame_equal
 from shapely import box
 from shapely.geometry import LineString, Point, Polygon
@@ -570,8 +570,12 @@ def test_buffer_and_merge_polygons():
 
     # Polygons should stay separate
     assert len(result) == 2
-    assert_approx_equal(polygon_1.area, result.geometry.iloc[0].area, significant=3)
-    assert_approx_equal(polygon_2.area, result.geometry.iloc[1].area, significant=3)
+    np.testing.assert_approx_equal(
+        polygon_1.area, result.geometry.iloc[0].area, significant=3
+    )
+    np.testing.assert_approx_equal(
+        polygon_2.area, result.geometry.iloc[1].area, significant=3
+    )
 
 
 def test_buffer_and_merge_polygons_invalid_geometry_type():

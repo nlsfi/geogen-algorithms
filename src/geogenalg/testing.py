@@ -12,10 +12,10 @@ from tempfile import TemporaryDirectory, gettempdir
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 from warnings import warn
 
+import numpy as np
 from geopandas import GeoDataFrame, read_file
 from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
-from numpy import allclose
 from shapely import get_coordinates
 from shapely.geometry import (
     GeometryCollection,
@@ -148,7 +148,7 @@ def assert_geoseries_coordinates_equal(
         a_coords = get_coordinates(a_geom, include_z=True)
         b_coords = get_coordinates(b_geom, include_z=True)
 
-        if not allclose(
+        if not np.allclose(
             a_coords,
             b_coords,
             atol=tolerance,
