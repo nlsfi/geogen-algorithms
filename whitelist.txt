@@ -8,6 +8,7 @@ allclose
 arange
 arctan2
 argmax
+argsort
 argspec
 asarray
 ascontiguousarray
@@ -99,6 +100,7 @@ rtol
 Rtree
 ruas
 scipy
+searchsorted
 segmentize
 segmentized
 shapelysmooth
