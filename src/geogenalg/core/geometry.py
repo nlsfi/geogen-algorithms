@@ -35,6 +35,7 @@ from shapely import (
     get_parts,
     get_point,
     has_z,
+    is_closed,
     length,
     linestrings,
     make_valid,
@@ -2538,3 +2539,175 @@ def chaikin_smooth_keep_topology(
             distance_threshold=distance_threshold,
         ),
     )
+
+
+def gaussian_smooth(  # noqa: PLR0915, PLR0914
+    line_geoms: np.ndarray,
+    sigma: float,
+) -> np.ndarray:
+    """Smooth linestrings using a gaussian function.
+
+    Args:
+    ----
+        line_geoms: Array of linestring geometries.
+        sigma: Affects gaussian filter strength, higher values cause stronger
+            smoothing.
+
+    Returns:
+    -------
+        Array of smoothed linestring geometries.
+
+    Raises:
+    ------
+        GeometryOperationError: If any input geometry has zero length or less
+            than 2 vertices.
+
+    """
+    line_geoms = np.asarray(line_geoms, dtype=object)
+    line_count = len(line_geoms)
+    if line_count == 0:
+        return line_geoms.copy()
+
+    all_coords, line_indexes = get_coordinates(line_geoms, return_index=True)
+    is_closed_per_line = is_closed(line_geoms)
+    counts_per_line = get_num_coordinates(line_geoms)
+
+    if np.any(counts_per_line < 2):  # noqa: PLR2004
+        msg = "All geometries must contain at least 2 vertexes."
+        raise GeometryOperationError(msg)
+
+    # We respace existing vertices to a consistent interval for better
+    # smoothing results.
+
+    # We could use shapely.interpolate() to achieve this more simply, but
+    # instead we do it "manually" to make this significantly (10x) faster.
+
+    # Calculate segment lengths in each line to use their mean for respacing
+    segment_vectors = np.diff(all_coords, axis=0)
+    segment_lengths = np.linalg.norm(segment_vectors, axis=1)
+
+    # Because we extract all the coordinates in all the geometries to a
+    # contiguous array, there's "fake" segments between the linestrings.
+    # Identify these and set their length at zero.
+    same_line = line_indexes[1:] == line_indexes[:-1]
+    segment_lengths[~same_line] = 0.0
+
+    # We calculate the cumulative distance at each vertex, to be used for
+    # interpolation later.
+
+    # Insert 0 at cumulative segment lengths to match vertex count
+    cumulative_all = np.insert(np.cumsum(segment_lengths), 0, 0.0)
+    line_start_point_indexes = np.searchsorted(line_indexes, np.arange(line_count))
+    line_end_point_indexes = (
+        np.searchsorted(
+            line_indexes,
+            np.arange(line_count),
+            side="right",
+        )
+        - 1
+    )
+
+    # Get cumulative distance at each vertex
+    cumulative_distances = (
+        cumulative_all - cumulative_all[line_start_point_indexes][line_indexes]
+    )
+
+    total_lengths = cumulative_distances[line_end_point_indexes]
+
+    if np.any(total_lengths) == 0:
+        msg = "Geometries with no length found."
+        raise GeometryOperationError(msg)
+
+    line_index_per_vertex = line_start_point_indexes[line_indexes]
+    line_start_offset_per_vertex = np.arange(len(all_coords)) - line_index_per_vertex
+
+    # Calculate mean segment length of each line
+    mean_segment_lengths = total_lengths / np.maximum(1, counts_per_line - 1)
+
+    new_cumulative_target_distances = (
+        line_start_offset_per_vertex * mean_segment_lengths[line_indexes]
+    )
+
+    # Since we're dealing with one large contiguous array where each line's
+    # vertexes' cumulative distances start from 0, and we want to use np.interp
+    # which expects values to keep growing we jump the distance values by each
+    # line's index by a large number (which is larger than any linestring's
+    # length) ensuring we have a contiguously growing array.
+    max_distance = (
+        np.max(cumulative_distances) if len(cumulative_distances) > 0 else 0.0
+    )
+    multiplier = max_distance + 1.0
+
+    shifted_original = cumulative_distances + line_indexes * multiplier
+    shifted_target = new_cumulative_target_distances + line_indexes * multiplier
+
+    respaced_coords = np.empty_like(all_coords)
+    # Interpolate x
+    respaced_coords[:, 0] = np.interp(
+        shifted_target,
+        shifted_original,
+        all_coords[:, 0],
+    )
+
+    # Interpolate y
+    respaced_coords[:, 1] = np.interp(
+        shifted_target,
+        shifted_original,
+        all_coords[:, 1],
+    )
+
+    # Calculate how many neighboring vertices the filtering considers
+    filter_intervals = np.round(4 * sigma / mean_segment_lengths).astype(int)
+
+    # Ensure interval is below the vertex count
+    max_filter_intervals = counts_per_line - 1
+    filter_intervals = np.minimum(filter_intervals, max_filter_intervals)
+
+    # Adjust used sigma if line is too short
+    line_sigmas = np.where(
+        filter_intervals == max_filter_intervals,
+        filter_intervals * mean_segment_lengths / 4.0,
+        sigma,
+    )
+
+    lines_coords = np.split(respaced_coords, line_start_point_indexes[1:])
+    smoothed_coords = []
+
+    for i in range(line_count):
+        line_coords = lines_coords[i]
+        k = filter_intervals[i]
+
+        if k == 0:
+            # Smoothing will do nothing, exit early.
+            smoothed_coords.append(line_coords)
+            continue
+
+        # Create gaussian kernel normalized to sum to 1.0
+        k_range = np.arange(-k, k + 1)
+        weights = np.exp(-0.5 * (k_range / line_sigmas[i]) ** 2)
+        weights /= weights.sum()
+
+        # Pad endpoints by k to stop losing vertices
+        if is_closed_per_line[i]:
+            # Drop duplicated bounding vertex
+            padded = np.pad(line_coords[:-1], ((k, k), (0, 0)), mode="wrap")
+        else:
+            padded = np.pad(line_coords, ((k, k), (0, 0)), mode="edge")
+
+        # Apply gaussian kernel
+        x_smoothed = np.convolve(padded[:, 0], weights[::-1], mode="valid")
+        y_smoothed = np.convolve(padded[:, 1], weights[::-1], mode="valid")
+        smoothed = np.column_stack([x_smoothed, y_smoothed])
+
+        if is_closed_per_line[i]:
+            smoothed = np.vstack([smoothed, smoothed[0]])
+        else:
+            # Restore original endpoints
+            smoothed[0] = line_coords[0]
+            smoothed[-1] = line_coords[-1]
+
+        smoothed_coords.append(smoothed)
+
+    flat_smoothed_coords = np.vstack(smoothed_coords)
+
+    return linestrings(flat_smoothed_coords, indices=line_indexes)

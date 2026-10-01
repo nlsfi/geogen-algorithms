@@ -31,6 +31,7 @@ changelog
 cleandoc
 concat
 const
+convolve
 coord
 coords
 crs
@@ -69,6 +70,7 @@ hashable
 hypot
 idx
 inplace
+interp
 isclose
 itemsize
 keepdims
@@ -95,6 +97,7 @@ pygeoops
 ramer
 rdp
 rect
+respaced
 rglob
 rtol
 Rtree

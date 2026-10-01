@@ -4,6 +4,9 @@
 #
 #  SPDX-License-Identifier: MIT
 
+from collections.abc import Callable
+
+import numpy as np
 import pytest
 from geopandas.geodataframe import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
@@ -13,6 +16,7 @@ from shapely.geometry import LineString, Point
 from geogenalg.core.geometry import (
     assign_z_from_attribute,
     concatenate_lines,
+    gaussian_smooth,
     get_line_connection_points,
     get_topological_points,
 )
@@ -130,3 +134,29 @@ def test_get_line_connection_points_roads(
     result = benchmark(get_line_connection_points, gdf)
 
     assert len(result) == 1050
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    "vertex_count",
+    [
+        100,
+        1000,
+        10000,
+        30000,
+        100000,
+        1000000,
+        10000000,
+    ],
+)
+def test_gaussian_smooth(
+    vertex_count: int,
+    benchmark: BenchmarkFixture,
+    make_linestring: Callable[[int], LineString],
+):
+    line = make_linestring(vertex_count)
+
+    result = benchmark(gaussian_smooth, np.array([line]), sigma=2)
+
+    assert len(result) == 1
+    assert len(result[0].coords) == vertex_count
