@@ -6,10 +6,8 @@
 
 from typing import ClassVar
 
-from cartagen.utils import smooth_gaussian
 from geopandas import GeoDataFrame
 from pydantic import Field
-from shapely.geometry import LineString, MultiPolygon, Polygon
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -17,12 +15,14 @@ from geogenalg.application import (
     supports_identity,
 )
 from geogenalg.continuity import (
-    add_contiguous_lines_information,
+    get_contiguous_lengths,
     smooth_linestring_connections,
 )
-from geogenalg.core.geometry import assign_z_from_attribute, largest_part
-from geogenalg.identity import hash_duplicate_indexes
-from geogenalg.split import split_lines_by_points
+from geogenalg.core.geometry import (
+    assign_z_from_attribute,
+    gaussian_smooth,
+)
+from geogenalg.split import explode_and_hash_id, split_lines_by_points
 
 SNAP_DISTANCE = 1.0
 
@@ -83,42 +83,19 @@ class GeneralizeContours(BaseAlgorithm):
         if gdf.empty:
             return gdf.copy()
 
-        # Split contours at slope line positions
         if not reference_gdf.empty:
             gdf = split_lines_by_points(gdf, reference_gdf, SNAP_DISTANCE)
+            gdf = explode_and_hash_id(gdf, "contour")
 
-        def _smooth(line: LineString) -> LineString:
-            if line.is_closed:
-                temp_poly = Polygon(line.coords)
-                smoothed = smooth_gaussian(
-                    temp_poly,
-                    sigma=self.gaussian_filter_strength,
-                )
-
-                if isinstance(smoothed, MultiPolygon):
-                    smoothed = largest_part(smoothed)
-
-                return LineString(smoothed.exterior.coords)
-
-            return smooth_gaussian(line, sigma=self.gaussian_filter_strength)
-
-        gdf.geometry = gdf.geometry.apply(_smooth)
+        gdf.geometry = gaussian_smooth(
+            gdf.geometry.to_numpy(),
+            sigma=self.gaussian_filter_strength,
+        )
 
         # TODO: Handle potentially intersecting contours after smoothing
 
-        # Add information about the total length of the continuous contour
-        gdf = add_contiguous_lines_information(gdf)
-
-        # Remove short contours
-        gdf = gdf[gdf["contiguous_length"] >= self.length_threshold]
-
-        # Smooth line connections
+        gdf = gdf[get_contiguous_lengths(gdf) >= self.length_threshold]
         gdf = smooth_linestring_connections(gdf, spline_subdivisions=10)
 
-        gdf = hash_duplicate_indexes(gdf, "contour")
-        gdf = assign_z_from_attribute(gdf, self.level_attribute, overwrite_z=True)
-        return gdf.drop(
-            [column for column in gdf.columns if column not in data.columns], axis=1
-        )
-
+        return assign_z_from_attribute(gdf, self.level_attribute, overwrite_z=True)
         # TODO: reduce the number of vertices
