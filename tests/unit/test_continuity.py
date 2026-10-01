@@ -6,14 +6,13 @@
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from geopandas.tools import overlay
 from networkx.classes.graph import Graph
-from numpy import array, ndarray
-from numpy.testing import assert_allclose
 from shapely import box
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
@@ -2103,7 +2102,7 @@ def test_gdf_to_networkx_graph(
                 ],
             ),
             6,
-            array([10.0, 10.0]),
+            np.array([10.0, 10.0]),
         ),
         (
             GeoDataFrame(
@@ -2114,7 +2113,7 @@ def test_gdf_to_networkx_graph(
                 ],
             ),
             6,
-            array([1.0, 9.0, 5.0]),
+            np.array([1.0, 9.0, 5.0]),
         ),
         (
             GeoDataFrame(
@@ -2126,7 +2125,7 @@ def test_gdf_to_networkx_graph(
                 ],
             ),
             6,
-            array([1.0, 9.0, 5.0, 10.0]),
+            np.array([1.0, 9.0, 5.0, 10.0]),
         ),
         (
             GeoDataFrame(
@@ -2136,14 +2135,14 @@ def test_gdf_to_networkx_graph(
                 ],
             ),
             6,
-            array([1.0, 8.0]),
+            np.array([1.0, 8.0]),
         ),
         (
             GeoDataFrame(
                 geometry=[],
             ),
             6,
-            array([], dtype=float),
+            np.array([], dtype=float),
         ),
         (
             GeoDataFrame(
@@ -2153,7 +2152,7 @@ def test_gdf_to_networkx_graph(
                 ],
             ),
             None,
-            array([1.0000001, 0.9999998]),
+            np.array([1.0000001, 0.9999998]),
         ),
     ],
     ids=[
@@ -2168,9 +2167,9 @@ def test_gdf_to_networkx_graph(
 def test_get_contiguous_lengths(
     input_gdf: GeoDataFrame,
     precision: int | None,
-    expected: ndarray,
+    expected: np.ndarray,
 ):
-    assert_allclose(
+    np.testing.assert_allclose(
         get_contiguous_lengths(input_gdf, precision=precision),
         expected,
     )

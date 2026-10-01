@@ -9,19 +9,9 @@ from itertools import starmap
 from typing import Literal, cast
 from warnings import warn
 
+import numpy as np
 from geopandas import GeoDataFrame
 from networkx.classes.graph import Graph
-from numpy import (
-    arange,
-    array,
-    bincount,
-    empty,
-    ndarray,
-    ones,
-    unique,
-    vstack,
-)
-from numpy import round as np_round
 from pandas import Series
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
@@ -45,35 +35,35 @@ from geogenalg.utility.dataframe_processing import (
 
 
 def _get_contiguous_line_components(  # noqa: PLR0914
-    geoms: ndarray,
+    geoms: np.ndarray,
     precision: int | None = 6,
-) -> tuple[ndarray, ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     n = len(geoms)
     if n == 0:
-        return array([], dtype="int64"), array([], dtype="int64")
+        return np.array([], dtype="int64"), np.array([], dtype="int64")
 
     start_coords = get_coordinates(get_point(geoms, 0))
     end_coords = get_coordinates(get_point(geoms, -1))
-    coords = vstack([start_coords, end_coords])
+    coords = np.vstack([start_coords, end_coords])
 
     if precision is not None:
-        coords = np_round(coords, precision)
+        coords = np.round(coords, precision)
 
-    structured_coords = empty(
+    structured_coords = np.empty(
         len(coords), dtype=[("x", coords.dtype), ("y", coords.dtype)]
     )
     structured_coords["x"] = coords[:, 0]
     structured_coords["y"] = coords[:, 1]
 
     # Assign id to each coordinate pair, with duplicates sharing an id
-    _, node_ids = unique(structured_coords, return_inverse=True)
+    _, node_ids = np.unique(structured_coords, return_inverse=True)
 
     # Build graph edges from indices
     u, v = node_ids[:n], node_ids[n:]
 
     n_nodes = node_ids.max() + 1
 
-    node_degrees = bincount(node_ids, minlength=n_nodes)
+    node_degrees = np.bincount(node_ids, minlength=n_nodes)
 
     # Split the graph at junctions and deadends by assigning a new unique node
     # id, isolating contiguous line segments.
@@ -83,17 +73,17 @@ def _get_contiguous_line_components(  # noqa: PLR0914
     next_id = n_nodes
 
     # Count how many new ids are overwritten
-    num_u = sum(mask_u)
-    num_v = sum(mask_v)
+    num_u = np.sum(mask_u)
+    num_v = np.sum(mask_v)
 
     # Give junction and deadend nodes a new id
-    u[mask_u] = arange(next_id, next_id + num_u)
+    u[mask_u] = np.arange(next_id, next_id + num_u)
     next_id += num_u
-    v[mask_v] = arange(next_id, next_id + num_v)
+    v[mask_v] = np.arange(next_id, next_id + num_v)
     next_id += num_v
 
     adjacency_matrix = coo_matrix(
-        (ones(n, dtype=bool), (u, v)),
+        (np.ones(n, dtype=bool), (u, v)),
         shape=(next_id, next_id),
     )
 
@@ -542,8 +532,8 @@ def flag_connections(
     n = len(input_gdf)
 
     gdf = input_gdf.copy()
-    gdf[start_connected_column] = bincount(start_indexes, minlength=n) > 1
-    gdf[end_connected_column] = bincount(end_indexes, minlength=n) > 1
+    gdf[start_connected_column] = np.bincount(start_indexes, minlength=n) > 1
+    gdf[end_connected_column] = np.bincount(end_indexes, minlength=n) > 1
 
     return gdf
 
@@ -604,8 +594,8 @@ def flag_connections_to_reference(
     end_indexes, _ = tree.query(end_points, predicate="intersects")
 
     n = len(input_gdf)
-    start_connected = bincount(start_indexes, minlength=n) > 0
-    end_connected = bincount(end_indexes, minlength=n) > 0
+    start_connected = np.bincount(start_indexes, minlength=n) > 0
+    end_connected = np.bincount(end_indexes, minlength=n) > 0
 
     gdf = input_gdf.copy()
     gdf[start_connected_column] = start_connected
@@ -1176,8 +1166,8 @@ def count_connections(
     end_indexes, _ = tree.query(end_points, predicate="intersects")
 
     n = len(input_gdf)
-    start_counts = bincount(start_indexes, minlength=n) - 1
-    end_counts = bincount(end_indexes, minlength=n) - 1
+    start_counts = np.bincount(start_indexes, minlength=n) - 1
+    end_counts = np.bincount(end_indexes, minlength=n) - 1
 
     gdf = input_gdf.copy()
     gdf[start_connections_column] = start_counts
@@ -1256,7 +1246,7 @@ def get_contiguous_lengths(
     input_gdf: GeoDataFrame,
     *,
     precision: int | None = 6,
-) -> ndarray:
+) -> np.ndarray:
     """Calculate length of set of contiguous lines each feature belongs to.
 
     Contiguous length here refers to sets of lines which are between either a
@@ -1276,10 +1266,10 @@ def get_contiguous_lengths(
     geoms = input_gdf.geometry.to_numpy()
 
     if len(geoms) == 0:
-        return array([], dtype="float64")
+        return np.array([], dtype="float64")
 
     line_components, _ = _get_contiguous_line_components(geoms, precision=precision)
     lengths = length(geoms)
-    component_lengths = bincount(line_components, weights=lengths)
+    component_lengths = np.bincount(line_components, weights=lengths)
 
     return component_lengths[line_components]
