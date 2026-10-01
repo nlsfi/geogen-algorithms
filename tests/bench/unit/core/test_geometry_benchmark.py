@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 from collections.abc import Callable
+from math import isclose
 
 import numpy as np
 import pytest
@@ -19,6 +20,7 @@ from geogenalg.core.geometry import (
     gaussian_smooth,
     get_line_connection_points,
     get_topological_points,
+    substring,
 )
 from geogenalg.testing import GeoPackagePath, TestInputData
 
@@ -160,3 +162,15 @@ def test_gaussian_smooth(
 
     assert len(result) == 1
     assert len(result[0].coords) == vertex_count
+
+
+@pytest.mark.benchmark
+def test_substring(
+    benchmark: BenchmarkFixture,
+    make_linestring: Callable[[int], LineString],
+):
+    line = make_linestring(1000)
+
+    result = benchmark(substring, line, 40, 50)
+
+    assert isclose(result.length, 10)

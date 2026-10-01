@@ -91,6 +91,7 @@ from geogenalg.core.geometry import (
     snap_to_closest_vertex_or_segment,
     split_line_at_distances,
     split_linear_geometry,
+    substring,
 )
 
 
@@ -4286,3 +4287,53 @@ def test_gaussian_smooth_raises(
 ):
     with pytest.raises(GeometryOperationError, match=expected_msg):
         gaussian_smooth(geoms, 1.0)
+
+
+@pytest.mark.parametrize(
+    ("line", "start_distance", "end_distance", "expected"),
+    [
+        pytest.param(
+            LineString([[0, 0], [10, 0]]),
+            2.0,
+            7.0,
+            LineString([[2, 0], [7, 0]]),
+            id="cut_middle",
+        ),
+        pytest.param(
+            LineString([[0, 0], [10, 0]]),
+            7.0,
+            2.0,
+            LineString([[2, 0], [7, 0]]),
+            id="distance_wrong_order",
+        ),
+        pytest.param(
+            LineString([[0, 0], [5, 0], [5, 10]]),
+            2.0,
+            8.0,
+            LineString([[2, 0], [5, 0], [5, 3]]),
+            id="vertex_in_middle",
+        ),
+        pytest.param(
+            LineString([[0, 0], [10, 0]]),
+            -5.0,
+            15.0,
+            LineString([[0, 0], [10, 0]]),
+            id="clamp",
+        ),
+        pytest.param(
+            LineString([[0, 0], [5, 0], [10, 0]]),
+            5.0,
+            10.0,
+            LineString([[5, 0], [10, 0]]),
+            id="starts_at_vertex",
+        ),
+    ],
+)
+def test_substring(
+    line: LineString,
+    start_distance: float,
+    end_distance: float,
+    expected: LineString,
+):
+    result = substring(line, start_distance, end_distance)
+    assert equals_exact(result, expected)
