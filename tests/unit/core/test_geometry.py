@@ -60,6 +60,7 @@ from geogenalg.core.geometry import (
     extend_line_to_nearest,
     extract_interior_rings,
     extract_interior_rings_gdf,
+    gaussian_smooth,
     get_connected_segments,
     get_connected_unit_vectors,
     get_line_connection_points,
@@ -4150,3 +4151,138 @@ def test_get_line_connection_points(
 
     for i in range(len(result)):
         assert result[i].equals_exact(expected[i])
+
+
+@pytest.mark.parametrize(
+    ("geoms", "sigma", "expected"),
+    [
+        pytest.param(
+            np.array([], dtype=object),
+            1.0,
+            np.array([], dtype=object),
+            id="empty",
+        ),
+        pytest.param(
+            np.array([LineString([[0, 0], [10, 0]])], dtype=object),
+            1.0,
+            np.array([LineString([[0, 0], [10, 0]])], dtype=object),
+            id="straight_line",
+        ),
+        pytest.param(
+            np.array(
+                [LineString([[0, 0], [2.5, 5], [5, 10], [7.5, 5], [10, 0]])],
+                dtype=object,
+            ),
+            10.0,
+            np.array(
+                [
+                    LineString(
+                        [
+                            [0.0, 0.0],
+                            [3.798, 2.404],
+                            [5.0, 2.442],
+                            [6.202, 2.404],
+                            [10.0, 0.0],
+                        ]
+                    )
+                ],
+                dtype=object,
+            ),
+            id="smoothed",
+        ),
+        pytest.param(
+            np.array(
+                [LineString([[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]])],
+                dtype=object,
+            ),
+            10.0,
+            np.array(
+                [
+                    LineString(
+                        [
+                            [4.491, 4.491],
+                            [4.491, 5.509],
+                            [5.509, 5.509],
+                            [5.509, 4.491],
+                            [4.491, 4.491],
+                        ]
+                    )
+                ],
+                dtype=object,
+            ),
+            id="closed_ring",
+        ),
+        pytest.param(
+            np.array(
+                [
+                    LineString([[0, 0], [2.5, 5], [5, 10], [7.5, 5], [10, 0]]),
+                    LineString([[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]),
+                ],
+                dtype=object,
+            ),
+            10.0,
+            np.array(
+                [
+                    LineString(
+                        [
+                            [0.0, 0.0],
+                            [3.798, 2.404],
+                            [5.0, 2.442],
+                            [6.202, 2.404],
+                            [10.0, 0.0],
+                        ]
+                    ),
+                    LineString(
+                        [
+                            [4.491, 4.491],
+                            [4.491, 5.509],
+                            [5.509, 5.509],
+                            [5.509, 4.491],
+                            [4.491, 4.491],
+                        ]
+                    ),
+                ],
+                dtype=object,
+            ),
+            id="multiple",
+        ),
+        pytest.param(
+            np.array([LineString([[0, 0], [5, 2], [10, 0]])], dtype=object),
+            0.001,
+            np.array([LineString([[0, 0], [5, 2], [10, 0]])], dtype=object),
+            id="small_sigma",
+        ),
+    ],
+)
+def test_gaussian_smooth(
+    geoms: np.ndarray,
+    sigma: float,
+    expected: np.ndarray,
+):
+    result = gaussian_smooth(geoms, sigma)
+
+    for result_geom, expected_geom in zip(result, expected, strict=True):
+        assert equals_exact(result_geom, expected_geom, tolerance=1e-3)
+
+
+@pytest.mark.parametrize(
+    ("geoms", "expected_msg"),
+    [
+        pytest.param(
+            np.array([Point(0, 0)], dtype=object),
+            "All geometries must contain at least 2 vertexes.",
+            id="insufficient_vertices_point",
+        ),
+        pytest.param(
+            np.array([LineString([[0, 0], [0, 0]])], dtype=object),
+            "Geometries with no length found.",
+            id="zero_length_linestring",
+        ),
+    ],
+)
+def test_gaussian_smooth_raises(
+    geoms: np.ndarray,
+    expected_msg: str,
+):
+    with pytest.raises(GeometryOperationError, match=expected_msg):
+        gaussian_smooth(geoms, 1.0)
