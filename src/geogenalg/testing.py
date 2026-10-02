@@ -3,8 +3,6 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from collections.abc import Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
@@ -52,9 +50,6 @@ AssertFunctionParameter = Literal[
     "check_crs",
     "normalize",
 ]
-
-
-RaisesCallable = Callable[[type[BaseException]], AbstractContextManager[Any]]
 
 
 class TestReportWarning(UserWarning):  # noqa: D101
