@@ -95,7 +95,7 @@ pytest tests/bench --benchmark-save=<name>
 
 Take note of the number of the saved .json file.
 
-Make your changes to whatever you're benchmarking and compare to the baseline:
+Make your changes to whatever you're optimizing and compare to the baseline:
 
 ```shell
 pytest tests/bench --benchmark-compare=<benchmark-number>
