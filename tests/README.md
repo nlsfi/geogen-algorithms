@@ -80,7 +80,7 @@ attributediff.csv # In case there are differences in attribute values, this show
 
 This repository uses `pytest-benchmark` for benchmarks. You can run benchmark tests
 normally with pytest. However, benchmarks are disincluded by default so you *have*
-to give the benchmark folder as an argument:
+to give the benchmark folder or file as an argument:
 
 ```shell
 pytest tests/bench
