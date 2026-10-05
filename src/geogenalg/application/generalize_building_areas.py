@@ -21,7 +21,7 @@ from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 from geogenalg.merge import buffer_and_merge_polygons
-from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
+from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
 @supports_identity
@@ -56,6 +56,16 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     classes_for_filtering: frozenset[int | str] = frozenset()
     """Buildings which a) have one of these values and b) are larger than the
     size threshold are filtered out."""
+
+    height_class_column: str = ""
+    """Name of the column that contains building height classes."""
+
+    tall_building_classes: frozenset[int | str] = frozenset()
+    """Buildings belonging to these classes are treated as tall buildings."""
+
+    height_area_class_column: str = "building_area_type"
+    """Output column indicating normal or tall building areas."""
+
     buildings_simplify_tolerance: float = Field(10.0, ge=0)
     """Tolerance for building simplification (Douglas-Peucker)."""
     boffet_area_buffer: float = Field(10.0, gt=0)
@@ -73,6 +83,10 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
     """Minimum size for newly generated building areas near other areas."""
     roads_buffer_distance: float = Field(10.0, gt=0)
     """How large a section will be removed close to roads from building areas."""
+
+    sliver_erosion_distance: float = Field(0.0, ge=0)
+    """Buffer distance used to erode small slivers after separating building
+    area types."""
 
     # parameters for GeneralizeLandCover
     positive_buffer: float = Field(10.0, ge=0)
@@ -113,45 +127,47 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         ),
     }
 
-    @override
-    def _execute(
+    def _generalize_building_areas(
         self,
-        data: GeoDataFrame,
+        buildings: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
         reference_roads = (
             reference_data[self.reference_key_roads]
             if self.reference_key_roads in reference_data
-            else copy_gdf_as_empty(data)
+            else GeoDataFrame(geometry=[], crs=buildings.crs)
         )
 
-        copy = data.copy()
-
-        gdf = copy.loc[
-            ~(
-                (copy[self.building_filter_column].isin(self.classes_for_filtering))
-                & (copy.geometry.area > self.building_size_filter_threshold)
-            )
-        ]
+        if self.classes_for_filtering:
+            gdf = buildings.loc[
+                ~(
+                    (
+                        buildings[self.building_filter_column].isin(
+                            self.classes_for_filtering
+                        )
+                    )
+                    & (buildings.geometry.area > self.building_size_filter_threshold)
+                )
+            ]
+        else:
+            gdf = buildings
 
         gdf.geometry = gdf.simplify(self.buildings_simplify_tolerance)
+
         gdf = GeoDataFrame(
-            {
-                data.geometry.name: GeoSeries(
-                    boffet_areas(
-                        gdf.geometry.to_list(),
-                        self.boffet_area_buffer,
-                        self.boffet_area_erosion,
-                    ),
-                )
-            },
-            geometry=data.geometry.name,
-            crs=data.crs,
+            geometry=GeoSeries(
+                boffet_areas(
+                    gdf.geometry.to_list(),
+                    self.boffet_area_buffer,
+                    self.boffet_area_erosion,
+                ),
+            ),
+            crs=buildings.crs,
         )
 
         if self.reference_key_parcels in reference_data:
             parcels_gdf = calculate_coverage(
-                copy, reference_data[self.reference_key_parcels], "coverage"
+                buildings, reference_data[self.reference_key_parcels], "coverage"
             )
             parcels_gdf = parcels_gdf.loc[
                 parcels_gdf["coverage"] > self.parcel_coverage_threshold
@@ -188,37 +204,109 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
         if gdf.empty:
             # GeneralizeLandCover may have eroded all areas away, which
             # will cause overlay() to fail later -> return early
-            return GeoDataFrame(geometry=[], crs=gdf.crs)
+            return GeoDataFrame(
+                {self.height_area_class_column: []},
+                geometry=[],
+                crs=gdf.crs,
+            )
 
         # Remove sections from building areas which are too close to the
         # reference roads
         buffered_network = reference_roads.geometry.buffer(
             self.roads_buffer_distance
         ).to_frame()
-        gdf = gdf.overlay(buffered_network, how="difference")
 
-        gdf = gdf.dissolve().explode(as_index=False).reset_index(drop=True)
+        gdf = gdf.overlay(buffered_network, how="difference")
+        return gdf.dissolve().explode(as_index=False).reset_index(drop=True)
+
+    @override
+    def _execute(
+        self,
+        data: GeoDataFrame,
+        reference_data: dict[str, GeoDataFrame],
+    ) -> GeoDataFrame:
+        copy = data.copy()
+
+        tall_gdf = GeoDataFrame(geometry=[], crs=data.crs)
+
+        if self.height_class_column and self.tall_building_classes:
+            tall_gdf = copy.loc[
+                copy[self.height_class_column].isin(self.tall_building_classes),
+                [copy.geometry.name, self.building_filter_column],
+            ].copy()
+            tall_gdf[self.height_area_class_column] = None
+
+        gdf = self._generalize_building_areas(
+            copy,
+            reference_data,
+        )
+
+        if not tall_gdf.empty:
+            tall_gdf = self._generalize_building_areas(
+                tall_gdf,
+                reference_data,
+            )
+
+        if not tall_gdf.empty:
+            gdf = gdf.overlay(
+                tall_gdf,
+                how="difference",
+            )
+
+        gdf[self.height_area_class_column] = 1
+
+        if not tall_gdf.empty:
+            tall_gdf[self.height_area_class_column] = 2
+
+        result = combine_gdfs(
+            [
+                gdf,
+                tall_gdf,
+            ]
+        )
+
+        result = result.explode().reset_index(drop=True)
 
         # Calculate distance to nearest building area
-        distances = gdf.sjoin_nearest(
-            gdf.loc[gdf.geometry.area > self.threshold_building_area_far],
-            distance_col="distance_to_nearest",
-            exclusive=True,
-        )["distance_to_nearest"]
+        distances = (
+            result.sjoin_nearest(
+                result.loc[result.geometry.area > self.threshold_building_area_far],
+                distance_col="distance_to_nearest",
+                exclusive=True,
+            )["distance_to_nearest"]
+            .groupby(level=0)
+            .min()
+        )
+        result = result.assign(distance_to_nearest=distances)
+        result = result.drop_duplicates()
 
-        gdf = gdf.assign(distance_to_nearest=distances)
-        gdf = gdf.drop_duplicates()
-        # Drop small building areas with different threshold for areas which
-        # are close to other areas and areas which are far from other areas.
-        is_near = gdf["distance_to_nearest"] <= self.near_area_distance
+        is_near = result["distance_to_nearest"] <= self.near_area_distance
         is_far = ~is_near
-        area = gdf.geometry.area
-        gdf = gdf.loc[
+
+        area = result.geometry.area
+
+        result = result.loc[
             (is_near & (area > self.threshold_building_area_near))
             | (is_far & (area > self.threshold_building_area_far))
         ]
 
-        gdf = gdf.drop("distance_to_nearest", axis=1)
+        result = result.drop("distance_to_nearest", axis=1)
 
-        gdf = assign_nearest_z(data, gdf)
-        return hash_index_from_geometry(gdf, "buildingareas")
+        result.geometry = result.geometry.buffer(
+            -self.sliver_erosion_distance,
+            join_style="bevel",
+        ).buffer(
+            self.sliver_erosion_distance,
+            join_style="bevel",
+        )
+
+        result = assign_nearest_z(data, result)
+        result = result.drop(
+            [
+                column
+                for column in result.columns
+                if column not in {self.height_area_class_column, result.geometry.name}
+            ],
+            axis=1,
+        )
+        return hash_index_from_geometry(result, "buildingareas")

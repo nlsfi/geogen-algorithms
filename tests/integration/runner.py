@@ -36,9 +36,10 @@ from geogenalg.utility.validation import geometry_string_to_type
 class ExpectedResultColumns:
     """Class for defining expected columns in test result."""
 
-    inherit: Literal["input", "none"] = "input"
+    inherit: Literal["input", "none", "specific"] = "input"
     inherit_from_reference_key: str | None = None
     mandatory_extra_columns: frozenset[str] = frozenset()
+    specific_columns: frozenset[str] = frozenset()
 
 
 GEOMETRY_TYPE_STRINGS = (
@@ -384,7 +385,7 @@ class IntegrationTest:
 
         self._check_columns(data, reference_data, result)
 
-    def _check_columns(
+    def _check_columns(  # noqa: C901
         self,
         input_data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
@@ -412,6 +413,21 @@ class IntegrationTest:
                 ]
                 if columns:
                     msg = f"Expected no columns in result, found: {columns}"
+                    raise AssertionError(msg)
+                return
+            case "specific":
+                columns = [
+                    column
+                    for column in result.columns
+                    if column != result.geometry.name
+                    and column not in self.expected_result_columns.specific_columns
+                ]
+                if columns:
+                    msg = (
+                        f"Expected only specific columns "
+                        f'"{list(self.expected_result_columns.specific_columns)} '
+                        f"in result, found: {columns}"
+                    )
                     raise AssertionError(msg)
                 return
 

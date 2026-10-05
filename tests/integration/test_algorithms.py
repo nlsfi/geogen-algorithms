@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from geogenalg.application import BaseAlgorithm
+from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.generalize_points import GeneralizePoints
 from geogenalg.application.keep_intersection import KeepIntersection
 from geogenalg.application.remove_overlap import RemoveOverlap
@@ -37,7 +38,8 @@ def test_generalize_building_areas(
         check_missing_reference=False,
         dummy_data_mandatory_columns=frozenset(["building_function_id"]),
         expected_result_columns=ExpectedResultColumns(
-            inherit="none",
+            inherit="specific",
+            specific_columns=frozenset(["building_area_type"]),
         ),
         algorithm=building_areas_algorithm,
     ).run()
@@ -380,4 +382,41 @@ def test_generalize_points(
             mandatory_extra_columns=frozenset(["is_cluster"]),
         ),
         algorithm=algorithm,
+    ).run()
+
+
+def test_generalize_tall_building_areas(
+    tall_building_areas_input: TestInputData,
+) -> None:
+    IntegrationTest(
+        input_data=tall_building_areas_input,
+        check_missing_reference=False,
+        dummy_data_mandatory_columns=frozenset(
+            ["building_function_id", "kerrosluku"],
+        ),
+        expected_result_columns=ExpectedResultColumns(
+            inherit="specific",
+            specific_columns=frozenset(["building_area_type"]),
+        ),
+        algorithm=GeneralizeBuildingAreas(
+            building_size_filter_threshold=4000.0,
+            parcel_coverage_threshold=5.0,
+            parcel_buffer_distance=20.0,
+            building_filter_column="building_function_id",
+            classes_for_filtering=frozenset([1]),
+            buildings_simplify_tolerance=10.0,
+            roads_buffer_distance=10.0,
+            threshold_building_area_far=20000.0,
+            threshold_building_area_near=4000.0,
+            near_area_distance=50.0,
+            reference_key_parcels="parcels",
+            reference_key_roads="roads",
+            positive_buffer=10.0,
+            negative_buffer=-10.0,
+            simplification_tolerance=4.0,
+            hole_threshold=7500,
+            height_class_column="kerrosluku",
+            tall_building_classes=frozenset([2]),
+            sliver_erosion_distance=5,
+        ),
     ).run()

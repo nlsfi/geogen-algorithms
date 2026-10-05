@@ -486,3 +486,17 @@ def watercourse_areas_algorithm() -> GeneralizeWaterCourseAreas:
         width_check_distance=10.0,
         feature_type_column="feature_type",
     )
+
+
+@pytest.fixture
+def tall_building_areas_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "building_areas.gpkg")
+    return TestInputData(
+        input_uri=gpkg.to_input("buildings"),
+        control_uri=gpkg.to_input("control_tall_buildings"),
+        unique_id_column="mtk_id",
+        reference_uris={
+            "parcels": gpkg.to_input("parcels"),
+            "roads": gpkg.to_input("roads"),
+        },
+    )
