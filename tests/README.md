@@ -19,6 +19,10 @@ As of writing, benchmark tests are not run in CI.
 
 Integration tests are defined and ran with the `IntegrationTest` class.
 
+A "default" algorithm fixture and test input data is defined in
+`tests/conftest.py`. This is done so that integration tests and algorithm
+benchmarks can reuse the same algorithm instances and data.
+
 It's possible to configure how integration tests are run by using environment
 variables.
 
@@ -41,7 +45,7 @@ GEOGENALG_TEST_REPORT_SAVE=1
 ```
 
 When this is on and an algorithm fails a "test report" is saved, unless the
-algorithm fails to an error before any results can be produved. The test report
+algorithm fails to an error before any results can be produced. The test report
 is by default saved to a temporary folder which is shown in a UserWarning in
 the test terminal output.
 
