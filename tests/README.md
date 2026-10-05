@@ -86,7 +86,8 @@ to give the benchmark folder as an argument:
 pytest tests/bench
 ```
 
-If you wish to compare benchmark runs to another, first establish the baseline:
+If you wish to compare benchmark runs to another, first establish the baseline
+(optionally choose specific test functions with the -k option):
 
 ```shell
 pytest tests/bench --benchmark-save=<name>
