@@ -24,6 +24,28 @@ Included `.code-workspace` has necessary options set (linting, formatting, tests
 
 Commit messages should follow [Conventional Commits notation](https://www.conventionalcommits.org/en/v1.0.0/#summary).
 
+## New algorithm steps
+
+To create a completely new algorithm:
+
+- Create a new file in `src/geogenalg/application`
+- Create a new class (inheriting BaseAlgorithm, or another existing algorithm)
+- Override `_execute` with algorithm implementation logic
+- Any code that could reasonably be reused in other contexts should be not be placed in an algorithm, but the other modules (geometry.py, continuity.py etc.)
+
+Testing:
+
+- If you introduce new functions, write unit tests for them in a corresponding test module in `tests/unit`
+- If an algorithm class has methods, write unit tests for them in a new file under `tests/unit/application`
+- If an algorithm method needs benchmarking, write benchmark test functions in a new file under `tests/bench/unit/application`
+- Place algorithm test data in `tests/testdata/algo`
+- Create a fixture for test input data in `tests/conftest.py`
+- Create a fixture for an algorithm instance used in tests in `tests/conftest.py`
+- Define an integration test in `tests/integration/test_algorithms.py`
+- Define an algorithm benchmark in `tests/bench/algo/test_algorithms_benchmark.py`
+
+[Read more about the testing framework here.](tests/README.md)
+
 ## Release steps
 
 When the branch is in a releasable state, trigger the `Create draft release` workflow from GitHub Actions. Pass the to-be-released version number as an input to the workflow.
