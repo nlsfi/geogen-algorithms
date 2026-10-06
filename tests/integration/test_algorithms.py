@@ -462,3 +462,14 @@ def test_generalize_tall_building_areas(
             sliver_erosion_distance=5,
         ),
     ).run()
+
+
+def test_generalize_block_fields(
+    block_fields_input: TestInputData,
+    block_fields_algorithm: BaseAlgorithm,
+) -> None:
+    IntegrationTest(
+        input_data=block_fields_input,
+        check_missing_reference=False,
+        algorithm=block_fields_algorithm,
+    ).run()
