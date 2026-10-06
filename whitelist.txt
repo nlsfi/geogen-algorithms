@@ -119,6 +119,7 @@ sqrt
 stacklevel
 starmap
 subdivs
+subsample
 substring
 substrings
 testdata

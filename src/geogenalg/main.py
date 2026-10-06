@@ -15,6 +15,7 @@ from typing import Annotated, Any, cast
 
 from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
 
+from geogenalg.application.generalize_block_fields import GeneralizeBlockFields
 from geogenalg.application.generalize_conservation_areas import (
     GeneralizeConservationAreas,
 )
@@ -467,6 +468,7 @@ def build_app() -> None:
         "railroads": GeneralizeRailroads,
         "contours": GeneralizeContours,
         "slope_lines": GeneralizeSlopeLines,
+        "block_fields": GeneralizeBlockFields,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
