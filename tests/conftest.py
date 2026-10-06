@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from geogenalg.application.dissolve_polygons import DissolvePolygons
+from geogenalg.application.generalize_block_fields import GeneralizeBlockFields
 from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.application.generalize_cliffs import GeneralizeCliffs
@@ -485,4 +486,23 @@ def watercourse_areas_algorithm() -> GeneralizeWaterCourseAreas:
         min_new_section_length=200.0,
         width_check_distance=10.0,
         feature_type_column="feature_type",
+    )
+
+
+@pytest.fixture
+def block_fields_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "block_fields.gpkg")
+    return TestInputData(
+        input_uri=[
+            gpkg.to_input("block_fields"),
+        ],
+        control_uri=gpkg.to_input("control"),
+        unique_id_column="kmtk_id",
+    )
+
+
+@pytest.fixture
+def block_fields_algorithm() -> GeneralizeBlockFields:
+    return GeneralizeBlockFields(
+        min_distance=150.0,
     )
