@@ -59,13 +59,6 @@ Now the test report will always be saved into its own folder inside this set
 folder. In this case, f.e. a `GeneralizeBuildingAreas` failure would save the
 report to `path/to/folder/GeneralizeBuildingAreas_YYYY_MM_DD-HH_MM_SS`.
 
-It's possible to set a specific folder as the target folder. In this case all
-test report contents are subject for being overwritten:
-
-```shell
-GEOGENALG_TEST_REPORT_DIR_SPECIFIC=1
-```
-
 The test report consists of five possible files:
 
 ```shell
@@ -75,6 +68,37 @@ control_features_not_in_result.gpkg # Features in control whose index was not fo
 geomdiff.gpkg # In case there are only geometric differences, this shows those
 attributediff.csv # In case there are differences in attribute values, this shows those
 ```
+
+It's possible to set a specific folder as the target folder. In this case all
+test report contents are subject for being overwritten:
+
+```shell
+GEOGENALG_TEST_REPORT_DIR_SPECIFIC=1
+```
+
+This depends on `GEOGENALG_TEST_REPORT_DIR`, so if you have set:
+
+```shell
+GEOGENALG_TEST_REPORT_DIR="path/to/folder"
+GEOGENALG_TEST_REPORT_DIR_SPECIFIC=1
+```
+
+The test report will be saved as:
+
+```shell
+path/to/folder/result.gpkg
+path/to/folder/result_features_not_in_control.gpkg
+```
+
+And each time test(s) run and fail these files will be overwritten. Note that
+if multiple tests fail, in this case they will overwrite the test report of
+another. Additionally, if a test run does *not* produce f.e. `geomdiff.gpkg`,
+but you have one from a previous run it will not be deleted.
+
+This option is therefore most useful when debugging a single integration test,
+and for focusing on changes to `result.gpkg`. You can load the result data for
+visual inspection and continually run a test to update it and observe the
+changes without loading the data from a different file each time.
 
 ## Running benchmarks
 
