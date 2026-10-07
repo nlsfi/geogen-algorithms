@@ -1297,6 +1297,19 @@ def test_assign_z_from_attribute_points():
     assert_frame_equal(_coords_df(out), _coords_df(expected))
 
 
+def test_assign_z_from_attribute_points_has_nan():
+    gdf = GeoDataFrame(
+        {"elevation": [np.nan, 2.0, 3.0]},
+        geometry=[Point(0.0, 0.0), Point(1.0, 0.0), Point(1.0, 1.0)],
+    )
+    expected = GeoDataFrame(
+        {"elevation": [np.nan, 2.0, 3.0]},
+        geometry=[Point(0.0, 0.0, -1.0), Point(1.0, 0.0, 2.0), Point(1.0, 1.0, 3.0)],
+    )
+    out = assign_z_from_attribute(gdf, "elevation")
+    assert_frame_equal(_coords_df(out), _coords_df(expected))
+
+
 def test_assign_z_from_attribute_linestrings():
     gdf = GeoDataFrame(
         {"elevation": [10.0, 20.0]},
