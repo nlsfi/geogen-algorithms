@@ -937,6 +937,7 @@ def assign_z_from_attribute(
     z_attribute: str,
     *,
     overwrite_z: bool = False,
+    replace_nan: float = -1,
 ) -> GeoDataFrame:
     """Assign Z values to geometries from a GeoDataFrame attribute.
 
@@ -949,6 +950,8 @@ def assign_z_from_attribute(
         gdf: GeoDataFrame with geometries and a Z attribute column.
         z_attribute: Name of the column to use as Z value.
         overwrite_z: Whether to overwrite existing Z values.
+        replace_nan: Any NaN/null Z values in the column will be replaced with
+            this.
 
     Returns:
     -------
@@ -960,7 +963,7 @@ def assign_z_from_attribute(
 
     result_gdf = gdf.copy()
     geoms = result_gdf.geometry.to_numpy()
-    z = result_gdf[z_attribute].to_numpy()
+    z = result_gdf[z_attribute].fillna(replace_nan).to_numpy()
 
     if overwrite_z:
         geoms = force_2d(geoms)
