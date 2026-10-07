@@ -5,8 +5,11 @@
 #  SPDX-License-Identifier: MIT
 
 from typing import ClassVar
+from warnings import warn
 
 from geopandas import GeoDataFrame
+from pandas import to_numeric
+from pandas.api.types import is_numeric_dtype
 from pydantic import Field
 
 from geogenalg.application import (
@@ -77,8 +80,32 @@ class GeneralizeContours(BaseAlgorithm):
         reference_gdf = reference_data.get(self.reference_key, GeoDataFrame())
         gdf.geometry = gdf.geometry.force_2d()
 
+        if not is_numeric_dtype(gdf[self.level_attribute]):
+            warn(
+                f"Column '{self.level_attribute}' is not numeric. "
+                "Attempting to convert, any features with values "
+                "which couldn't be converted will NOT be filtered.",
+                UserWarning,
+                stacklevel=1,
+            )
+            gdf[self.level_attribute] = to_numeric(
+                gdf[self.level_attribute],
+                errors="coerce",
+            )
+
+        if gdf[self.level_attribute].isna().any():
+            warn(
+                f"Column '{self.level_attribute}' contains null values. "
+                "These features will not be filtered by their elevation value.",
+                UserWarning,
+                stacklevel=1,
+            )
+
         # Filter contours by elevation interval
-        gdf = gdf[gdf[self.level_attribute] % self.interval == 0]
+        is_in_interval = gdf[self.level_attribute] % self.interval == 0
+        is_null = gdf[self.level_attribute].isna()
+
+        gdf = gdf[is_in_interval | is_null]
 
         if gdf.empty:
             return gdf.copy()
