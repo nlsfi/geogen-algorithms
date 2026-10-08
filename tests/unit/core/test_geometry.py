@@ -67,11 +67,13 @@ from geogenalg.core.geometry import (
     get_topological_points,
     insert_vertex,
     largest_part,
+    line_length_weighted_directions,
     line_mean_direction,
     lines_to_segments,
     make_valid_ensure_polygon,
     make_valid_extract_linestrings,
     make_valid_extract_polygons,
+    mean_segment_lengths,
     mean_z,
     move_to_point,
     node_non_simple,
@@ -4350,3 +4352,103 @@ def test_substring(
 ):
     result = substring(line, start_distance, end_distance)
     assert equals_exact(result, expected)
+
+
+@pytest.mark.parametrize(
+    ("geom", "unit", "expected"),
+    [
+        pytest.param(
+            LineString([[0, 0], [10, 0]]),
+            "degrees",
+            0.0,
+            id="horizontal_degrees",
+        ),
+        pytest.param(
+            LineString([[0, 0], [0, 10]]),
+            "degrees",
+            90.0,
+            id="vertical_degrees",
+        ),
+        pytest.param(
+            LineString([[0, 0], [0, 10]]),
+            "radians",
+            np.pi / 2,
+            id="vertical_radians",
+        ),
+        pytest.param(
+            LineString([[0, 0], [10, 10]]),
+            "degrees",
+            45.0,
+            id="diagonal_45_degrees",
+        ),
+        pytest.param(
+            LineString([[10, 0], [0, 0]]),
+            "degrees",
+            0.0,
+            id="reversed_direction",
+        ),
+        pytest.param(
+            LineString([[0, 0], [10, 0], [10, 10]]),
+            "degrees",
+            45.0,
+            id="equal_length_perpendicular_segments",
+        ),
+        pytest.param(
+            LineString([[0, 0], [0, 0]]),
+            "degrees",
+            0.0,
+            id="zero_length_linestring",
+        ),
+        pytest.param(
+            LineString([]),
+            "degrees",
+            0.0,
+            id="empty_linestring",
+        ),
+    ],
+)
+def test_line_length_weighted_directions(
+    geom: LineString,
+    unit: Literal["degrees", "radians"],
+    expected: float,
+):
+    result = line_length_weighted_directions(np.array([geom]), unit=unit)[0]
+    assert np.isclose(result, expected)
+
+
+@pytest.mark.parametrize(
+    ("geoms", "expected"),
+    [
+        pytest.param(
+            [],
+            np.array([], dtype=np.float64),
+            id="empty_input_array",
+        ),
+        pytest.param(
+            [LineString([[0, 0], [10, 0]])],
+            np.array([10.0]),
+            id="single_segment_linestring",
+        ),
+        pytest.param(
+            [LineString([[0, 0], [3, 0], [10, 0]])],
+            np.array([5.0]),  # Total length 10 / 2 segments
+            id="multi_segment_linestring",
+        ),
+        pytest.param(
+            [
+                LineString([[0, 0], [10, 0]]),
+                LineString([[0, 0], [10, 0], [10, 10]]),
+                LineString([[0, 0], [0, 0]]),
+                LineString([]),
+            ],
+            np.array([10.0, 10.0, 0.0, 0.0]),
+            id="mixed_geometries_including_empty_and_zero_length",
+        ),
+    ],
+)
+def test_mean_segment_lengths(
+    geoms: np.ndarray,
+    expected: np.ndarray,
+):
+    result = mean_segment_lengths(geoms)
+    assert np.allclose(result, expected)
