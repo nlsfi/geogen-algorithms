@@ -76,25 +76,25 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
     """
 
-    min_area: float = Field(4000.0, gt=0)
+    min_area: float = Field(4000.0, ge=0)
     """Features under this area will be removed."""
-    area_simplification_tolerance: float = Field(100.0, gt=0)
+    area_simplification_tolerance: float = Field(100.0, ge=0)
     """Simplification tolerance used for water areas."""
-    thin_section_width: float = Field(20.0, gt=0)
+    thin_section_width: float = Field(20.0, ge=0)
     """Sections under this width will be exaggerated."""
-    thin_section_min_size: float = Field(200.0, gt=0)
+    thin_section_min_size: float = Field(200.0, ge=0)
     """Don't exaggerate thin sections under this size."""
-    thin_section_exaggerate_by: float = Field(3.0, gt=0)
+    thin_section_exaggerate_by: float = Field(3.0, ge=0)
     """By how many CRS units thin sections will be exaggerated."""
-    island_min_area: float = Field(100.0, gt=0)
+    island_min_area: float = Field(100.0, ge=0)
     """Islands under this area will be removed."""
-    island_min_width: float = Field(185.0, gt=0)
+    island_min_width: float = Field(185.0, ge=0)
     """Islands under this width will be considered for exaggeration."""
     island_min_elongation: float = Field(0.25, ge=0.0, le=1.0)
     """Islands under this elongation will be considered for exaggeration."""
-    island_exaggerate_by: float = Field(3.0, gt=0)
+    island_exaggerate_by: float = Field(3.0, ge=0)
     """By how many CRS units thin islands will be exaggerated."""
-    island_simplification_tolerance: float = Field(50.0, gt=0)
+    island_simplification_tolerance: float = Field(50.0, ge=0)
     """Simplification tolerance used for islands."""
     smoothing_passes: int = Field(3, ge=0)
     """How many smoothing passes will be performed. Each smoothing passes
