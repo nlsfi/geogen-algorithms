@@ -10,11 +10,13 @@ import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
+from pandas import Series
 from pandas.testing import assert_frame_equal
 from shapely import box
 from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg.analyze import (
+    add_parallel_line_information,
     calculate_coverage,
     calculate_edge_adjacency,
     calculate_main_angle,
@@ -1028,4 +1030,280 @@ def test_polygonize_parallel_lines(
         ),
         expected_gdf,
         check_less_precise=True,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "parallel_distance",
+        "allowed_direction_difference",
+        "min_overlap_ratio",
+        "expected",
+    ),
+    [
+        pytest.param(
+            GeoDataFrame(geometry=[]),
+            5.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": Series([], dtype=float),
+                    "parallels_left": Series([], dtype=int),
+                    "parallels_right": Series([], dtype=int),
+                    "parallel_group": Series([], dtype=int),
+                },
+                geometry=[],
+            ),
+            id="empty",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                ]
+            ),
+            5.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": [0.0],
+                    "parallels_left": [0],
+                    "parallels_right": [0],
+                    "parallel_group": [-1],
+                },
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                ],
+            ),
+            id="no_parallel_lines",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 2], [10, 2]]),
+                ]
+            ),
+            5.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": [0.0, 0.0],
+                    "parallels_left": [1, 0],
+                    "parallels_right": [0, 1],
+                    "parallel_group": [0, 0],
+                },
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 2], [10, 2]]),
+                ],
+            ),
+            id="two_parallel_lines",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 1], [10, 11]]),
+                ]
+            ),
+            5.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": [0.0, 45.0],
+                    "parallels_left": [0, 0],
+                    "parallels_right": [0, 0],
+                    "parallel_group": [-1, -1],
+                },
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 1], [10, 11]]),
+                ],
+            ),
+            id="direction_difference_too_large",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 2], [10, 2.8]]),
+                ]
+            ),
+            5.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": [0.0, 4.57392125990086],
+                    "parallels_left": [1, 0],
+                    "parallels_right": [0, 1],
+                    "parallel_group": [0, 0],
+                },
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 2], [10, 2.8]]),
+                ],
+            ),
+            id="in_direction_difference_bounds",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 2], [10, 2]]),
+                    LineString([[0, 50], [10, 50]]),
+                    LineString([[0, 52], [10, 52]]),
+                ]
+            ),
+            5.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": [0.0, 0.0, 0.0, 0.0],
+                    "parallels_left": [1, 0, 1, 0],
+                    "parallels_right": [0, 1, 0, 1],
+                    "parallel_group": [0, 0, 1, 1],
+                },
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[0, 2], [10, 2]]),
+                    LineString([[0, 50], [10, 50]]),
+                    LineString([[0, 52], [10, 52]]),
+                ],
+            ),
+            id="multiple_parallel_groups",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[14, 2], [20, 2]]),
+                ]
+            ),
+            5.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": [0.0, 0.0],
+                    "parallels_left": [0, 0],
+                    "parallels_right": [0, 0],
+                    "parallel_group": [-1, -1],
+                },
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[14, 2], [20, 2]]),
+                ],
+            ),
+            id="insufficient_spatial_overlap",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[10, 0], [20, 0]]),
+                    LineString([[0, 2], [20, 2]]),
+                ]
+            ),
+            5.0,
+            10.0,
+            0.1,
+            GeoDataFrame(
+                {
+                    "direction": [0.0, 0.0, 0.0],
+                    "parallels_left": [1, 1, 0],
+                    "parallels_right": [0, 0, 1],
+                    "parallel_group": [0, 0, 0],
+                },
+                geometry=[
+                    LineString([[0, 0], [10, 0]]),
+                    LineString([[10, 0], [20, 0]]),
+                    LineString([[0, 2], [20, 2]]),
+                ],
+            ),
+            id="collinear_with_parallel",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                geometry=[
+                    LineString([[-5, 0], [0, 0]]),
+                    LineString([[0, 0], [5, 0]]),
+                    LineString([[5, 0], [10, 0]]),
+                    LineString([[-5, 5], [0, 5]]),
+                    LineString([[0, 5], [5, 5]]),
+                    LineString([[5, 5], [10, 5]]),
+                    LineString([[0, -5], [0, 0]]),
+                    LineString([[0, 0], [0, 5]]),
+                    LineString([[0, 5], [0, 10]]),
+                    LineString([[5, -5], [5, 0]]),
+                    LineString([[5, 0], [5, 5]]),
+                    LineString([[5, 5], [5, 10]]),
+                ]
+            ),
+            10.0,
+            10.0,
+            0.5,
+            GeoDataFrame(
+                {
+                    "direction": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        90.0,
+                        90.0,
+                        90.0,
+                        90.0,
+                        90.0,
+                        90.0,
+                    ],
+                    "parallels_left": [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    "parallels_right": [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+                    "parallel_group": [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                },
+                geometry=[
+                    LineString([[-5, 0], [0, 0]]),
+                    LineString([[0, 0], [5, 0]]),
+                    LineString([[5, 0], [10, 0]]),
+                    LineString([[-5, 5], [0, 5]]),
+                    LineString([[0, 5], [5, 5]]),
+                    LineString([[5, 5], [10, 5]]),
+                    LineString([[0, -5], [0, 0]]),
+                    LineString([[0, 0], [0, 5]]),
+                    LineString([[0, 5], [0, 10]]),
+                    LineString([[5, -5], [5, 0]]),
+                    LineString([[5, 0], [5, 5]]),
+                    LineString([[5, 5], [5, 10]]),
+                ],
+            ),
+            id="grid_pattern",
+        ),
+    ],
+)
+def test_add_parallel_line_information(
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    allowed_direction_difference: float,
+    min_overlap_ratio: float,
+    expected: GeoDataFrame,
+):
+    result = add_parallel_line_information(
+        input_gdf,
+        parallel_distance,
+        allowed_direction_difference,
+        min_overlap_ratio=min_overlap_ratio,
+    )
+    assert_geodataframe_equal(
+        result,
+        expected,
+        check_like=True,
     )
