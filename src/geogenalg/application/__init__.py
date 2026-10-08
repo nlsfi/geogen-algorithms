@@ -213,7 +213,7 @@ class BaseAlgorithm(ABC, BaseModel):
                 raise InvalidCRSError(msg)
 
     @final
-    def _validate_reference_data(
+    def _validate_reference_data(  # noqa: C901
         self,
         reference_data: dict[str, GeoDataFrame],
     ) -> None:
@@ -272,7 +272,10 @@ class BaseAlgorithm(ABC, BaseModel):
                 msg = f"Reference data contains no mandatory key '{key}'."
                 raise MissingReferenceError(msg)
 
-            reference = reference_data[key]
+            reference = reference_data.get(key)
+
+            if reference is None:
+                continue
 
             if not check_gdf_geometry_type(
                 reference,
