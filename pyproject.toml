@@ -34,7 +34,7 @@ dependencies = [
     "pydantic==2.13.3",
     "pygeoops==0.6.0",
     "scikit-learn==1.6.1",
-    "shapely==2.1.2",
+    "shapely==2.2.0",
     "shapelysmooth==0.2.1",
     "simplification==1.0.0",
 ]
