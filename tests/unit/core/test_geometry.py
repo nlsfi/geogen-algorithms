@@ -19,6 +19,7 @@ from shapely import (
     GeometryCollection,
     MultiPolygon,
     box,
+    equals,
     equals_exact,
     from_wkt,
     length,
@@ -47,9 +48,11 @@ from geogenalg.core.geometry import (
     angle_difference,
     assign_nearest_z,
     assign_z_from_attribute,
+    build_collinear_chains,
     centerline_length,
     chaikin_smooth_conditional,
     chaikin_smooth_keep_topology,
+    circular_direction_difference,
     concatenate_lines,
     create_crossing_line_at_vertex,
     elongation,
@@ -4452,3 +4455,181 @@ def test_mean_segment_lengths(
 ):
     result = mean_segment_lengths(geoms)
     assert np.allclose(result, expected)
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "expected"),
+    [
+        pytest.param([0], [0], [0], id="same"),
+        pytest.param([0], [10], [10], id="small_difference"),
+        pytest.param([10], [0], [10], id="small_difference_reversed"),
+        pytest.param([179], [1], [2], id="wraparound_forward"),
+        pytest.param([1], [179], [2], id="wraparound_reversed"),
+        pytest.param([45], [135], [90], id="big"),
+        pytest.param(
+            [0, 10, 179],
+            [0, 20, 1],
+            [0, 10, 2],
+            id="multiple",
+        ),
+    ],
+)
+def test_circular_direction_difference(
+    a: np.ndarray,
+    b: np.ndarray,
+    expected: np.ndarray,
+):
+    result = circular_direction_difference(np.array(a), np.array(b))
+    np.testing.assert_allclose(result, np.array(expected))
+
+
+@pytest.mark.parametrize(
+    ("lines", "allowed_direction_difference", "expected_chain_ids", "expected_geoms"),
+    [
+        pytest.param(
+            [LineString([(0, 0), (100, 0)])],
+            10.0,
+            [0],
+            [LineString([(0, 0), (100, 0)])],
+            id="single_line",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (100, 0)]),
+            ],
+            10.0,
+            [0, 0],
+            [LineString([(0, 0), (100, 0)])],
+            id="collinear_touching_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (40, 0)]),
+                LineString([(60, 0), (100, 0)]),
+            ],
+            10.0,
+            [0, 1],
+            [
+                LineString([(0, 0), (40, 0)]),
+                LineString([(60, 0), (100, 0)]),
+            ],
+            id="collinear_disjoint_not_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (50, 50)]),
+            ],
+            10.0,
+            [0, 1],
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (50, 50)]),
+            ],
+            id="perpendicular_touching_not_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 50), (50, 50)]),
+                LineString([(50, 50), (100, 50)]),
+                LineString([(50, 0), (50, 50)]),
+                LineString([(50, 50), (50, 100)]),
+            ],
+            10.0,
+            [0, 0, 1, 1],
+            [
+                LineString([(0, 50), (100, 50)]),
+                LineString([(50, 0), (50, 100)]),
+            ],
+            id="grid_junction_splits_by_orientation",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(100, 0), (200, 100 * np.tan(np.radians(5)))]),
+            ],
+            10.0,
+            [0, 0],
+            [LineString([(0, 0), (100, 0), (200, 100 * np.tan(np.radians(5)))])],
+            id="bend_within_tolerance_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(100, 0), (200, 100 * np.tan(np.radians(15)))]),
+            ],
+            10.0,
+            [0, 1],
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(100, 0), (200, 100 * np.tan(np.radians(15)))]),
+            ],
+            id="bend_outside_tolerance_not_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, -1.75)]),
+                LineString([(100, -1.75), (200, 0)]),
+            ],
+            10.0,
+            [0, 0],
+            [LineString([(0, 0), (100, -1.75), (200, 0)])],
+            id="orientation_wraps_around_180",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 0), (100, 10)]),
+                LineString([(0, 0), (100, 20)]),
+            ],
+            10.0,
+            [0, 0, 0],
+            [
+                MultiLineString(
+                    [
+                        [(0, 0), (100, 0)],
+                        [(0, 0), (100, 10)],
+                        [(0, 0), (100, 20)],
+                    ]
+                )
+            ],
+            id="fan_chained_transitively",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(0, 10), (100, 10)]),
+                LineString([(50, 0), (100, 0)]),
+            ],
+            10.0,
+            [0, 1, 0],
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 10), (100, 10)]),
+            ],
+            id="non_adjacent_input_order",
+        ),
+    ],
+)
+def test_build_collinear_chains(
+    lines: list[LineString],
+    allowed_direction_difference: float,
+    expected_chain_ids: list[int],
+    expected_geoms: list[LineString],
+):
+    geoms = np.array(lines, dtype=object)
+    directions = line_length_weighted_directions(geoms)
+
+    chain_ids, chain_geoms = build_collinear_chains(
+        geoms,
+        directions,
+        allowed_direction_difference,
+    )
+
+    np.testing.assert_array_equal(chain_ids, expected_chain_ids)
+    assert len(chain_geoms) == len(expected_geoms)
+
+    for actual, expected in zip(chain_geoms, expected_geoms, strict=True):
+        assert actual.geom_type == expected.geom_type
+        assert equals(actual, expected)
