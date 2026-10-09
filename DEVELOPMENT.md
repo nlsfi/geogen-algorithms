@@ -24,6 +24,48 @@ Included `.code-workspace` has necessary options set (linting, formatting, tests
 
 Commit messages should follow [Conventional Commits notation](https://www.conventionalcommits.org/en/v1.0.0/#summary).
 
+## New algorithm steps
+
+To create a completely new algorithm:
+
+- Create a new file in `src/geogenalg/application`
+- Create a new class (inheriting BaseAlgorithm, or another existing algorithm)
+- Override `_execute` with algorithm implementation logic
+- Any code that could reasonably be reused in other contexts should be not be placed in an algorithm, but the other modules (geometry.py, continuity.py etc.)
+
+Index handling:
+
+- The algorithm should handle indexes in such a way that:
+  - No duplicate indexes should exist in the output
+  - An index should be deterministically created
+  - In case multiple features are merged together, the new index should be hashed from the original features' indexes (see `dissolve_and_inherit_attributes` and `hash_index_from_old_ids`)
+  - In case features are split to multiple features, the new index should be hashed from a combination of the original index and the new geometry (see `explode_and_hash_id` and `hash_duplicate_indexes`)
+  - In case it cannot reasonably be tracked how (and what from) a new feature was formed, the new index can be hashed purely from the new geometry (see `hash_index_from_geometry`)
+  - In other cases (no merging or splitting) involved, features should keep their original index
+- Once these requirements are met, you can add the `@supports_identity` decorator to the algorithm class
+
+Geometry validity:
+
+- Generally speaking, an algorithm should produce GEOS-valid and simple geometries
+- However, depending on what an algorithm does it can be difficult preempt all cases of invalid geometries potentially forming
+  - For this reason, there is no hard requirement or error cases for invalid geometries, only a warning is given
+  - Additionally, for every algorithm there is an option to automatically attempt to repair any invalid and non-simple geometries (`repair_result_geometries`)
+    - This is intended only as a quick fix to allow applications to still run algorithms
+    - As they get discovered, these _should_ be fixed at in the algorithm itself
+
+Testing:
+
+- If you introduce new functions, write unit tests for them in a corresponding test module in `tests/unit`
+- If an algorithm class has methods, write unit tests for them in a new file under `tests/unit/application`
+- If an algorithm method needs benchmarking, write benchmark test functions in a new file under `tests/bench/unit/application`
+- Place algorithm test data in `tests/testdata/algo`
+- Create a fixture for test input data in `tests/conftest.py`
+- Create a fixture for an algorithm instance used in tests in `tests/conftest.py`
+- Define an integration test in `tests/integration/test_algorithms.py`
+- Define an algorithm benchmark in `tests/bench/algo/test_algorithms_benchmark.py`
+
+[Read more about the testing framework here.](tests/README.md)
+
 ## Release steps
 
 When the branch is in a releasable state, trigger the `Create draft release` workflow from GitHub Actions. Pass the to-be-released version number as an input to the workflow.
