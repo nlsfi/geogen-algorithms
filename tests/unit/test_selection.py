@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from geopandas import GeoDataFrame
+from geopandas.testing import assert_geodataframe_equal
 from pandas import Series
 from pandas.testing import assert_frame_equal, assert_series_equal
 from shapely import MultiLineString
@@ -16,6 +17,7 @@ from shapely.geometry import LineString, Point, Polygon
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.selection import (
+    prune_parallel_groups,
     rank_parallel_lines,
     reduce_nearby_points_by_selecting,
     remove_close_line_segments,
@@ -846,3 +848,323 @@ def test_rank_parallel_lines(
     result = rank_parallel_lines(input_gdf)
     assert_series_equal(result[0], expected[0])
     assert result[1] == expected[1]
+
+
+@pytest.mark.parametrize(
+    (
+        "input_gdf",
+        "keep_furthest",
+        "distance_multiplier",
+        "expected_kept",
+        "expected_deleted",
+    ),
+    [
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": Series([], dtype=int)},
+                geometry=[],
+            ),
+            False,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": Series([], dtype=int)},
+                geometry=[],
+            ),
+            GeoDataFrame(
+                {"parallel_group": Series([], dtype=int)},
+                geometry=[],
+            ),
+            id="empty",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [-1, -1, -1]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            False,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [-1, -1, -1]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": Series([], dtype=int)},
+                geometry=[],
+            ),
+            id="unflagged_lines_kept",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                ],
+            ),
+            True,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": Series([], dtype=int)},
+                geometry=[],
+            ),
+            id="two_chains_not_pruned",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [50, 0]]),
+                    LineString([[50, 0], [100, 0]]),
+                    LineString([[0, 10], [50, 10]]),
+                    LineString([[50, 10], [100, 10]]),
+                ],
+            ),
+            False,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [50, 0]]),
+                    LineString([[50, 0], [100, 0]]),
+                    LineString([[0, 10], [50, 10]]),
+                    LineString([[50, 10], [100, 10]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": Series([], dtype=int)},
+                geometry=[],
+            ),
+            id="two_split_chains_not_pruned",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[-10, 10], [110, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            False,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0]},
+                geometry=[
+                    LineString([[-10, 10], [110, 10]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": [0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            id="longest_first_keeps_longest_chain",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            True,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": [0]},
+                geometry=[
+                    LineString([[0, 10], [100, 10]]),
+                ],
+            ),
+            id="keep_furthest_keeps_outer_pair",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 30], [100, 30]]),
+                    LineString([[0, 40], [100, 40]]),
+                ],
+            ),
+            True,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 40], [100, 40]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": [0, 0]},
+                geometry=[
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 30], [100, 30]]),
+                ],
+            ),
+            id="keep_furthest_keeps_separated_interior_chain",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 30], [100, 30]]),
+                    LineString([[0, 40], [100, 40]]),
+                ],
+            ),
+            True,
+            2.5,
+            GeoDataFrame(
+                {"parallel_group": [0, 0]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 40], [100, 40]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0]},
+                geometry=[
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 30], [100, 30]]),
+                ],
+            ),
+            id="larger_distance_multiplier_prunes_more",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [50, 0]]),
+                    LineString([[50, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            True,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0]},
+                geometry=[
+                    LineString([[0, 0], [50, 0]]),
+                    LineString([[50, 0], [100, 0]]),
+                    LineString([[0, 20], [100, 20]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": [0]},
+                geometry=[
+                    LineString([[0, 10], [100, 10]]),
+                ],
+            ),
+            id="all_segments_of_kept_chain_kept",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0, 1, 1, 1, -1]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 100], [100, 100]]),
+                    LineString([[0, 110], [100, 110]]),
+                    LineString([[0, 120], [100, 120]]),
+                    LineString([[0, 200], [100, 200]]),
+                ],
+            ),
+            True,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 1, 1, -1]},
+                geometry=[
+                    LineString([[0, 0], [100, 0]]),
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 100], [100, 100]]),
+                    LineString([[0, 120], [100, 120]]),
+                    LineString([[0, 200], [100, 200]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": [0, 1]},
+                geometry=[
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 110], [100, 110]]),
+                ],
+            ),
+            id="groups_pruned_independently",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"parallel_group": [0, 0, 0]},
+                geometry=[
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 10], [100, 10]]),
+                    LineString([[0, 0], [100, 0]]),
+                ],
+                index=[7, 7, 2],
+            ),
+            True,
+            1.25,
+            GeoDataFrame(
+                {"parallel_group": [0, 0]},
+                geometry=[
+                    LineString([[0, 20], [100, 20]]),
+                    LineString([[0, 0], [100, 0]]),
+                ],
+            ),
+            GeoDataFrame(
+                {"parallel_group": [0]},
+                geometry=[
+                    LineString([[0, 10], [100, 10]]),
+                ],
+            ),
+            id="duplicate_index_and_input_order",
+        ),
+    ],
+)
+def test_prune_parallel_groups(
+    input_gdf: GeoDataFrame,
+    keep_furthest: bool,
+    distance_multiplier: float,
+    expected_kept: GeoDataFrame,
+    expected_deleted: GeoDataFrame,
+):
+    kept, deleted = prune_parallel_groups(
+        input_gdf,
+        keep_furthest=keep_furthest,
+        distance_multiplier=distance_multiplier,
+    )
+    assert_geodataframe_equal(kept, expected_kept, check_like=True)
+    assert_geodataframe_equal(deleted, expected_deleted, check_like=True)
