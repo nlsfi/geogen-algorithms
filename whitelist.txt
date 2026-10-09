@@ -36,6 +36,7 @@ coord
 coords
 crs
 csgraph
+csr
 dataframe
 dataset
 DBSCAN
