@@ -9,7 +9,6 @@ from collections.abc import Iterable
 from copy import deepcopy
 from enum import Enum
 from itertools import chain, pairwise
-from math import atan2, isclose
 from statistics import mean
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 from warnings import warn
@@ -17,6 +16,8 @@ from warnings import warn
 import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
 from pygeoops import centerline
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
     GeometryCollection,
@@ -26,6 +27,7 @@ from shapely import (
     MultiPolygon,
     Point,
     Polygon,
+    STRtree,
     area,
     count_coordinates,
     force_2d,
@@ -38,8 +40,10 @@ from shapely import (
     is_closed,
     length,
     line_interpolate_point,
+    line_merge,
     linestrings,
     make_valid,
+    multilinestrings,
     node,
     points,
     polygonize,
@@ -1232,7 +1236,7 @@ def segment_direction(
         msg = "Segment has duplicate vertices."
         raise GeometryOperationError(msg)
 
-    angle = atan2(vertex_2[1] - vertex_1[1], vertex_2[0] - vertex_1[0])
+    angle = np.atan2(vertex_2[1] - vertex_1[1], vertex_2[0] - vertex_1[0])
 
     if unit == "degrees":
         return np.degrees(angle) % 180
@@ -1731,7 +1735,7 @@ def split_line_at_distances(
 
             next_split = next(distance_iter, None)
 
-        if next_split is not None and isclose(next_split, segment_end_distance):
+        if next_split is not None and np.isclose(next_split, segment_end_distance):
             current_coords.append(end_coord)
 
             result_segments.append(LineString(current_coords))
@@ -2757,3 +2761,177 @@ def gaussian_smooth(  # noqa: PLR0915, PLR0914
     flat_smoothed_coords = np.vstack(smoothed_coords)
 
     return linestrings(flat_smoothed_coords, indices=line_indexes)
+
+
+def line_length_weighted_directions(  # noqa: PLR0914
+    geoms: np.ndarray,
+    *,
+    unit: Literal["degrees", "radians"] = "degrees",
+) -> np.ndarray:
+    """Calculate length-weighted mean direction for an array of LineStrings in parallel.
+
+    Args:
+    ----
+        geoms: NumPy array of LineString geometries.
+        unit: Output angle unit, either "degrees" or "radians".
+
+    Returns:
+    -------
+        NumPy array of length-weighted mean directions.
+
+    """
+    geom_count = len(geoms)
+    if geom_count == 0:
+        return np.array([], dtype=np.float64)
+
+    coords, coord_indices = get_coordinates(geoms, return_index=True)
+
+    if len(coords) < 2:  # noqa: PLR2004
+        return np.zeros(geom_count, dtype=np.float64)
+
+    same_line_mask = coord_indices[1:] == coord_indices[:-1]
+
+    segment_start_points = coords[:-1][same_line_mask]
+    segment_end_points = coords[1:][same_line_mask]
+
+    segment_geom_index = coord_indices[:-1][same_line_mask]
+
+    dx = segment_end_points[:, 0] - segment_start_points[:, 0]
+    dy = segment_end_points[:, 1] - segment_start_points[:, 1]
+    lengths = np.hypot(dx, dy)
+
+    non_zero = lengths > 0
+    if not np.any(non_zero):
+        return np.zeros(geom_count, dtype=np.float64)
+
+    dx = dx[non_zero]
+    dy = dy[non_zero]
+    lengths = lengths[non_zero]
+    segment_geom_index = segment_geom_index[non_zero]
+
+    angles = np.arctan2(dy, dx)
+
+    cos_2 = lengths * np.cos(2 * angles)
+    sin_2 = lengths * np.sin(2 * angles)
+
+    sum_cos_2 = np.bincount(segment_geom_index, weights=cos_2, minlength=geom_count)
+    sum_sin_2 = np.bincount(segment_geom_index, weights=sin_2, minlength=geom_count)
+
+    mean_angles = 0.5 * np.arctan2(sum_sin_2, sum_cos_2)
+
+    if unit == "degrees":
+        deg = np.degrees(mean_angles) % 180.0
+        return np.where(np.isclose(deg, 180.0), 0.0, deg)
+
+    rad = mean_angles % np.pi
+    return np.where(np.isclose(rad, np.pi), 0.0, rad)
+
+
+def mean_segment_lengths(
+    geoms: np.ndarray,
+) -> np.ndarray:
+    """Calculate the mean segment length for an array of LineStrings.
+
+    Args:
+        geoms: NumPy array of LineString geometries.
+
+    Returns:
+        NumPy array of mean segment lengths.
+
+    """
+    geom_count = len(geoms)
+    if geom_count == 0:
+        return np.array([], dtype=np.float64)
+
+    lengths = length(geoms)
+    segment_count = get_num_coordinates(geoms) - 1
+
+    return np.divide(
+        lengths,
+        segment_count,
+        out=np.zeros(geom_count, dtype=np.float64),
+        where=segment_count > 0,
+    )
+
+
+def circular_direction_difference(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Return the angular difference between directions in degrees.
+
+    Directions are treated as circular between 0-180 i.e. so 179° and 1°
+    are 2° apart.
+
+    Returns
+    -------
+        NumPy array of calculated differences.
+
+    """
+    # TODO: BEFORE RELEASE: not really a geometry function per se, but
+    # we don't really have a generic "math" module either and utils are
+    # one package up
+    difference = np.abs(b - a) % 180
+    return np.minimum(difference, 180 - difference)
+
+
+def build_collinear_chains(
+    line_geoms: np.ndarray,
+    line_directions: np.ndarray,
+    allowed_direction_difference: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Group touching, approximately collinear lines into chains.
+
+    Args:
+    ----
+    line_geoms: NumPy array of LineString geometries.
+    line_directions: Orientation of each line in degrees.
+    allowed_direction_difference: Maximum angular difference in between
+        touching lines for them to be connected. These are expected to be in
+        degrees and between 0-180.
+
+    Returns:
+    -------
+        A tuple of chain IDs for the input lines and merged chain geometries.
+        Each chain ID indexes its corresponding geometry in the second array.
+        Merged geometries may be LineStrings or MultiLineStrings.
+
+    """
+    source_ids, target_ids = STRtree(line_geoms).query(
+        line_geoms,
+        predicate="touches",
+    )
+
+    within_direction_difference = (
+        circular_direction_difference(
+            line_directions[source_ids],
+            line_directions[target_ids],
+        )
+        <= allowed_direction_difference
+    )
+
+    adjacency_matrix = csr_matrix(
+        (
+            np.ones(np.count_nonzero(within_direction_difference), dtype=bool),
+            (
+                source_ids[within_direction_difference],
+                target_ids[within_direction_difference],
+            ),
+        ),
+        shape=(len(line_geoms), len(line_geoms)),
+    )
+
+    _, chain_ids = connected_components(
+        adjacency_matrix,
+        directed=False,
+        return_labels=True,
+    )
+
+    # multilinestrings expects its indices in increasing order, so sort the
+    # parts by chain ID.
+    parts, line_ids = get_parts(line_geoms, return_index=True)
+    part_chain_ids = chain_ids[line_ids]
+    order = np.argsort(part_chain_ids, kind="stable")
+
+    chain_geoms = line_merge(
+        multilinestrings(parts[order], indices=part_chain_ids[order])
+    )
+
+    return chain_ids, chain_geoms

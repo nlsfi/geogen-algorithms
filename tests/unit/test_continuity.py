@@ -25,6 +25,7 @@ from geogenalg.continuity import (
     connect_nearby_endpoints,
     count_connections,
     detect_dead_ends,
+    filter_short_contiguous_lines,
     find_all_endpoints,
     flag_connections,
     flag_connections_to_reference,
@@ -2173,3 +2174,161 @@ def test_get_contiguous_lengths(
         get_contiguous_lengths(input_gdf, precision=precision),
         expected,
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "lines",
+        "threshold",
+        "dead_end_exempt",
+        "disconnected_exempt",
+        "expected",
+    ),
+    [
+        pytest.param(
+            [],
+            10.0,
+            None,
+            None,
+            [],
+            id="empty",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (100, 0)])],
+            10.0,
+            None,
+            None,
+            [True],
+            id="long_disconnected_line_kept",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (5, 0)])],
+            10.0,
+            None,
+            None,
+            [False],
+            id="short_disconnected_line_removed",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (10, 0)])],
+            10.0,
+            None,
+            None,
+            [True],
+            id="length_equal_to_threshold_kept",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (100, 0)]),
+            ],
+            60.0,
+            None,
+            None,
+            [True, True],
+            id="total_contiguous_line_length_used",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (100, 0)]),
+            ],
+            120.0,
+            None,
+            None,
+            [False, False],
+            id="short_disconnected_contiguous_line_removed",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (5, 0)])],
+            10.0,
+            [True],
+            None,
+            [False],
+            id="dead_end_exemption_does_not_protect_disconnected_line",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (100, 0)]),
+            ],
+            120.0,
+            None,
+            [True, False],
+            [True, False],
+            id="disconnected_exemption_is_per_line",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (-100, 0)]),
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 0), (0, 5)]),
+            ],
+            10.0,
+            None,
+            None,
+            [True, True, False],
+            id="short_dead_end_removed",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (-100, 0)]),
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 0), (0, 5)]),
+            ],
+            10.0,
+            [False, False, True],
+            None,
+            [True, True, True],
+            id="dead_end_exemption_preserves_short_branch",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (-100, 0)]),
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 0), (0, 5)]),
+            ],
+            10.0,
+            None,
+            [False, False, True],
+            [True, True, False],
+            id="disconnected_exemption_does_not_protect_dead_end",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (0, 1)]),
+                LineString([(0, 1), (0, 0)]),
+                LineString([(0, 0), (-1, 0)]),
+            ],
+            4.0,
+            None,
+            None,
+            [False, False, False, False],
+            id="tail_removal_exposes_short_disconnected_ring",
+        ),
+    ],
+)
+def test_filter_short_contiguous_lines(
+    lines: np.ndarray,
+    threshold: float,
+    dead_end_exempt: list[bool] | None,
+    disconnected_exempt: list[bool] | None,
+    expected: np.ndarray,
+):
+    geoms = np.array(lines, dtype=object)
+
+    actual = filter_short_contiguous_lines(
+        geoms,
+        threshold,
+        dead_end_exempt=(
+            None if dead_end_exempt is None else np.array(dead_end_exempt, dtype=bool)
+        ),
+        disconnected_exempt=(
+            None
+            if disconnected_exempt is None
+            else np.array(disconnected_exempt, dtype=bool)
+        ),
+    )
+
+    np.testing.assert_array_equal(actual, np.array(expected, dtype=bool))

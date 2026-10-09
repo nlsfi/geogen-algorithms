@@ -19,6 +19,7 @@ from shapely import (
     GeometryCollection,
     MultiPolygon,
     box,
+    equals,
     equals_exact,
     from_wkt,
     length,
@@ -47,9 +48,11 @@ from geogenalg.core.geometry import (
     angle_difference,
     assign_nearest_z,
     assign_z_from_attribute,
+    build_collinear_chains,
     centerline_length,
     chaikin_smooth_conditional,
     chaikin_smooth_keep_topology,
+    circular_direction_difference,
     concatenate_lines,
     create_crossing_line_at_vertex,
     elongation,
@@ -67,11 +70,13 @@ from geogenalg.core.geometry import (
     get_topological_points,
     insert_vertex,
     largest_part,
+    line_length_weighted_directions,
     line_mean_direction,
     lines_to_segments,
     make_valid_ensure_polygon,
     make_valid_extract_linestrings,
     make_valid_extract_polygons,
+    mean_segment_lengths,
     mean_z,
     move_to_point,
     node_non_simple,
@@ -4350,3 +4355,281 @@ def test_substring(
 ):
     result = substring(line, start_distance, end_distance)
     assert equals_exact(result, expected)
+
+
+@pytest.mark.parametrize(
+    ("geom", "unit", "expected"),
+    [
+        pytest.param(
+            LineString([[0, 0], [10, 0]]),
+            "degrees",
+            0.0,
+            id="horizontal_degrees",
+        ),
+        pytest.param(
+            LineString([[0, 0], [0, 10]]),
+            "degrees",
+            90.0,
+            id="vertical_degrees",
+        ),
+        pytest.param(
+            LineString([[0, 0], [0, 10]]),
+            "radians",
+            np.pi / 2,
+            id="vertical_radians",
+        ),
+        pytest.param(
+            LineString([[0, 0], [10, 10]]),
+            "degrees",
+            45.0,
+            id="diagonal_45_degrees",
+        ),
+        pytest.param(
+            LineString([[10, 0], [0, 0]]),
+            "degrees",
+            0.0,
+            id="reversed_direction",
+        ),
+        pytest.param(
+            LineString([[0, 0], [10, 0], [10, 10]]),
+            "degrees",
+            45.0,
+            id="equal_length_perpendicular_segments",
+        ),
+        pytest.param(
+            LineString([[0, 0], [0, 0]]),
+            "degrees",
+            0.0,
+            id="zero_length_linestring",
+        ),
+        pytest.param(
+            LineString([]),
+            "degrees",
+            0.0,
+            id="empty_linestring",
+        ),
+    ],
+)
+def test_line_length_weighted_directions(
+    geom: LineString,
+    unit: Literal["degrees", "radians"],
+    expected: float,
+):
+    result = line_length_weighted_directions(np.array([geom]), unit=unit)[0]
+    assert np.isclose(result, expected)
+
+
+@pytest.mark.parametrize(
+    ("geoms", "expected"),
+    [
+        pytest.param(
+            [],
+            np.array([], dtype=np.float64),
+            id="empty_input_array",
+        ),
+        pytest.param(
+            [LineString([[0, 0], [10, 0]])],
+            np.array([10.0]),
+            id="single_segment_linestring",
+        ),
+        pytest.param(
+            [LineString([[0, 0], [3, 0], [10, 0]])],
+            np.array([5.0]),  # Total length 10 / 2 segments
+            id="multi_segment_linestring",
+        ),
+        pytest.param(
+            [
+                LineString([[0, 0], [10, 0]]),
+                LineString([[0, 0], [10, 0], [10, 10]]),
+                LineString([[0, 0], [0, 0]]),
+                LineString([]),
+            ],
+            np.array([10.0, 10.0, 0.0, 0.0]),
+            id="mixed_geometries_including_empty_and_zero_length",
+        ),
+    ],
+)
+def test_mean_segment_lengths(
+    geoms: np.ndarray,
+    expected: np.ndarray,
+):
+    result = mean_segment_lengths(geoms)
+    assert np.allclose(result, expected)
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "expected"),
+    [
+        pytest.param([0], [0], [0], id="same"),
+        pytest.param([0], [10], [10], id="small_difference"),
+        pytest.param([10], [0], [10], id="small_difference_reversed"),
+        pytest.param([179], [1], [2], id="wraparound_forward"),
+        pytest.param([1], [179], [2], id="wraparound_reversed"),
+        pytest.param([45], [135], [90], id="big"),
+        pytest.param(
+            [0, 10, 179],
+            [0, 20, 1],
+            [0, 10, 2],
+            id="multiple",
+        ),
+    ],
+)
+def test_circular_direction_difference(
+    a: np.ndarray,
+    b: np.ndarray,
+    expected: np.ndarray,
+):
+    result = circular_direction_difference(np.array(a), np.array(b))
+    np.testing.assert_allclose(result, np.array(expected))
+
+
+@pytest.mark.parametrize(
+    ("lines", "allowed_direction_difference", "expected_chain_ids", "expected_geoms"),
+    [
+        pytest.param(
+            [LineString([(0, 0), (100, 0)])],
+            10.0,
+            [0],
+            [LineString([(0, 0), (100, 0)])],
+            id="single_line",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (100, 0)]),
+            ],
+            10.0,
+            [0, 0],
+            [LineString([(0, 0), (100, 0)])],
+            id="collinear_touching_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (40, 0)]),
+                LineString([(60, 0), (100, 0)]),
+            ],
+            10.0,
+            [0, 1],
+            [
+                LineString([(0, 0), (40, 0)]),
+                LineString([(60, 0), (100, 0)]),
+            ],
+            id="collinear_disjoint_not_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (50, 50)]),
+            ],
+            10.0,
+            [0, 1],
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(50, 0), (50, 50)]),
+            ],
+            id="perpendicular_touching_not_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 50), (50, 50)]),
+                LineString([(50, 50), (100, 50)]),
+                LineString([(50, 0), (50, 50)]),
+                LineString([(50, 50), (50, 100)]),
+            ],
+            10.0,
+            [0, 0, 1, 1],
+            [
+                LineString([(0, 50), (100, 50)]),
+                LineString([(50, 0), (50, 100)]),
+            ],
+            id="grid_junction_splits_by_orientation",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(100, 0), (200, 100 * np.tan(np.radians(5)))]),
+            ],
+            10.0,
+            [0, 0],
+            [LineString([(0, 0), (100, 0), (200, 100 * np.tan(np.radians(5)))])],
+            id="bend_within_tolerance_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(100, 0), (200, 100 * np.tan(np.radians(15)))]),
+            ],
+            10.0,
+            [0, 1],
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(100, 0), (200, 100 * np.tan(np.radians(15)))]),
+            ],
+            id="bend_outside_tolerance_not_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, -1.75)]),
+                LineString([(100, -1.75), (200, 0)]),
+            ],
+            10.0,
+            [0, 0],
+            [LineString([(0, 0), (100, -1.75), (200, 0)])],
+            id="orientation_wraps_around_180",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 0), (100, 10)]),
+                LineString([(0, 0), (100, 20)]),
+            ],
+            10.0,
+            [0, 0, 0],
+            [
+                MultiLineString(
+                    [
+                        [(0, 0), (100, 0)],
+                        [(0, 0), (100, 10)],
+                        [(0, 0), (100, 20)],
+                    ]
+                )
+            ],
+            id="fan_chained_transitively",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (50, 0)]),
+                LineString([(0, 10), (100, 10)]),
+                LineString([(50, 0), (100, 0)]),
+            ],
+            10.0,
+            [0, 1, 0],
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, 10), (100, 10)]),
+            ],
+            id="non_adjacent_input_order",
+        ),
+    ],
+)
+def test_build_collinear_chains(
+    lines: list[LineString],
+    allowed_direction_difference: float,
+    expected_chain_ids: list[int],
+    expected_geoms: list[LineString],
+):
+    geoms = np.array(lines, dtype=object)
+    directions = line_length_weighted_directions(geoms)
+
+    chain_ids, chain_geoms = build_collinear_chains(
+        geoms,
+        directions,
+        allowed_direction_difference,
+    )
+
+    np.testing.assert_array_equal(chain_ids, expected_chain_ids)
+    assert len(chain_geoms) == len(expected_geoms)
+
+    for actual, expected in zip(chain_geoms, expected_geoms, strict=True):
+        assert actual.geom_type == expected.geom_type
+        assert equals(actual, expected)

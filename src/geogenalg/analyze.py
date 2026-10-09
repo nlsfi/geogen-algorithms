@@ -9,11 +9,19 @@ from typing import Literal
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 from shapely import (
     BufferJoinStyle,
     MultiLineString,
+    STRtree,
+    buffer,
+    centroid,
     concave_hull,
     convex_hull,
+    get_coordinates,
+    intersection,
+    length,
     union_all,
 )
 from shapely.geometry import GeometryCollection, LineString, Polygon
@@ -22,8 +30,11 @@ from shapely.geometry.base import BaseGeometry
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import (
     angle_difference,
+    build_collinear_chains,
+    circular_direction_difference,
     ensure_geoms,
     explode_line,
+    line_length_weighted_directions,
     line_mean_direction,
     remove_holes,
     segment_bearing,
@@ -720,3 +731,211 @@ def polygonize_parallel_lines(
         .explode()
         .reset_index(drop=True)
     )
+
+
+def _connected_labels(
+    source_ids: np.ndarray,
+    target_ids: np.ndarray,
+    node_count: int,
+) -> np.ndarray:
+    adjacency_matrix = csr_matrix(
+        (np.ones(len(source_ids), dtype=bool), (source_ids, target_ids)),
+        shape=(node_count, node_count),
+    )
+
+    _, labels = connected_components(
+        adjacency_matrix,
+        directed=False,
+        return_labels=True,
+    )
+
+    return labels
+
+
+def add_parallel_line_information(  # noqa: PLR0914
+    input_gdf: GeoDataFrame,
+    parallel_distance: float,
+    allowed_direction_difference: float,
+    min_overlap_ratio: float = 0.75,
+    side_tolerance: float = 1e-8,
+) -> GeoDataFrame:
+    """Add information about approximately parallel line features.
+
+    Touching and (almost) collinear lines are merged into chains and
+    parallel checking is done against other chains of lines.
+
+    The following columns are added:
+
+    - direction: segment length-weighted line direction in degrees
+    - parallels_left: number of parallel chains on the left side
+    - parallels_right: number of parallel chains on the right side
+    - parallel_group: index of a group of connected parallel lines, or
+        -1 if the feature is not found to be in any group
+
+    Args:
+    ----
+    input_gdf: GeoDataFrame containing line geometries.
+    parallel_distance: Buffer distance used to find candidate parallel chains.
+    allowed_direction_difference: Maximum allowed angular difference for lines
+        or chains to be considered collinear or parallel. In degrees.
+    min_overlap_ratio: Minimum fraction of the shorter chain's length that must
+        overlap the candidate chain's buffer for a parallel relationship to count.
+    side_tolerance: Tolerance for deciding whether a candidate lies on the left
+        or right side of a chain. Candidates with an effectively zero cross product
+        are ignored for side counts.
+
+    Returns:
+    -------
+        GeoDataFrame containing the columns described above.
+
+    """
+    if input_gdf.empty:
+        return copy_gdf_as_empty(
+            input_gdf,
+            add_columns={
+                "direction": "float64",
+                "parallels_left": "int64",
+                "parallels_right": "int64",
+                "parallel_group": "int64",
+            },
+        )
+
+    gdf = input_gdf.copy()
+    line_geoms = gdf.geometry.to_numpy()
+    line_directions = line_length_weighted_directions(line_geoms)
+    gdf["direction"] = line_directions
+
+    # We flag parallel lines as parts of larger "chains" of linestrings. The
+    # reason for this is that if the lines are broken into smaller parts at
+    # junctions we get a better result. This f.e. handles datasets where the
+    # lines form a grid structure and allows detecting sets of parallel lines
+    # within the grid.
+    chain_ids, chain_geoms = build_collinear_chains(
+        line_geoms,
+        line_directions,
+        allowed_direction_difference,
+    )
+    chain_count = len(chain_geoms)
+
+    chain_lengths = length(chain_geoms)
+
+    weights = length(line_geoms)
+    angles = np.radians(line_directions * 2)
+
+    cos_sums = np.bincount(
+        chain_ids,
+        weights * np.cos(angles),
+        minlength=chain_count,
+    )
+    sin_sums = np.bincount(
+        chain_ids,
+        weights * np.sin(angles),
+        minlength=chain_count,
+    )
+
+    chain_directions = (np.degrees(np.arctan2(sin_sums, cos_sums)) / 2.0) % 180.0
+    chain_directions[np.isclose(chain_directions, 180.0, rtol=0, atol=1e-10)] = 0.0
+
+    # We build buffers for each "chain" and this way for each chain find
+    # other chains which are potentially parallel to it.
+    chain_buffers = buffer(
+        chain_geoms,
+        parallel_distance,
+        cap_style="flat",
+    )
+
+    # Find initial parallel candidates.
+    source_ids, target_ids = STRtree(chain_geoms).query(
+        chain_buffers,
+        predicate="intersects",
+    )
+
+    # Remove parallel candidates whose direction differs too much.
+    direction_difference = circular_direction_difference(
+        chain_directions[source_ids],
+        chain_directions[target_ids],
+    )
+    different_chains = source_ids != target_ids  # Also filter self-pairs.
+    direction_mask = different_chains & (
+        direction_difference <= allowed_direction_difference
+    )
+    source_ids = source_ids[direction_mask]
+    target_ids = target_ids[direction_mask]
+
+    # Since we're using buffers to find parallel candidates, on the first pass
+    # we may find lines which are parellel, but only for a short length of
+    # either line. We remove candidates which do not run parallel to the chain
+    # for a large enough ratio of their length.
+    overlap_lengths = length(
+        intersection(
+            chain_geoms[target_ids],
+            chain_buffers[source_ids],
+        )
+    )
+    min_lengths = np.minimum(
+        chain_lengths[source_ids],
+        chain_lengths[target_ids],
+    )
+
+    parallel_overlap_ratios = np.zeros_like(overlap_lengths, dtype=float)
+    np.divide(
+        overlap_lengths,
+        min_lengths,
+        out=parallel_overlap_ratios,
+        where=min_lengths > 0,
+    )
+    overlap_mask = (
+        (min_lengths > 0)
+        & (overlap_lengths > 0)
+        & (parallel_overlap_ratios >= min_overlap_ratio)
+    )
+    source_ids = source_ids[overlap_mask]
+    target_ids = target_ids[overlap_mask]
+
+    # Classify candidates as left or right using the cross product of the
+    # source chain's direction vector and the offset between chain centroids.
+    # Ignore lateral offsets within side_tolerance, then broadcast each chain's
+    # counts to its member features.
+    chain_centroids = get_coordinates(centroid(chain_geoms))
+    offsets = chain_centroids[target_ids] - chain_centroids[source_ids]
+    angles = np.radians(chain_directions[source_ids])
+    cross_products = np.cos(angles) * offsets[:, 1] - np.sin(angles) * offsets[:, 0]
+
+    pairs = np.column_stack((source_ids, target_ids))
+
+    left_pairs = pairs[cross_products > side_tolerance]
+    right_pairs = pairs[cross_products < -side_tolerance]
+
+    left_counts = np.bincount(left_pairs[:, 0], minlength=chain_count)
+    right_counts = np.bincount(right_pairs[:, 0], minlength=chain_count)
+
+    gdf["parallels_left"] = left_counts[chain_ids]
+    gdf["parallels_right"] = right_counts[chain_ids]
+
+    # Add a graph edge only when both chains accept the relationship: B must be
+    # on A's left and A on B's right, with both evaluations passing the
+    # direction and overlap checks.
+    left_keys = left_pairs[:, 0] * chain_count + left_pairs[:, 1]
+    reversed_right_keys = right_pairs[:, 1] * chain_count + right_pairs[:, 0]
+
+    mutual_keys = np.intersect1d(left_keys, reversed_right_keys)
+    mutual_edges = np.column_stack(np.divmod(mutual_keys, chain_count))
+
+    chain_group_labels = _connected_labels(
+        mutual_edges[:, 0],
+        mutual_edges[:, 1],
+        chain_count,
+    )
+
+    # _connected_labels will label every chain component, including
+    # single-chain components. We don't want to consider those as being in a
+    # parallel group so we set those to -1
+    group_sizes = np.bincount(chain_group_labels)
+    valid_groups = group_sizes > 1
+
+    group_mapping = np.full(len(group_sizes), -1, dtype=int)
+    group_mapping[valid_groups] = np.arange(np.count_nonzero(valid_groups))
+
+    # Map results from chain-based checks to original features.
+    gdf["parallel_group"] = group_mapping[chain_group_labels[chain_ids]]
+    return gdf

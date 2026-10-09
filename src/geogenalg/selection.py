@@ -5,19 +5,28 @@
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
 from math import hypot
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from warnings import catch_warnings
 
 import numpy as np
 from geopandas import GeoDataFrame
 from pandas import Series
+from shapely import distance, length, line_interpolate_point
 from shapely.geometry import LineString, Point
 
 from geogenalg.continuity import find_all_endpoints
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import line_mean_direction, remove_holes
+from geogenalg.core.geometry import (
+    build_collinear_chains,
+    line_length_weighted_directions,
+    line_mean_direction,
+    remove_holes,
+)
 from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def remove_disconnected_short_lines(
@@ -421,4 +430,149 @@ def rank_parallel_lines(
     return (
         distances.rank(),
         disjoint.index.tolist(),
+    )
+
+
+def _select_chains(
+    chains: np.ndarray,
+    distance_multiplier: float,
+    *,
+    keep_furthest: bool,
+) -> np.ndarray:
+    """Select sufficiently separated chains.
+
+    Args:
+    ----
+    chains: NumPy array of LineString geometries.
+    distance_multiplier: Multiplier used on the average parallel line distance
+        to establish a new approximate distance between parallel lines.
+    keep_furthest: If True, furthest lines will not be selected.
+
+    Returns:
+    -------
+        Indices of selected chains.
+
+    """
+    count = len(chains)
+    if count <= 2:  # noqa: PLR2004
+        return np.arange(count)
+
+    # Estimate lateral distance between chains
+    midpoints = line_interpolate_point(chains, 0.5, normalized=True)
+    first, second = np.triu_indices(count, k=1)
+
+    pair_distances = (
+        distance(midpoints[first], chains[second])
+        + distance(midpoints[second], chains[first])
+    ) * 0.5
+
+    distances = np.full((count, count), np.inf)
+    distances[first, second] = pair_distances
+    distances[second, first] = pair_distances
+
+    # Replace near-zero distances with inf
+    nearest_distances = np.where(distances > 0.001, distances, np.inf).min(axis=1)  # noqa: PLR2004
+    nearest_distances = nearest_distances[np.isfinite(nearest_distances)]
+
+    if nearest_distances.size == 0:
+        return np.arange(count)
+
+    minimum_distance = float(nearest_distances.mean()) * distance_multiplier
+
+    # Sort chains by their length, prefering to keep them over shorter ones.
+    # Keep chains that are further away from the estimated lateral distance
+    # than the newly established minimum distance.
+    selected: list[int] = []
+    order: Sequence[int]
+
+    if keep_furthest:
+        first_index, second_index = np.triu_indices(count, k=1)
+        furthest = np.argmax(distances[first_index, second_index])
+        selected = [int(first_index[furthest]), int(second_index[furthest])]
+        order = range(count)
+    else:
+        chain_lengths = length(chains)
+        order = sorted(
+            range(count),
+            key=lambda index: float(chain_lengths[index]),
+            reverse=True,
+        )
+
+    for index in order:
+        if index in selected:
+            continue
+        if not selected or np.all(distances[index, selected] > minimum_distance):
+            selected.append(index)
+
+    return np.array(selected, dtype=int)
+
+
+def prune_parallel_groups(
+    gdf: GeoDataFrame,
+    *,
+    distance_multiplier: float = 1.25,
+    keep_furthest: bool = False,
+    parallel_group_column: str = "parallel_group",
+    allowed_direction_difference: float = 10.0,
+) -> tuple[GeoDataFrame, GeoDataFrame]:
+    """Prune grouped parallel line features.
+
+    Lines which are connected to other lines are treated as parts of that
+    larger chain of linestrings.
+
+    Args:
+    ----
+    gdf: GeoDataFrame with line features, with a parallel group column.
+    distance_multiplier: Multiplier used on the average parallel line distance
+        to establish a new approximate distance between parallel lines.
+    keep_furthest: If True, furthest lines will not be pruned.
+    parallel_group_column: Name of column with parallel group values.
+    allowed_direction_difference: Maximum allowed angular difference for lines
+        or chains to be considered collinear or parallel. In degrees.
+
+    Returns:
+    -------
+        Two GeoDataFrames containing kept features and pruned features, in that
+        order.
+
+    """
+    if gdf.empty:
+        return gdf.copy(), copy_gdf_as_empty(gdf)
+
+    keep = np.zeros(len(gdf), dtype=bool)
+
+    for group_id, positions in gdf.groupby(parallel_group_column).indices.items():
+        if group_id == -1:
+            keep[positions] = True
+            continue
+
+        group = gdf.iloc[positions]
+        line_geoms = group.geometry.to_numpy()
+        line_directions = line_length_weighted_directions(line_geoms)
+
+        # Build chains using collinear merging; this returns explicit chain IDs.
+        chain_ids, chain_geoms = build_collinear_chains(
+            line_geoms,
+            line_directions,
+            allowed_direction_difference=allowed_direction_difference,
+        )
+
+        unique_chain_ids = np.unique(chain_ids)
+        if len(unique_chain_ids) <= 2:  # noqa: PLR2004
+            keep[positions] = True
+            continue
+
+        selected_chain_indices = _select_chains(
+            chain_geoms,
+            distance_multiplier,
+            keep_furthest=keep_furthest,
+        )
+        selected_chain_ids_set = set(selected_chain_indices)
+
+        # Mark features whose chain was selected.
+        keep[positions] = np.isin(chain_ids, list(selected_chain_ids_set))
+
+    return (
+        gdf.iloc[np.flatnonzero(keep)].copy().reset_index(drop=True),
+        gdf.iloc[np.flatnonzero(~keep)].copy().reset_index(drop=True),
     )

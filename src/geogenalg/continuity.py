@@ -13,7 +13,7 @@ import numpy as np
 from geopandas import GeoDataFrame
 from networkx.classes.graph import Graph
 from pandas import Series
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely import STRtree, force_2d, get_coordinates, get_point, length
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
@@ -1273,3 +1273,98 @@ def get_contiguous_lengths(
     component_lengths = np.bincount(line_components, weights=lengths)
 
     return component_lengths[line_components]
+
+
+def filter_short_contiguous_lines(  # noqa: PLR0914
+    geoms: np.ndarray,
+    threshold: float,
+    *,
+    dead_end_exempt: np.ndarray | None = None,
+    disconnected_exempt: np.ndarray | None = None,
+) -> np.ndarray:
+    """Find contiguous lines iteratively which are disconnected or dead ends.
+
+    Args:
+    ----
+    geoms: NumPy array of LineString geometries.
+    threshold: Lines shorter than this are filtered.
+    dead_end_exempt: Boolean mask of lines that are never removed as part of a
+        dead end.
+    disconnected_exempt: Boolean mask of lines that are never removed as part
+        of a disconnected contiguous line.
+
+    Returns:
+    -------
+        Boolean mask of lines to keep.
+
+    """
+    line_count = len(geoms)
+    keep = np.ones(line_count, dtype=bool)
+    if line_count == 0:
+        return keep
+
+    if dead_end_exempt is None:
+        dead_end_exempt = np.zeros(line_count, dtype=bool)
+    if disconnected_exempt is None:
+        disconnected_exempt = np.zeros(line_count, dtype=bool)
+
+    endpoints = np.vstack(
+        [
+            get_coordinates(get_point(geoms, 0)),
+            get_coordinates(get_point(geoms, -1)),
+        ]
+    )
+    _, node_ids = np.unique(endpoints, axis=0, return_inverse=True)
+    node_ids = node_ids.ravel()
+
+    start_nodes, end_nodes = node_ids[:line_count], node_ids[line_count:]
+    node_count = int(node_ids.max()) + 1
+    lengths = length(geoms)
+
+    while keep.any():
+        alive = np.flatnonzero(keep)
+        alive_count = len(alive)
+
+        line_ends = np.concatenate([start_nodes[alive], end_nodes[alive]])
+        end_lines = np.tile(np.arange(alive_count), 2)
+        degree = np.bincount(line_ends, minlength=node_count)[line_ends]
+
+        pass_through = degree == 2  # noqa: PLR2004
+        graph_size = alive_count + node_count
+        adjacency = csr_matrix(
+            (
+                np.ones(np.count_nonzero(pass_through), dtype=bool),
+                (
+                    end_lines[pass_through],
+                    alive_count + line_ends[pass_through],
+                ),
+            ),
+            shape=(graph_size, graph_size),
+        )
+        _, labels = connected_components(adjacency, directed=False)
+        strand_ids = labels[:alive_count]
+        strand_count = int(strand_ids.max()) + 1
+
+        strand_lengths = np.bincount(strand_ids, lengths[alive], minlength=strand_count)
+        free_ends = np.bincount(
+            strand_ids[end_lines[degree == 1]], minlength=strand_count
+        )
+        junction_ends = np.bincount(
+            strand_ids[end_lines[degree > 2]],  # noqa: PLR2004
+            minlength=strand_count,
+        )
+
+        short = strand_lengths[strand_ids] < threshold
+        disconnected = (junction_ends == 0)[strand_ids]
+        dead_end = ((junction_ends == 1) & (free_ends == 1))[strand_ids]
+
+        remove = short & (
+            (disconnected & ~disconnected_exempt[alive])
+            | (dead_end & ~dead_end_exempt[alive])
+        )
+        if not remove.any():
+            break
+
+        keep[alive[remove]] = False
+
+    return keep

@@ -29,6 +29,7 @@ centroids
 chaikin
 changelog
 cleandoc
+collinear
 concat
 const
 convolve
@@ -36,12 +37,14 @@ coord
 coords
 crs
 csgraph
+csr
 dataframe
 dataset
 DBSCAN
 densify
 dest
 directionally
+divmod
 docstring
 docstrings
 dtype
@@ -50,6 +53,7 @@ dy
 Expr
 fid
 fids
+flatnonzero
 fromiter
 func
 gdf
@@ -71,7 +75,9 @@ hypot
 idx
 inplace
 interp
+intersect1d
 isclose
+isfinite
 itemsize
 keepdims
 landcover
@@ -83,6 +89,7 @@ loc
 minlength
 multigeometries
 multilinestring
+multilinestrings
 multipolygon
 ndarray
 networkx
@@ -125,6 +132,7 @@ testdata
 tol
 tolist
 topo
+triu
 typer
 unary
 unsplit

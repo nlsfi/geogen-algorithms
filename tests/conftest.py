@@ -30,6 +30,9 @@ from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.application.generalize_watercourse_areas import (
     GeneralizeWaterCourseAreas,
 )
+from geogenalg.application.generalize_watercourse_lines import (
+    GeneralizeWaterCourseLines,
+)
 from geogenalg.testing import GeoPackagePath, TestInputData
 
 
@@ -499,4 +502,36 @@ def tall_building_areas_input(algorithm_testdata_path: Path) -> TestInputData:
             "parcels": gpkg.to_input("parcels"),
             "roads": gpkg.to_input("roads"),
         },
+    )
+
+
+@pytest.fixture
+def watercourse_lines_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "watercourse_lines.gpkg")
+    return TestInputData(
+        input_uri=[
+            gpkg.to_input("watercourse_part_line"),
+        ],
+        control_uri=gpkg.to_input("control"),
+        unique_id_column="kmtk_id",
+        reference_uris={
+            "water_areas": gpkg.to_input("water_areas"),
+        },
+    )
+
+
+@pytest.fixture
+def watercourse_lines_algorithm() -> GeneralizeWaterCourseLines:
+    return GeneralizeWaterCourseLines(
+        parallel_line_distance=45.0,
+        parallel_line_allowed_direction_difference=10.0,
+        parallel_line_keep_edges_always=True,
+        parallel_line_min_overlap_ratio=0.75,
+        natural_max_mean_segment_length=10.0,
+        natural_min_vertices=10,
+        disconnected_lines_length_threshold=75.0,
+        prune_distance_multiplier=1.25,
+        always_keep_column="watercourse_line_width_category_id",
+        always_keep_values=frozenset([2]),
+        reference_key="water_areas",
     )
