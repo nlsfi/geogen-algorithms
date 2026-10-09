@@ -20,11 +20,8 @@ from shapely import (
     concave_hull,
     convex_hull,
     get_coordinates,
-    get_parts,
     intersection,
     length,
-    line_merge,
-    multilinestrings,
     union_all,
 )
 from shapely.geometry import GeometryCollection, LineString, Polygon
@@ -33,6 +30,8 @@ from shapely.geometry.base import BaseGeometry
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import (
     angle_difference,
+    build_collinear_chains,
+    circular_direction_difference,
     ensure_geoms,
     explode_line,
     line_length_weighted_directions,
@@ -43,11 +42,6 @@ from geogenalg.core.geometry import (
 )
 from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
-
-
-def _circular_direction_difference(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    difference = np.abs(b - a) % 180
-    return np.minimum(difference, 180 - difference)
 
 
 def _group_parallel_lines(
@@ -758,42 +752,6 @@ def _connected_labels(
     return labels
 
 
-def _build_collinear_chains(
-    line_geoms: np.ndarray,
-    line_directions: np.ndarray,
-    allowed_direction_difference: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    source_ids, target_ids = STRtree(line_geoms).query(
-        line_geoms,
-        predicate="touches",
-    )
-
-    within_direction_difference = (
-        _circular_direction_difference(
-            line_directions[source_ids],
-            line_directions[target_ids],
-        )
-        <= allowed_direction_difference
-    )
-
-    chain_ids = _connected_labels(
-        source_ids[within_direction_difference],
-        target_ids[within_direction_difference],
-        len(line_geoms),
-    )
-
-    # multilinestrings expects its indices in increasing order, so sort the
-    # parts by chain ID.
-    parts, line_ids = get_parts(line_geoms, return_index=True)
-    part_chain_ids = chain_ids[line_ids]
-    order = np.argsort(part_chain_ids, kind="stable")
-
-    chain_geoms = line_merge(
-        multilinestrings(parts[order], indices=part_chain_ids[order])
-    )
-    return chain_ids, chain_geoms
-
-
 def add_parallel_line_information(  # noqa: PLR0914
     input_gdf: GeoDataFrame,
     parallel_distance: float,
@@ -852,7 +810,7 @@ def add_parallel_line_information(  # noqa: PLR0914
     # junctions we get a better result. This f.e. handles datasets where the
     # lines form a grid structure and allows detecting sets of parallel lines
     # within the grid.
-    chain_ids, chain_geoms = _build_collinear_chains(
+    chain_ids, chain_geoms = build_collinear_chains(
         line_geoms,
         line_directions,
         allowed_direction_difference,
@@ -893,7 +851,7 @@ def add_parallel_line_information(  # noqa: PLR0914
     )
 
     # Remove parallel candidates whose direction differs too much.
-    direction_difference = _circular_direction_difference(
+    direction_difference = circular_direction_difference(
         chain_directions[source_ids],
         chain_directions[target_ids],
     )

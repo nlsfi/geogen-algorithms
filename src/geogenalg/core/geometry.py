@@ -16,6 +16,8 @@ from warnings import warn
 import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
 from pygeoops import centerline
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
     GeometryCollection,
@@ -25,6 +27,7 @@ from shapely import (
     MultiPolygon,
     Point,
     Polygon,
+    STRtree,
     area,
     count_coordinates,
     force_2d,
@@ -37,8 +40,10 @@ from shapely import (
     is_closed,
     length,
     line_interpolate_point,
+    line_merge,
     linestrings,
     make_valid,
+    multilinestrings,
     node,
     points,
     polygonize,
@@ -2847,3 +2852,86 @@ def mean_segment_lengths(
         out=np.zeros(geom_count, dtype=np.float64),
         where=segment_count > 0,
     )
+
+
+def circular_direction_difference(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Return the angular difference between directions in degrees.
+
+    Directions are treated as circular between 0-180 i.e. so 179° and 1°
+    are 2° apart.
+
+    Returns
+    -------
+        NumPy array of calculated differences.
+
+    """
+    # TODO: BEFORE RELEASE: not really a geometry function per se, but
+    # we don't really have a generic "math" module either and utils are
+    # one package up
+    difference = np.abs(b - a) % 180
+    return np.minimum(difference, 180 - difference)
+
+
+def build_collinear_chains(
+    line_geoms: np.ndarray,
+    line_directions: np.ndarray,
+    allowed_direction_difference: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Group touching, approximately collinear lines into chains.
+
+    Args:
+    ----
+    line_geoms: NumPy array of LineString geometries.
+    line_directions: Orientation of each line in degrees.
+    allowed_direction_difference: Maximum angular difference in between
+        touching lines for them to be connected. These are expected to be in
+        degrees and between 0-180.
+
+    Returns:
+    -------
+        A tuple of chain IDs for the input lines and merged chain geometries.
+        Each chain ID indexes its corresponding geometry in the second array.
+        Merged geometries may be LineStrings or MultiLineStrings.
+
+    """
+    source_ids, target_ids = STRtree(line_geoms).query(
+        line_geoms,
+        predicate="touches",
+    )
+
+    within_direction_difference = (
+        circular_direction_difference(
+            line_directions[source_ids],
+            line_directions[target_ids],
+        )
+        <= allowed_direction_difference
+    )
+
+    adjacency_matrix = csr_matrix(
+        (
+            np.ones(np.count_nonzero(within_direction_difference), dtype=bool),
+            (
+                source_ids[within_direction_difference],
+                target_ids[within_direction_difference],
+            ),
+        ),
+        shape=(len(line_geoms), len(line_geoms)),
+    )
+
+    _, chain_ids = connected_components(
+        adjacency_matrix,
+        directed=False,
+        return_labels=True,
+    )
+
+    # multilinestrings expects its indices in increasing order, so sort the
+    # parts by chain ID.
+    parts, line_ids = get_parts(line_geoms, return_index=True)
+    part_chain_ids = chain_ids[line_ids]
+    order = np.argsort(part_chain_ids, kind="stable")
+
+    chain_geoms = line_merge(
+        multilinestrings(parts[order], indices=part_chain_ids[order])
+    )
+
+    return chain_ids, chain_geoms
