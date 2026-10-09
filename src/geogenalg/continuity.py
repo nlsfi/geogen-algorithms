@@ -5,22 +5,24 @@
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
 from collections.abc import Callable
-from itertools import starmap
 from typing import Literal, cast
 from warnings import warn
 
 import numpy as np
 from geopandas import GeoDataFrame
 from networkx.classes.graph import Graph
-from pandas import Series
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
-from shapely import STRtree, force_2d, get_coordinates, get_point, length
+from shapely import (
+    STRtree,
+    force_2d,
+    get_coordinates,
+    get_point,
+    length,
+)
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import linemerge
 
-from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
     extend_line_to_nearest,
@@ -902,46 +904,34 @@ def process_lines_and_reconnect(
     )
 
 
-def _get_merged_line_connections(
-    input_gdf: GeoDataFrame,
-    reference_network: GeoDataFrame,
-) -> GeoDataFrame:
-    merged_geom = input_gdf.union_all()
+def _contiguous_components(
+    end_nodes: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    _, nodes = np.unique(end_nodes, return_inverse=True)
+    nodes = nodes.ravel()
+    line_count = len(nodes) // 2
+    node_count = int(nodes.max()) + 1
 
-    if isinstance(merged_geom, MultiLineString):
-        merged_geom = linemerge(merged_geom)
+    # Find endpoints with only 2 connected lines
+    pass_through = np.bincount(nodes)[nodes] == 2  # noqa: PLR2004
+    end_lines = np.tile(np.arange(line_count), 2)
 
-    merged = GeoDataFrame(
-        geometry=[
-            merged_geom,
-        ],
-        crs=input_gdf.crs,
-    ).explode()
-
-    merged = flag_connections(
-        merged,
-        start_connected_column="connected_to_self_start",
-        end_connected_column="connected_to_self_end",
+    size = line_count + node_count
+    graph = csr_matrix(
+        (
+            np.ones(np.count_nonzero(pass_through), dtype=bool),
+            (
+                end_lines[pass_through],
+                line_count + nodes[pass_through],
+            ),
+        ),
+        shape=(size, size),
     )
-
-    merged = flag_connections_to_reference(
-        merged,
-        reference_network,
-        start_connected_column="connected_to_network_start",
-        end_connected_column="connected_to_network_end",
-    )
-
-    merged["start_connected"] = Series(
-        merged["connected_to_self_start"] | merged["connected_to_network_start"]
-    )
-    merged["end_connected"] = Series(
-        merged["connected_to_self_end"] | merged["connected_to_network_end"]
-    )
-
-    return merged
+    _, labels = connected_components(graph, directed=False)
+    return labels[:line_count], ~pass_through
 
 
-def add_contiguous_lines_information(  # noqa: PLR0913
+def add_contiguous_lines_information(  # noqa: PLR0913, PLR0914
     input_gdf: GeoDataFrame,
     reference_network: GeoDataFrame | None = None,
     *,
@@ -972,65 +962,92 @@ def add_contiguous_lines_information(  # noqa: PLR0913
         Input GeoDataFrame with boolean Series added.
 
     """
-    if reference_network is None:
-        reference_network = GeoDataFrame(geometry=[], crs=input_gdf.crs)
-
-    gdf = cast("GeoDataFrame", input_gdf.copy())
-
-    def _get_length(line: LineString, merged: GeoDataFrame) -> float:
-        merged_lines = merged.loc[merged.covers(line)]
-
-        if merged_lines.shape[0] == 0:
-            return line.length
-
-        if merged_lines.shape[0] != 1:
-            msg = "Line should be covered only by one merged line."
-            raise GeometryOperationError(msg)
-
-        return merged_lines.iloc[[0]].geometry.length.to_numpy()[0]
-
-    def _flag(filtered_gdf: GeoDataFrame, reference_data: GeoDataFrame) -> GeoDataFrame:
-        if filtered_gdf.empty:
-            return filtered_gdf
-        merged = _get_merged_line_connections(gdf, reference_data)
-        merged["is_deadend"] = merged["start_connected"] != merged["end_connected"]
-        merged["is_disconnected"] = (~merged["start_connected"]) & (
-            ~merged["end_connected"]
-        )
-
-        dead_ends = merged.loc[merged["is_deadend"]].union_all()
-        disconnected_lines = merged.loc[merged["is_disconnected"]].union_all()
-        filtered_gdf[dead_end_column] = filtered_gdf.geometry.covered_by(dead_ends)
-        filtered_gdf[disconnected_column] = filtered_gdf.geometry.covered_by(
-            disconnected_lines
-        )
-        filtered_gdf[length_column] = Series(
-            gdf.geometry.apply(lambda geom: _get_length(geom, merged))
-        )
-
-        return filtered_gdf
-
-    def _get_ref(_gdf: GeoDataFrame) -> GeoDataFrame:
-        return (
-            _gdf if reference_network.empty else combine_gdfs([_gdf, reference_network])
-        )
-
-    inputs = (
-        [
-            (
-                gdf.loc[gdf[line_type_column] == value].copy(),
-                _get_ref(gdf.loc[gdf[line_type_column] != value]),
-            )
-            for value in gdf[line_type_column].unique()
-        ]
-        if line_type_column is not None
-        else [(gdf, reference_network)]
-    )
-
-    if not inputs:
+    gdf = input_gdf.copy()
+    if gdf.empty:
         return gdf
 
-    return combine_gdfs(list(starmap(_flag, inputs)))
+    geoms = gdf.geometry.to_numpy()
+    geom_count = len(geoms)
+    lengths = length(geoms)
+
+    endpoints = np.concatenate([get_point(geoms, 0), get_point(geoms, -1)])
+    end_lines = np.tile(np.arange(geom_count), 2)  # map endpoints back to its line
+
+    # We're building a graph from the network, create unique ID for each
+    # endpoint
+    _, node_ids = np.unique(
+        np.round(get_coordinates(endpoints), 6),
+        axis=0,
+        return_inverse=True,
+    )
+    node_ids = node_ids.ravel()
+
+    # Check endpoint connections
+    point_ids, line_ids = STRtree(geoms).query(endpoints, predicate="intersects")
+    connected = (
+        np.bincount(
+            point_ids[line_ids != end_lines[point_ids]],
+            minlength=2 * geom_count,
+        )
+        > 0
+    )
+
+    if reference_network is not None and not reference_network.empty:
+        point_ids, _ = STRtree(reference_network.geometry.to_numpy()).query(
+            endpoints, predicate="intersects"
+        )
+        connected[point_ids] = True
+
+    contiguous_lengths = np.zeros(geom_count, dtype=float)
+    dead_ends = np.zeros(geom_count, dtype=bool)
+    disconnected = np.zeros(geom_count, dtype=bool)
+
+    groups = (
+        [np.arange(geom_count)]
+        if line_type_column is None
+        else gdf.groupby(
+            line_type_column, sort=False, dropna=False, observed=True
+        ).indices.values()
+    )
+
+    for positions in groups:
+        # Select this groups endpoints
+        ends = np.concatenate([positions, positions + geom_count])
+
+        # Find contiguous lines (by node degree = 2)
+        components, boundary = _contiguous_components(node_ids[ends])
+
+        # Repeat the contiguous-group id of each line for both of its endpoints.
+        end_components = np.tile(components, 2)
+        component_count = int(components.max()) + 1
+
+        # Count how many boundary endpoints in each component are connected.
+        connected_count = np.bincount(
+            end_components[boundary & connected[ends]],
+            minlength=component_count,
+        )
+
+        # Count how many boundary endpoints each component has.
+        boundary_count = np.bincount(
+            end_components[boundary],
+            minlength=component_count,
+        )
+
+        contiguous_lengths[positions] = np.bincount(components, lengths[positions])[
+            components
+        ]
+
+        dead_ends[positions] = (
+            (boundary_count == 2) & (connected_count == 1)  # noqa: PLR2004
+        )[components]
+
+        disconnected[positions] = (connected_count == 0)[components]
+
+    gdf[length_column] = contiguous_lengths
+    gdf[dead_end_column] = dead_ends
+    gdf[disconnected_column] = disconnected
+
+    return gdf
 
 
 def get_segments_in_polygon_boundary_but_not_in_lines(
