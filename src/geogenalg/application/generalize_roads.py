@@ -74,6 +74,4 @@ class GeneralizeRoads(BaseAlgorithm):
             )
         ]
 
-        return gdf.drop(
-            [column for column in gdf.columns if column not in data.columns], axis=1
-        )
+        return gdf[data.columns]
