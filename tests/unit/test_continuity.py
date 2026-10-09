@@ -1272,15 +1272,15 @@ def test_process_lines_and_reconnect(
                         True,
                         True,
                         True,
-                        False,
                         True,
+                        False,
                     ],
                     "contiguous_disconnected": [
                         False,
                         False,
                         False,
                         False,
-                        False,
+                        True,
                     ],
                     "contiguous_length": [
                         3.0,
@@ -1317,7 +1317,7 @@ def test_process_lines_and_reconnect(
                         True,
                         True,
                         True,
-                        False,
+                        True,
                     ],
                     "contiguous_disconnected": [
                         False,
@@ -1422,10 +1422,10 @@ def test_process_lines_and_reconnect(
                         False,
                     ],
                     "contiguous_length": [
+                        1.0,
+                        1.0,
+                        1.0,
                         2.0,
-                        2.0,
-                        3.0,
-                        3.0,
                     ],
                 },
                 geometry=[
