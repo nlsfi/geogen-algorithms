@@ -237,6 +237,18 @@ def test_generalize_watercourse_areas(
     ).run()
 
 
+def test_generalize_watercourse_lines(
+    watercourse_lines_input: TestInputData,
+    watercourse_lines_algorithm: BaseAlgorithm,
+):
+    IntegrationTest(
+        input_data=watercourse_lines_input,
+        check_missing_reference=False,
+        algorithm=watercourse_lines_algorithm,
+        dummy_data_mandatory_columns=frozenset(["watercourse_line_width_category_id"]),
+    ).run()
+
+
 @pytest.mark.parametrize(
     ("layer_suffix"),
     [
