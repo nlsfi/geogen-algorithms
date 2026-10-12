@@ -584,5 +584,5 @@ def address_points_algorithm() -> GeneralizeAddressPoints:
 
 def reduce_points_algorithm() -> GeneralizeReducePoints:
     return GeneralizeReducePoints(
-        min_distance=150.0,
+        min_distance=75.0,
     )
