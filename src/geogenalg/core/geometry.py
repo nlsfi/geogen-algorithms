@@ -17,6 +17,7 @@ import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
 from pygeoops import centerline
 from scipy.sparse import csr_matrix
+from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
@@ -2935,3 +2936,91 @@ def build_collinear_chains(
     )
 
     return chain_ids, chain_geoms
+
+
+def get_contiguous_line_components(  # noqa: PLR0914
+    geoms: np.ndarray,
+    precision: int | None = 6,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Identify contiguous sets of LineStrings.
+
+    Lines belong to the same contiguous set of lines when they connect to each
+    other with a node of degree two i.e. a threeway (or more) junction or a
+    deadend is the endpoint of a chain.
+
+    Only endpoints are considered, so if a line crosses through a segment
+    of another line this does not count as a chain stopping.
+
+    Args:
+    ----
+        geoms: NumPy array of LineStrings.
+        precision: Number of decimal places used to round endpoint coordinates
+            before comparing them. Use None for exact coordinate matching.
+            Rounding does not modify the input geometries.
+
+    Returns:
+    -------
+        A tuple of NumPy arrays. The first one contains contiguous line
+        component ids, matching every line in the input geometries with what
+        contiguous line it is a part of (a single geometry can also constitute
+        its own contigous line). The second one contains the node degree of
+        each endpoint.
+
+    """
+    n = len(geoms)
+    if n == 0:
+        return np.array([], dtype="int64"), np.array([], dtype="int64")
+
+    # Get endpoint coordinates while avoiding constructing Point objects.
+    coords = get_coordinates(geoms)
+    coordinate_count = get_num_coordinates(geoms)
+    cumulative_sum = np.cumsum(coordinate_count)
+    start_indexes = cumulative_sum - coordinate_count
+    end_indexes = cumulative_sum - 1
+    coords = np.vstack([coords[start_indexes], coords[end_indexes]])
+
+    if precision is not None:
+        coords = np.round(coords, precision)
+
+    structured_coords = np.empty(
+        len(coords), dtype=[("x", coords.dtype), ("y", coords.dtype)]
+    )
+    structured_coords["x"] = coords[:, 0]
+    structured_coords["y"] = coords[:, 1]
+
+    # Assign id to each coordinate pair, with duplicates sharing an id
+    _, node_ids = np.unique(structured_coords, return_inverse=True)
+
+    # Build graph edges from indices
+    u, v = node_ids[:n], node_ids[n:]
+
+    n_nodes = node_ids.max() + 1
+
+    node_degrees = np.bincount(node_ids, minlength=n_nodes)
+
+    # Split the graph at junctions and deadends by assigning a new unique node
+    # id, isolating contiguous line segments.
+    mask_u = node_degrees[u] != 2  # noqa: PLR2004
+    mask_v = node_degrees[v] != 2  # noqa: PLR2004
+
+    next_id = n_nodes
+
+    # Count how many new ids are overwritten
+    num_u = np.sum(mask_u)
+    num_v = np.sum(mask_v)
+
+    # Give junction and deadend nodes a new id
+    u[mask_u] = np.arange(next_id, next_id + num_u)
+    next_id += num_u
+    v[mask_v] = np.arange(next_id, next_id + num_v)
+    next_id += num_v
+
+    adjacency_matrix = coo_matrix(
+        (np.ones(n, dtype=bool), (u, v)),
+        shape=(next_id, next_id),
+    )
+
+    # Group contiguous line segments (components) with ids
+    _, component_ids = connected_components(adjacency_matrix, directed=False)
+
+    return component_ids[u], node_degrees
