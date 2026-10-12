@@ -161,7 +161,7 @@ class IntegrationTest:
 
             raise
 
-    def run(self) -> None:
+    def run(self) -> None:  # noqa: C901, PLR0912
         """Run integration test.
 
         Raises
@@ -171,7 +171,14 @@ class IntegrationTest:
         """
         algorithm_before = deepcopy(self.algorithm)
 
-        self._check_algorithm_passes_with_dummy_data()
+        skip_dummy_env = os.environ.get("GEOGENALG_TEST_SKIP_DUMMY")
+        skip_dummy = skip_dummy_env is not None and skip_dummy_env.lower() in {
+            "true",
+            "1",
+            "on",
+        }
+        if not skip_dummy:
+            self._check_algorithm_passes_with_dummy_data()
         test_gdfs = self.get_test_gdfs()
 
         assert self.algorithm == algorithm_before

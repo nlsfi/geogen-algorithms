@@ -36,6 +36,15 @@ may disable running each test twice by setting:
 GEOGENALG_TEST_ONE_GEOM_COLUMN=1
 ```
 
+By default, each algorithm gets run with dummy data. This catches some (but not
+all) issues such as errors with handling of empty GeoDataFrames in the
+algorithm. For debugging purposes it's possible to disable the dummy data test
+by setting:
+
+```shell
+GEOGENALG_TEST_SKIP_DUMMY=1
+```
+
 ### Integration test report
 
 It's possible to inspect algorithm results in integration tests by setting:
