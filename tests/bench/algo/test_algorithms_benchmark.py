@@ -409,3 +409,15 @@ def test_generalize_address_points(
         input_data=address_points_input,
         algorithm=address_points_algorithm,
     ).run(benchmark, record_property)
+
+
+def test_generalize_reduce_points(
+    benchmark: BenchmarkFixture,
+    record_property: Callable,
+    reduce_points_input: TestInputData,
+    reduce_points_algorithm: BaseAlgorithm,
+) -> None:
+    AlgorithmBenchmark(
+        input_data=reduce_points_input,
+        algorithm=reduce_points_algorithm,
+    ).run(benchmark, record_property)
