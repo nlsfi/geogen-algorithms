@@ -31,7 +31,7 @@ To create a completely new algorithm:
 - Create a new file in `src/geogenalg/application`
 - Create a new class (inheriting BaseAlgorithm, or another existing algorithm)
 - Override `_execute` with algorithm implementation logic
-- Any code that could reasonably be reused in other contexts should be not be placed in an algorithm, but the other modules (geometry.py, continuity.py etc.)
+- Any code that could reasonably be reused in other contexts should not be placed in an algorithm, but the other modules (geometry.py, continuity.py etc.)
 
 Index handling:
 
