@@ -9,12 +9,18 @@ from typing import Literal
 import numpy as np
 from geopandas import GeoDataFrame
 from pandas import Series
-from shapely import GeometryCollection, MultiPolygon, Polygon, line_merge
-from shapely.geometry import LineString, MultiLineString, Point
+from shapely import (
+    GeometryCollection,
+    MultiPolygon,
+    Polygon,
+    line_merge,
+    multilinestrings,
+)
+from shapely.geometry import Point
 
 from geogenalg.analyze import group_geometries_by_intersections_recursively
-from geogenalg.attributes import inherit_attributes
-from geogenalg.core.exceptions import GeometryTypeError
+from geogenalg.core.exceptions import DuplicateIndexError, GeometryTypeError
+from geogenalg.core.geometry import get_contiguous_line_components
 from geogenalg.utility.dataframe_processing import (
     combine_gdfs,
     copy_gdf_as_empty,
@@ -30,11 +36,11 @@ def merge_connecting_lines_by_attribute(
     """Merge LineStrings in the GeoDataFrame by a given attribute.
 
     Lines with the same grouping attribute value and connecting endpoints will
-    get merged into MultiLineStrings.
+    get merged..
 
     Args:
     ----
-        input_gdf: A GeoDataFrame containing the (Multi)LineStrings to merge.
+        input_gdf: A GeoDataFrame containing the LineStrings to merge.
         attribute: The attribute name used to group lines for merging.
         old_ids_column: Name of the column in the output GeoDataFrame
             containing a tuple of the cluster's old identifiers.
@@ -44,68 +50,74 @@ def merge_connecting_lines_by_attribute(
         A new GeoDataFrame with merged line geometries and corresponding attributes.
         Identifiers of the original lines are in `old_ids_column` column.
 
+    Raises:
+    ------
+        DuplicateIndexError: if input data has duplicate indices.
+
     """
-    merged_records: list[dict] = []
+    if not input_gdf.index.is_unique:
+        msg = "Duplicate indexes found in input, cannot proceed."
+        raise DuplicateIndexError(msg)
 
-    for _, group in input_gdf.groupby(attribute, dropna=False):
-        lines: list[tuple[LineString, dict, str]] = []  # geom, attributes, id
+    if input_gdf.empty:
+        return copy_gdf_as_empty(
+            input_gdf,
+            add_columns={old_ids_column: "object"},
+        )
 
-        for idx, row in group.iterrows():
-            geom = row[group.geometry.name]
-            if geom is None:
-                continue
+    geoms = input_gdf.geometry.to_numpy()
+    lengths = input_gdf.geometry.length.to_numpy()
+    source_ids = input_gdf.index.to_numpy()
 
-            row_properties = row.drop(input_gdf.geometry.name).to_dict()
-            source_id = str(idx)
+    representative_positions = []
+    merged_geometries = []
+    old_ids = []
 
-            if isinstance(geom, LineString):
-                lines.append((geom, row_properties, source_id))
-            elif isinstance(geom, MultiLineString):
-                lines.extend((part, row_properties, source_id) for part in geom.geoms)
-
-        if not lines:
-            continue
-
-        # Extract just geometries for merging
-        geometries = [geom for geom, _, _ in lines]
-        merged = line_merge(MultiLineString(geometries))
-
-        if isinstance(merged, LineString):
-            merged_lines = [merged]
-        elif isinstance(merged, MultiLineString):
-            merged_lines = list(merged.geoms)
-        else:
-            continue
-
-        for merged_line in merged_lines:
-            old_ids = sorted(
-                {
-                    source_id
-                    for source_line, _, source_id in lines
-                    if (
-                        source_line.within(merged_line)
-                        or source_line.equals(merged_line)
-                    )
-                }
-            )
-            properties = lines[0][1].copy()
-            properties[input_gdf.geometry.name] = merged_line
-            properties[old_ids_column] = old_ids
-            merged_records.append(properties)
-
-    result_gdf = GeoDataFrame(
-        data=merged_records,
-        geometry=input_gdf.geometry.name,
-        crs=input_gdf.crs,
+    groups = input_gdf.groupby(
+        attribute,
+        dropna=False,
+        observed=True,
+        sort=True,
     )
 
-    # Assign attributes to merged lines by mapping back to one of the source lines
-    result_gdf_with_attributes = inherit_attributes(input_gdf, result_gdf)
+    for positions in groups.indices.values():
+        if len(positions) <= 0:
+            continue
 
-    # Assign old ids back
-    result_gdf_with_attributes[old_ids_column] = result_gdf[old_ids_column]
+        component_ids, _ = get_contiguous_line_components(
+            geoms[positions],
+            precision=None,
+        )
 
-    return result_gdf_with_attributes
+        # Groups lines by their components
+        order = np.argsort(component_ids, kind="stable")
+        boundaries = np.flatnonzero(np.diff(component_ids[order])) + 1
+
+        for component in np.split(order, boundaries):
+            source_positions = positions[component]
+
+            merged_geometries.append(
+                line_merge(multilinestrings(geoms[source_positions]))
+            )
+
+            representative_positions.append(
+                source_positions[np.argmax(lengths[source_positions])]
+            )
+            old_ids.append(sorted(set(source_ids[source_positions])))
+
+    if not representative_positions:
+        return copy_gdf_as_empty(
+            input_gdf,
+            add_columns={old_ids_column: "object"},
+        )
+
+    # Select representative row from original gdf and update with merged geometries
+    result = input_gdf.iloc[representative_positions].copy()
+
+    result.geometry = merged_geometries
+    result[old_ids_column] = old_ids
+
+    return result
 
 
 def dissolve_and_inherit_attributes(  # noqa: C901

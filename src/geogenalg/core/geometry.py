@@ -16,8 +16,7 @@ from warnings import warn
 import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
 from pygeoops import centerline
-from scipy.sparse import csr_matrix
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import KDTree  # noqa: SC200
 from shapely import (
