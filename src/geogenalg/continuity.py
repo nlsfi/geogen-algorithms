@@ -13,7 +13,7 @@ import numpy as np
 from geopandas import GeoDataFrame
 from networkx.classes.graph import Graph
 from pandas import Series
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely import STRtree, force_2d, get_coordinates, get_point, length
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
@@ -24,6 +24,7 @@ from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
     LineExtendFrom,
     extend_line_to_nearest,
+    get_contiguous_line_components,
     get_line_connection_points,
     smooth_around_connection_point_of_two_lines,
 )
@@ -32,65 +33,6 @@ from geogenalg.utility.dataframe_processing import (
     combine_gdfs,
     copy_gdf_as_empty,
 )
-
-
-def _get_contiguous_line_components(  # noqa: PLR0914
-    geoms: np.ndarray,
-    precision: int | None = 6,
-) -> tuple[np.ndarray, np.ndarray]:
-    n = len(geoms)
-    if n == 0:
-        return np.array([], dtype="int64"), np.array([], dtype="int64")
-
-    start_coords = get_coordinates(get_point(geoms, 0))
-    end_coords = get_coordinates(get_point(geoms, -1))
-    coords = np.vstack([start_coords, end_coords])
-
-    if precision is not None:
-        coords = np.round(coords, precision)
-
-    structured_coords = np.empty(
-        len(coords), dtype=[("x", coords.dtype), ("y", coords.dtype)]
-    )
-    structured_coords["x"] = coords[:, 0]
-    structured_coords["y"] = coords[:, 1]
-
-    # Assign id to each coordinate pair, with duplicates sharing an id
-    _, node_ids = np.unique(structured_coords, return_inverse=True)
-
-    # Build graph edges from indices
-    u, v = node_ids[:n], node_ids[n:]
-
-    n_nodes = node_ids.max() + 1
-
-    node_degrees = np.bincount(node_ids, minlength=n_nodes)
-
-    # Split the graph at junctions and deadends by assigning a new unique node
-    # id, isolating contiguous line segments.
-    mask_u = node_degrees[u] != 2  # noqa: PLR2004
-    mask_v = node_degrees[v] != 2  # noqa: PLR2004
-
-    next_id = n_nodes
-
-    # Count how many new ids are overwritten
-    num_u = np.sum(mask_u)
-    num_v = np.sum(mask_v)
-
-    # Give junction and deadend nodes a new id
-    u[mask_u] = np.arange(next_id, next_id + num_u)
-    next_id += num_u
-    v[mask_v] = np.arange(next_id, next_id + num_v)
-    next_id += num_v
-
-    adjacency_matrix = coo_matrix(
-        (np.ones(n, dtype=bool), (u, v)),
-        shape=(next_id, next_id),
-    )
-
-    # Group contiguous line segments (components) with ids
-    _, component_ids = connected_components(adjacency_matrix, directed=False)
-
-    return component_ids[u], node_degrees
 
 
 def find_all_endpoints(
@@ -1268,7 +1210,7 @@ def get_contiguous_lengths(
     if len(geoms) == 0:
         return np.array([], dtype="float64")
 
-    line_components, _ = _get_contiguous_line_components(geoms, precision=precision)
+    line_components, _ = get_contiguous_line_components(geoms, precision=precision)
     lengths = length(geoms)
     component_lengths = np.bincount(line_components, weights=lengths)
 

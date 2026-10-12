@@ -66,6 +66,7 @@ from geogenalg.core.geometry import (
     gaussian_smooth,
     get_connected_segments,
     get_connected_unit_vectors,
+    get_contiguous_line_components,
     get_line_connection_points,
     get_topological_points,
     insert_vertex,
@@ -4633,3 +4634,145 @@ def test_build_collinear_chains(
     for actual, expected in zip(chain_geoms, expected_geoms, strict=True):
         assert actual.geom_type == expected.geom_type
         assert equals(actual, expected)
+
+
+@pytest.mark.parametrize(
+    (
+        "geoms",
+        "precision",
+        "expected_components",
+        "expected_node_degrees",
+    ),
+    [
+        pytest.param(
+            [],
+            None,
+            [],
+            [],
+            id="empty",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            None,
+            [2],
+            [1, 1],
+            id="single_line",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (2, 0)]),
+                LineString([(2, 0), (3, 0)]),
+            ],
+            None,
+            [1, 1, 1],
+            [1, 2, 2, 1],
+            id="chain",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(2, 0), (1, 0)]),
+            ],
+            None,
+            [1, 1],
+            [1, 2, 1],
+            id="reversed_line",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(10, 0), (11, 0)]),
+            ],
+            None,
+            [4, 5],
+            [1, 1, 1, 1],
+            id="disconnected_lines",
+        ),
+        pytest.param(
+            [
+                LineString([(-2, 0), (-1, 0)]),
+                LineString([(-1, 0), (0, 0)]),
+                LineString([(0, 0), (1, 0)]),
+                LineString([(0, 0), (0, 1)]),
+            ],
+            None,
+            [1, 1, 5, 6],
+            [1, 2, 3, 1, 1],
+            id="chain_stops_at_junction",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (0, 1)]),
+                LineString([(0, 1), (0, 0)]),
+            ],
+            None,
+            [0, 0, 0],
+            [2, 2, 2],
+            id="cycle",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0), (0, 1), (0, 0)])],
+            None,
+            [0],
+            [2],
+            id="closed_line",
+        ),
+        pytest.param(
+            [
+                LineString([(-1, 0), (1, 0)]),
+                LineString([(0, -1), (0, 1)]),
+            ],
+            None,
+            [4, 5],
+            [1, 1, 1, 1],
+            id="interior_crossing_is_not_connected",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (2, 0)]),
+                LineString([(1, 0), (1, 1)]),
+            ],
+            None,
+            [4, 5],
+            [1, 1, 1, 1],
+            id="endpoint_on_interior_is_not_connected",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1.0000004, 0), (2, 0)]),
+            ],
+            6,
+            [1, 1],
+            [1, 2, 1],
+            id="rounded_endpoints_connect",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1.0000004, 0), (2, 0)]),
+            ],
+            None,
+            [4, 5],
+            [1, 1, 1, 1],
+            id="exact_endpoints_remain_disconnected",
+        ),
+    ],
+)
+def test_get_contiguous_line_components(
+    geoms: list[LineString],
+    precision: int | None,
+    expected_components: list[int],
+    expected_node_degrees: list[int],
+):
+    for _g in geoms:
+        pass
+    component_ids, node_degrees = get_contiguous_line_components(
+        np.array(geoms, dtype=object),
+        precision=precision,
+    )
+
+    np.testing.assert_array_equal(component_ids, expected_components)
+    np.testing.assert_array_equal(node_degrees, expected_node_degrees)
