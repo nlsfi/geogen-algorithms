@@ -78,4 +78,4 @@ def _distance_based_subsample(
         if not np_any(retained_mask[neighbors]):
             retained_mask[idx] = True
 
-    return cast("GeoDataFrame", gdf.iloc[retained_mask].copy().reset_index(drop=True))
+    return cast("GeoDataFrame", gdf.iloc[retained_mask].copy())
