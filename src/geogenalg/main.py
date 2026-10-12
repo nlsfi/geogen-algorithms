@@ -9,12 +9,12 @@ from types import FunctionType
 from typing import Annotated, Any, cast
 
 from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
-from geogenalg.application.generalize_block_fields import GeneralizeBlockFields
 from geogenalg.application.generalize_conservation_areas import (
     GeneralizeConservationAreas,
 )
 from geogenalg.application.generalize_contours import GeneralizeContours
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
+from geogenalg.application.generalize_reduce_points import GeneralizeReducePoints
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
 from geogenalg.application.generalize_watercourse_lines import (
     GeneralizeWaterCourseLines,
@@ -305,7 +305,7 @@ def build_app() -> None:
         "watercourse_areas": GeneralizeWaterCourseAreas,
         "watercourse_lines": GeneralizeWaterCourseLines,
         "water_areas": GeneralizeWaterAreas,
-        "block_fields": GeneralizeBlockFields,
+        "reduce_points": GeneralizeReducePoints,
     }
 
     for cli_command_name, alg in commands_and_algs.items():

@@ -10,7 +10,6 @@ import pytest
 
 from geogenalg.application.dissolve_polygons import DissolvePolygons
 from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
-from geogenalg.application.generalize_block_fields import GeneralizeBlockFields
 from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.application.generalize_cliffs import GeneralizeCliffs
@@ -25,6 +24,7 @@ from geogenalg.application.generalize_polygons_to_points import (
 )
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
+from geogenalg.application.generalize_reduce_points import GeneralizeReducePoints
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
@@ -552,7 +552,7 @@ def address_points_input(algorithm_testdata_path: Path) -> TestInputData:
     )
 
 
-def block_fields_input(algorithm_testdata_path: Path) -> TestInputData:
+def reduce_points_input(algorithm_testdata_path: Path) -> TestInputData:
     gpkg = GeoPackagePath(algorithm_testdata_path / "block_fields.gpkg")
     return TestInputData(
         input_uri=[
@@ -582,8 +582,7 @@ def address_points_algorithm() -> GeneralizeAddressPoints:
     )
 
 
-
-def block_fields_algorithm() -> GeneralizeBlockFields:
-    return GeneralizeBlockFields(
+def reduce_points_algorithm() -> GeneralizeReducePoints:
+    return GeneralizeReducePoints(
         min_distance=150.0,
     )
