@@ -37,6 +37,8 @@ from geogenalg.selection import (
 from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
+_SUBSTATION_FENCE_LENGTH_RATIO_THRESHOLD = 0.75
+
 
 @supports_identity
 class GeneralizePowerLines(BaseAlgorithm):
@@ -103,9 +105,21 @@ class GeneralizePowerLines(BaseAlgorithm):
         fences = reference_data[self.reference_key_fences]
         substations = reference_data[self.reference_key_substations]
 
-        # Get substations which no longer have a surrounding fence
+        # Get substations which no longer have a surrounding fence.
+
+        # Since the fence geometry may have changed (been simplified), we do
+        # this by buffering the substation exterior and calculating the
+        # fraction of the length found in all fences compared to the exterior
+        # length. This way if other fences happen to be close to the substation
+        # they are unlikely going to affect the result in an unwanted way.
         substations = substations.loc[
-            substations.geometry.buffer(5).disjoint(fences.union_all())
+            (
+                substations.geometry.exterior.buffer(5)
+                .intersection(fences.union_all())
+                .length
+                / substations.geometry.exterior.length
+            )
+            <= _SUBSTATION_FENCE_LENGTH_RATIO_THRESHOLD
         ]
 
         gdf = cast("GeoDataFrame", data.copy())
