@@ -383,12 +383,12 @@ def test_generalize_points(
     ).run()
 
 
-def test_generalize_block_fields(
-    block_fields_input: TestInputData,
-    block_fields_algorithm: BaseAlgorithm,
+def test_generalize_reduce_points(
+    reduce_points_input: TestInputData,
+    reduce_points_algorithm: BaseAlgorithm,
 ) -> None:
     IntegrationTest(
-        input_data=block_fields_input,
+        input_data=reduce_points_input,
         check_missing_reference=False,
-        algorithm=block_fields_algorithm,
+        algorithm=reduce_points_algorithm,
     ).run()
