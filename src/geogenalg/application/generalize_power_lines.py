@@ -21,6 +21,7 @@ from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.continuity import (
     connect_lines_to_polygon_centroids,
     flag_polygon_centerline_connections,
+    get_contiguous_lengths,
     process_lines_and_reconnect,
 )
 from geogenalg.core.geometry import (
@@ -32,7 +33,6 @@ from geogenalg.identity import hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
 from geogenalg.selection import (
     remove_close_line_segments,
-    remove_disconnected_short_lines,
 )
 from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.dataframe_processing import combine_gdfs
@@ -172,7 +172,7 @@ class GeneralizePowerLines(BaseAlgorithm):
         if self.simplification_tolerance > 0:
             gdf.geometry = gdf.geometry.simplify(self.simplification_tolerance)
 
-        gdf = remove_disconnected_short_lines(gdf, self.length_threshold)
+        gdf = gdf.loc[get_contiguous_lengths(gdf) > self.length_threshold]
         gdf = connect_lines_to_polygon_centroids(gdf, substations)
 
         return assign_nearest_z(data, gdf)
