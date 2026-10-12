@@ -33,7 +33,7 @@ class GeneralizeReducePoints(BaseAlgorithm):
     `min_distance` so far
     """
 
-    min_distance: float = Field(150.0, gt=0)
+    min_distance: float = Field(75.0, gt=0)
     """Retained points will be at least this distance from each other."""
 
     valid_input_geometry_types: ClassVar = {"Point"}
