@@ -9,6 +9,8 @@ import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from shapely import points
+from geopandas.geodataframe import GeoDataFrame
+from shapely import buffer, points
 from shapely.geometry import LineString
 
 
@@ -75,6 +77,29 @@ def make_point_gdf():
 
         return GeoDataFrame(
             {"category": rng.integers(0, 3, size=point_count)},
+            geometry=geometries,
+            crs="EPSG:3857",
+        )
+
+    return _factory
+
+
+def make_overlapping_polygons():
+    def _factory(
+        polygon_count: int,
+        seed: int = 0,
+        spacing: float = 2.0,
+    ) -> GeoDataFrame:
+        rng = np.random.default_rng(seed=seed)
+
+        extent = spacing * np.sqrt(polygon_count)
+        centers = rng.uniform(0.0, extent, size=(polygon_count, 2))
+        radii = rng.uniform(0.5, 1.5, size=polygon_count)
+
+        geometries = buffer(points(centers), radii)
+
+        return GeoDataFrame(
+            {"category": rng.integers(0, 3, size=polygon_count)},
             geometry=geometries,
             crs="EPSG:3857",
         )
