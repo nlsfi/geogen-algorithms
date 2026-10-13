@@ -6,15 +6,13 @@
 
 from typing import ClassVar, cast
 
+import numpy as np
 from geopandas import GeoDataFrame
-from numpy import any as np_any  # Avoids shadowing Python 'any'
-from numpy import column_stack, random, zeros
+from numpy import column_stack, zeros
 from pydantic import Field
 from scipy.spatial import KDTree
 
 from geogenalg.application import BaseAlgorithm, supports_identity
-
-RANDOM_SEED: int = 0
 
 
 @supports_identity
@@ -60,14 +58,11 @@ class GeneralizeReducePoints(BaseAlgorithm):
             return data.copy()
 
         coords = column_stack((data.geometry.x, data.geometry.y))
-        n_points = len(coords)
-
-        rng = random.default_rng(RANDOM_SEED)
-        sample_order = rng.permutation(n_points)
-
         tree = KDTree(coords)
-        retained_mask = zeros(n_points, dtype=bool)
-        for idx in sample_order:
+        retained_mask = zeros(len(coords), dtype=bool)
+
+        # Iterate points in a stable index-based order
+        for idx in data.index.argsort(kind="stable"):
             if retained_mask[idx]:
                 continue
 
@@ -75,7 +70,7 @@ class GeneralizeReducePoints(BaseAlgorithm):
             neighbors = tree.query_ball_point(coords[idx], r=self.min_distance)
 
             # Retain this point if no other points too near to it have been retained yet
-            if not np_any(retained_mask[neighbors]):
+            if not np.any(retained_mask[neighbors]):
                 retained_mask[idx] = True
 
         return cast("GeoDataFrame", data.iloc[retained_mask].copy())
