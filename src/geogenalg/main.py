@@ -15,6 +15,7 @@ from typing import Annotated, Any, cast
 
 from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
 
+from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
 from geogenalg.application.generalize_conservation_areas import (
     GeneralizeConservationAreas,
 )
@@ -451,6 +452,7 @@ def build_app() -> None:
 
     """
     commands_and_algs = {
+        "address_points": GeneralizeAddressPoints,
         "buildings": GeneralizeBuildings,
         "building_areas": GeneralizeBuildingAreas,
         "cliffs": GeneralizeCliffs,
