@@ -48,6 +48,7 @@ divmod
 docstring
 docstrings
 dtype
+dwithin
 dx
 dy
 Expr
@@ -128,7 +129,6 @@ starmap
 subdivs
 substring
 substrings
-swe
 testdata
 tol
 tolist

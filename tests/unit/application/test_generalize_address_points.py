@@ -23,10 +23,16 @@ def test_generalize_address_points(
     algorithm = GeneralizeAddressPoints(
         join_column="permanent_building_identifier",
         reference_join_column="vtj_prt",
+        address_number_column="number_part_of_address_number",
+        address_primary_column="address_fin",
+        address_secondary_column="address_swe",
         priority_column="address_number",
         duplicate_location_tolerance=1.0,
         max_building_distance=200.0,
         search_radius=500.0,
+        primary_function_values=frozenset({1, 3}),
+        building_function_column="building_function_id",
+        invalid_address_numbers=frozenset([0]),
         reference_key="buildings",
     )
 
