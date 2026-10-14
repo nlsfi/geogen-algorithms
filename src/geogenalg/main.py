@@ -377,7 +377,7 @@ ReferenceGeoPackageList = Annotated[
 
 def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
     def _command_function(
-        **kwargs: GeoPackageArgument | GeoPackageOption,
+        **kwargs: object,
     ) -> None:
         args = kwargs
 
@@ -419,7 +419,7 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
             if isinstance(value, list):
                 kwargs[key] = frozenset(value)
 
-        instance = algorithm(**kwargs)
+        instance = algorithm(**kwargs)  # ty: ignore[invalid-argument-type]
 
         input_gdfs = []
         for uri in input_geopackages:
@@ -439,7 +439,7 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
         output = instance.execute(in_gdf, reference_data=reference_data)
         output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 
-    return _command_function  # type: ignore[return-value]
+    return _command_function
 
 
 app = typer.Typer()
@@ -576,7 +576,7 @@ def build_app() -> None:
                 )
 
                 type_annotation = Annotated[
-                    transform_information.transformed_type,
+                    transform_information.transformed_type,  # ty: ignore[invalid-type-form]
                     typer.Option(
                         parser=transform_information.parser,
                         help=help_str,
@@ -600,10 +600,10 @@ def build_app() -> None:
                 )
             )
 
-        # mypy complains about that the __signature__ attribute is missing
+        # ty complains about that the __signature__ attribute is missing
         # however, setting is required to get the correct parameters showing in
         # the CLI and passing into the actual command function
-        algorithm_command_function.__signature__ = function_signature.replace(  # type: ignore[attr-defined]
+        algorithm_command_function.__signature__ = function_signature.replace(  # ty: ignore[unresolved-attribute]
             parameters=parameters
         )
 

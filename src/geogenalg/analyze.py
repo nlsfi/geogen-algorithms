@@ -4,7 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 from collections.abc import Hashable
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 from geopandas import GeoDataFrame, overlay
@@ -13,7 +13,11 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely import (
     BufferJoinStyle,
+    GeometryCollection,
+    LineString,
     MultiLineString,
+    MultiPolygon,
+    Polygon,
     STRtree,
     buffer,
     centroid,
@@ -24,7 +28,6 @@ from shapely import (
     length,
     union_all,
 )
-from shapely.geometry import GeometryCollection, LineString, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
@@ -66,7 +69,7 @@ def _group_parallel_lines(
     groups = []
     processed = set()
 
-    def _process_row(index: int, row: Series, group: set[int]) -> None:
+    def _process_row(index: Hashable, row: Series, group: set[Hashable]) -> None:
         if index in processed:
             return
 
@@ -87,7 +90,7 @@ def _group_parallel_lines(
         if index in processed:
             continue
 
-        group: set[int] = set()
+        group: set[Hashable] = set()
         _process_row(index, row, group)
         groups.append(group)
 
@@ -153,7 +156,7 @@ def flag_parallel_lines(
     if segmentize_distance > 0:
         gdf.geometry = gdf.geometry.segmentize(segmentize_distance)
 
-    gdf.geometry = gdf.geometry.apply(explode_line)
+    gdf.geometry = gdf.geometry.apply(explode_line)  # ty: ignore[no-matching-overload]
     gdf = gdf.explode().reset_index(drop=True)
 
     # Normalize so that comparing the direction of segments later on is consistent
@@ -167,7 +170,7 @@ def flag_parallel_lines(
     for index, row in gdf.iterrows():
         parallel_geom = row[column_parallel_check]
         parallel_geom_direction = row[column_direction]
-        row_geom = row[gdf.geometry.name]
+        row_geom = row[str(gdf.geometry.name)]
 
         # This locates lines which a) are not the line we're iterating over
         # b) intersects the buffered area used to check for parallel lines and
@@ -184,7 +187,7 @@ def flag_parallel_lines(
         if crossing_lines.empty:
             continue
 
-        gdf[column_parallel_with].to_numpy()[index] = set(crossing_lines.index)
+        gdf.at[index, column_parallel_with] = set(crossing_lines.index)  # noqa: PD008
 
     gdf = gdf.loc[gdf[column_parallel_with].notna()]
 
@@ -255,15 +258,16 @@ def get_polygons_for_parallel_lines(
 
         geoms = [geom, *list(others.geometry)]
 
-        return (
+        return cast(
+            "Polygon",
             concave_hull(MultiLineString(geoms))
             if polygonize_function == "concave"
-            else convex_hull(MultiLineString(geoms))
+            else convex_hull(MultiLineString(geoms)),
         )
 
     parallels.geometry = parallels[
         [column_parallel_with, parallels.geometry.name]
-    ].apply(lambda columns: _polygonize_parallel(*columns), axis=1)
+    ].apply(lambda columns: _polygonize_parallel(*columns), axis=1)  # ty: ignore[invalid-assignment]
 
     # Dissolve by group and calculate mean direction for group. Other columns
     # not included in the aggfunc parameter will be dropped.
@@ -356,19 +360,13 @@ def calculate_main_angle(polygon: Polygon) -> float:
         Orientation angle in degrees (range: 0 to 180), measured from the positive
         Y-axis.
 
-    Raises:
-    ------
-        TypeError: If the input is not a Shapely Polygon.
-
     """
     if polygon is None or polygon.is_empty:
         return np.nan
 
-    if not isinstance(polygon, Polygon):
-        msg = "Input geometry must be a Shapely Polygon."
-        raise TypeError(msg)
-
-    coordinates = list(polygon.minimum_rotated_rectangle.exterior.coords)
+    coordinates = list(
+        cast("Polygon", polygon.minimum_rotated_rectangle).exterior.coords,
+    )
 
     edges = [
         np.array(coordinates[1]) - np.array(coordinates[0]),
@@ -420,7 +418,7 @@ def classify_polygons_by_size_of_minimum_bounding_rectangle(
     small_polygon_indices = []
 
     for idx, row in input_gdf.iterrows():
-        geom = row[input_gdf.geometry.name]
+        geom = row[str(input_gdf.geometry.name)]
         coordinates = list(geom.minimum_rotated_rectangle.exterior.coords)
 
         longest_side = max(
@@ -483,9 +481,11 @@ def calculate_edge_adjacency(
         if area <= 0:
             return None
 
-        possible = reference_gdf.iloc[
-            list(reference_gdf.sindex.intersection(halo.bounds))
-        ]
+        possible_indices = np.asarray(
+            list(reference_gdf.sindex.intersection(halo.bounds)),
+            dtype=np.intp,
+        )
+        possible = reference_gdf.iloc[possible_indices]
 
         if possible.empty:
             return 0.0
@@ -610,7 +610,7 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
     for i, geometry_group in enumerate(geometry_group_sets, start=1):
         for idx in geometry_group:
             if idx in gdf.index:
-                gdf.loc[idx, geometry_group_column] = i
+                gdf.at[idx, geometry_group_column] = i  # noqa: PD008
 
     return gdf
 
@@ -649,7 +649,7 @@ def polygonize_parallel_lines(
     gdf = input_gdf.copy()
     polys_for_lines = gdf.union_all()
 
-    segments = gdf.geometry.apply(explode_line).explode()
+    segments = gdf.geometry.apply(explode_line).explode()  # ty: ignore[no-matching-overload]
 
     # This approach works by going through each line segment in the input
     # dataset, searching for other line segments by a buffered polygon, and if
@@ -705,7 +705,7 @@ def polygonize_parallel_lines(
 
     # Do some post-processing by removing some of the smaller holes
     polygonized_lines = remove_holes(
-        polygonized_lines,
+        cast("Polygon | MultiPolygon", polygonized_lines),
         area_threshold=postprocessing_hole_threshold,
     )
 
@@ -752,7 +752,7 @@ def _connected_labels(
     return labels
 
 
-def add_parallel_line_information(  # noqa: PLR0914
+def add_parallel_line_information(
     input_gdf: GeoDataFrame,
     parallel_distance: float,
     allowed_direction_difference: float,

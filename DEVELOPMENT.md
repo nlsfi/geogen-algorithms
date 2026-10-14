@@ -5,7 +5,7 @@
 - Create a venv: `python -m venv .venv`
 - Activate the venv
 - This project uses [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage dependencies, install uv: `pip install uv`
-- Install the dependencies: `uv sync --extra=cli`
+- Install the dependencies: `uv sync --all-groups --extra=cli`
 - Install prek hooks: `prek install`
 - Run CLI: `generalize --help`
 - Run tests: `pytest`

@@ -138,18 +138,22 @@ def test_get_basealgorithm_docstrings():
         """Parent attribute."""
 
         def _execute(
-            self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
+            self,
+            data: GeoDataFrame,  # noqa: ARG002
+            reference_data: dict[str, GeoDataFrame],  # noqa: ARG002
         ) -> GeoDataFrame:
-            pass
+            return GeoDataFrame()
 
     class MockAlgSubclass(MockAlgParent):
         subclass_attribute: str = "something"
         """Subclass attribute."""
 
         def _execute(
-            self, data: GeoDataFrame, reference_data: dict[str, GeoDataFrame]
+            self,
+            data: GeoDataFrame,  # noqa: ARG002
+            reference_data: dict[str, GeoDataFrame],  # noqa: ARG002
         ) -> GeoDataFrame:
-            pass
+            return GeoDataFrame()
 
     assert get_basealgorithm_attribute_docstrings(MockAlgSubclass) == {
         "parent_attribute": "Parent attribute.",

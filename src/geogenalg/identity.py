@@ -4,6 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 from hashlib import sha256
+from typing import overload
 
 from geopandas import GeoDataFrame
 from pandas import DataFrame, Index
@@ -52,7 +53,7 @@ def hash_duplicate_indexes(
     gdf[temp_index] = gdf.index
 
     mask = gdf.duplicated(keep=False, subset=[temp_index])
-    gdf.loc[mask, temp_index] = (
+    gdf.loc[mask, temp_index] = list(
         hash_prefix + gdf.loc[mask].index + gdf.loc[mask].geometry.to_wkt()
     )
     gdf.loc[mask, temp_index] = gdf.loc[mask, temp_index].apply(
@@ -72,13 +73,31 @@ def hash_duplicate_indexes(
     return gdf
 
 
+@overload
+def hash_index_from_old_ids(
+    data: GeoDataFrame,
+    hash_prefix: str,
+    old_ids_column: str,
+    *,
+    drop_old_ids: bool = True,
+) -> GeoDataFrame: ...
+@overload
 def hash_index_from_old_ids(
     data: DataFrame,
     hash_prefix: str,
     old_ids_column: str,
     *,
     drop_old_ids: bool = True,
-) -> DataFrame:
+) -> DataFrame: ...
+
+
+def hash_index_from_old_ids(
+    data: DataFrame | GeoDataFrame,
+    hash_prefix: str,
+    old_ids_column: str,
+    *,
+    drop_old_ids: bool = True,
+) -> DataFrame | GeoDataFrame:
     """Change dataframe index to a hash value based on an old IDs column.
 
     It is required that the input has a string index.

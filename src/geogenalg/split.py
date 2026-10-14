@@ -54,7 +54,7 @@ def explode_and_hash_id(
     return hash_duplicate_indexes(data.explode(), hash_prefix)
 
 
-def split_lines_by_points(  # noqa: PLR0915, PLR0914
+def split_lines_by_points(  # noqa: PLR0915
     lines_gdf: GeoDataFrame,
     points_gdf: GeoDataFrame,
     max_distance: float,

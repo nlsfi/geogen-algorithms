@@ -7,9 +7,10 @@ from typing import cast
 
 from geopandas import GeoDataFrame, GeoSeries
 from pygeoops import centerline
-from shapely import LineString, MultiLineString
+from shapely import LineString, MultiLineString, MultiPolygon, Polygon
 
 from geogenalg.attributes import inherit_attributes_from_largest
+from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import (
     centerline_length,
     remove_line_segments_at_wide_sections,
@@ -52,12 +53,24 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         Two GeoDataFrames containing new line features and remaining polygon
         features, with thin sections removed, in that order.
 
+    Raises:
+    ------
+        GeometryTypeError: If input_gdf can't be unioned into a (Multi)Polygon.
+
     """
     gdf = input_gdf.copy()
+
+    if gdf.empty:
+        return gdf, gdf.copy()
 
     # We need to calculate centerline of union of input geodataframe.
     # Otherwise if it has shared edges the centerlines will not form properly.
     input_union = input_gdf.union_all()
+
+    if not isinstance(input_union, Polygon | MultiPolygon):
+        msg = "Expected a Polygon or MultiPolygon from union_all()."
+        raise GeometryTypeError(msg)
+
     full_centerline = cast(
         "LineString | MultiLineString",
         centerline(
@@ -119,12 +132,15 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         # we want to only consider the "length" of the polygon as it
         # appears on a map.
         new_geom = remove_small_parts(
-            geom,
+            new_geom,
             min_new_section_length,
-            size_function=lambda geom: centerline_length(geom, exterior_only=True),
+            size_function=lambda geom: centerline_length(
+                cast("Polygon", geom),
+                exterior_only=True,
+            ),
         )
 
-        gdf.loc[row.Index, geom_column_name] = new_geom
+        gdf.at[row.Index, geom_column_name] = new_geom
 
     gdf = gdf.drop("modified_by_mask_", axis=1)
     gdf = gdf.loc[~gdf.geometry.is_empty]

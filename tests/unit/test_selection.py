@@ -664,7 +664,7 @@ def test_remove_small_polygons_b():  # test B - handling None and empty geometri
             None,  # should be ignored
             Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
             Polygon(),  # should be ignored
-        ],
+        ],  # ty: ignore[invalid-argument-type]
         crs="EPSG:3067",
     )
 
@@ -696,11 +696,11 @@ def test_remove_close_line_segments():
     assert list(result.index) == ["1", "2"]
 
     # Unchanged
-    assert result.loc["1", "geometry"].equals(lines.loc["1", "geometry"])
+    assert result.geometry.loc["1"].equals(lines.loc["1", "geometry"])
 
     # Partly cut
-    assert result.loc["2", "geometry"].geom_type == "MultiLineString"
-    assert result.loc["2", "geometry"].length < lines.loc["2", "geometry"].length
+    assert result.geometry.loc["2"].geom_type == "MultiLineString"
+    assert result.geometry.loc["2"].length < lines.geometry.loc["2"].length
 
 
 def test_remove_close_line_segments_invalid_line_geometry_type():
@@ -734,8 +734,8 @@ def test_remove_short_lines():
     result = remove_short_lines(gdf, length_threshold=1.0)
 
     assert list(result.index) == ["2", "3"]
-    assert result.loc["2", "geometry"].equals(gdf.loc["2", "geometry"])
-    assert result.loc["3", "geometry"].equals(gdf.loc["3", "geometry"])
+    assert result.geometry.loc["2"].equals(gdf.loc["2", "geometry"])
+    assert result.geometry.loc["3"].equals(gdf.loc["3", "geometry"])
 
 
 def test_remove_short_lines_invalid_geometry_type():

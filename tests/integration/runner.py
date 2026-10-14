@@ -121,6 +121,10 @@ class IntegrationTest:
             "on",
         }
 
+        if self.input_data.control_uri is None:
+            msg = "Control URI should not be None"
+            raise ValueError(msg)
+
         if report_dir is None:
             warn(
                 "No directory specified for report. Using temporary directory by default. "
@@ -255,7 +259,7 @@ class IntegrationTest:
 
             with pytest.raises(GeometryTypeError):
                 self.algorithm.execute(
-                    GeoDataFrame(geometry=[geom_type()]),
+                    GeoDataFrame(geometry=[geom_type()]),  # ty: ignore[deprecated]
                 )
 
         # TODO: test reference data geom types?

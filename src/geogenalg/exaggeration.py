@@ -140,6 +140,6 @@ def exaggerate_thin_polygons(
 
         return geom
 
-    modified.geometry = modified.geometry.apply(_process_polygon)
+    modified.geometry = modified.geometry.apply(_process_polygon)  # ty: ignore[no-matching-overload]
 
     return modified

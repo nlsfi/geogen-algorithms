@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Literal, NotRequired, TypedDict, Unpack
+from typing import Literal, NotRequired, TypedDict, Unpack, cast
 
 from geopandas import GeoDataFrame, read_file
 from geopandas.geoseries import GeoSeries
@@ -99,13 +99,13 @@ def _combine_geo_objects(
     crs = set()
     geom_names = set()
 
-    geo_objects = list(geo_objects)
+    geo_object_list = list(geo_objects)
 
-    if len(geo_objects) == 0:
+    if len(geo_object_list) == 0:
         msg = "Nothing to combine."
         raise GeoCombineError(msg)
 
-    for geo_object in geo_objects:
+    for geo_object in geo_object_list:
         if not isinstance(geo_object, object_type):
             msg = f"Non-{object_type.__name__} object found."
             raise GeoCombineError(msg)
@@ -117,8 +117,8 @@ def _combine_geo_objects(
         geom_names.add(geo_object.geometry.name)
         crs.add(geo_object.crs)
 
-    if len(geo_objects) == 1:
-        return geo_objects[0]
+    if len(geo_object_list) == 1:
+        return geo_object_list[0]
 
     if len(crs) != 1:
         msg = "Different CRSs found in GeoDataFrames."
@@ -128,7 +128,7 @@ def _combine_geo_objects(
         msg = "Different geometry column names found in GeoDataFrames."
         raise GeoCombineError(msg)
 
-    return concat(geo_objects, **kwargs)
+    return cast("GeoDataFrame | GeoSeries", concat(geo_object_list, **kwargs))
 
 
 def combine_gdfs(

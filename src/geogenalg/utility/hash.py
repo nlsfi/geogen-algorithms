@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 from secrets import token_hex
-from typing import TypeVar, cast
+from typing import TypeVar
 
 from geopandas import GeoDataFrame
 from pandas import DataFrame, Index
@@ -23,12 +23,7 @@ def reset_with_random_hash_index(data: _Data) -> _Data:  # noqa: UP047, bump min
         Input dataframe with the index reset.
 
     """
-    return cast(
-        "_Data",
-        data.set_index(
-            Index(
-                [token_hex(256 // 8) for _ in range(len(data.index))], dtype="string"
-            ),
-            inplace=False,
-        ),
+    return data.set_index(
+        Index([token_hex(256 // 8) for _ in range(len(data.index))], dtype="string"),
+        inplace=False,
     )

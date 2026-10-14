@@ -48,6 +48,6 @@ class GeneralizePolygonsToPoints(BaseAlgorithm):
 
             return point
 
-        gdf.geometry = gdf.geometry.apply(_to_point)
+        gdf.geometry = gdf.geometry.apply(_to_point)  # ty: ignore[no-matching-overload]
 
         return gdf

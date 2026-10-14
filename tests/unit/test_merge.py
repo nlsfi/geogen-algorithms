@@ -604,6 +604,7 @@ def test_dissolve_polygon_layers_with_valid_input():
 
     assert len(result) == 1
     assert result.geometry.iloc[0].is_valid
+    assert result.crs is not None
     assert result.crs.to_string() == "EPSG:3067"
 
 

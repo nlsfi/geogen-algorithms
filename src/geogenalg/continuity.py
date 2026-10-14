@@ -5,7 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
 from collections.abc import Callable
-from typing import Literal, cast
+from typing import Literal
 from warnings import warn
 
 import numpy as np
@@ -168,7 +168,7 @@ def check_line_connections(
     results = []
 
     for idx, row in gdf.iterrows():
-        line = row[gdf.geometry.name]
+        line = row[str(gdf.geometry.name)]
 
         first_point = Point(line.coords[0])
         last_point = Point(line.coords[-1])
@@ -229,7 +229,7 @@ def check_reference_line_connections(  # noqa: SC200
     gdf = input_gdf.copy()
 
     for _idx, row in gdf.iterrows():
-        line = row[gdf.geometry.name]
+        line = row[str(gdf.geometry.name)]
 
         # Extract first and last points of the line
         first_point = Point(line.coords[0])
@@ -285,7 +285,7 @@ def detect_dead_ends(
     last_point_connected = []
 
     for idx, row in gdf.iterrows():
-        line = row[gdf.geometry.name]
+        line = row[str(gdf.geometry.name)]
 
         first_point = Point(line.coords[0])
         last_point = Point(line.coords[-1])
@@ -350,7 +350,7 @@ def inspect_dead_end_candidates(
     gdf = GeoDataFrame(gdf, geometry=gdf.geometry.name)
 
     for _idx, row in gdf.iterrows():
-        line = row[gdf.geometry.name]
+        line = row[str(gdf.geometry.name)]
 
         # Extract first and last points of the line
         if row["first_intersects"]:
@@ -615,7 +615,7 @@ def connect_lines_to_polygon_centroids(
 
         return line
 
-    gdf.geometry = gdf.geometry.apply(_extend_line)
+    gdf.geometry = gdf.geometry.apply(_extend_line)  # ty: ignore[no-matching-overload]
 
     return gdf
 
@@ -720,7 +720,7 @@ def process_lines_and_reconnect(
         Processed and reconnected GeoDataFrame.
 
     """
-    gdf = cast("GeoDataFrame", data.copy())
+    gdf = data.copy()
     boundaries = gdf.boundary.union_all()
     gdf = count_connections(
         gdf,
@@ -744,10 +744,10 @@ def process_lines_and_reconnect(
 
     gdf["_start_point"] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[0]))
-    )
+    )  # ty: ignore[no-matching-overload]
     gdf["_end_point"] = gdf.geometry.apply(
         lambda geom: force_2d(Point(geom.coords[-1]))
-    )
+    )  # ty: ignore[no-matching-overload]
     data_union = data.union_all().buffer(0.1)
     gdf["_start_was_cut"] = gdf["_start_point"].intersects(data_union) & gdf[
         "_start_point"
@@ -827,7 +827,7 @@ def process_lines_and_reconnect(
                 extend_end=columns["_extend_end"],
             ),
             axis=1,
-        )
+        )  # ty: ignore[invalid-assignment]
 
     return gdf.drop(
         [
@@ -873,7 +873,7 @@ def _contiguous_components(
     return labels[:line_count], ~pass_through
 
 
-def add_contiguous_lines_information(  # noqa: PLR0913, PLR0914
+def add_contiguous_lines_information(  # noqa: PLR0913
     input_gdf: GeoDataFrame,
     reference_network: GeoDataFrame | None = None,
     *,
@@ -952,7 +952,8 @@ def add_contiguous_lines_information(  # noqa: PLR0913, PLR0914
         ).indices.values()
     )
 
-    for positions in groups:
+    for _positions in groups:
+        positions = np.asarray(_positions, dtype=np.intp)
         # Select this groups endpoints
         ends = np.concatenate([positions, positions + geom_count])
 
@@ -1166,7 +1167,7 @@ def gdf_to_networkx_graph(
     graph = Graph()
 
     for idx, feature in input_gdf.iterrows():
-        geometry = feature[input_gdf.geometry.name]
+        geometry = feature[str(input_gdf.geometry.name)]
 
         if len(geometry.coords) < 2:  # noqa: PLR2004
             warn(
@@ -1234,7 +1235,7 @@ def get_contiguous_lengths(
     return component_lengths[line_components]
 
 
-def filter_short_contiguous_lines(  # noqa: PLR0914
+def filter_short_contiguous_lines(
     geoms: np.ndarray,
     threshold: float,
     *,

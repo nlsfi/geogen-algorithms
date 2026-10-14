@@ -980,16 +980,16 @@ def test_lines_to_segments():
 
 
 def test_scale_line_to_length():
-    line1 = from_wkt("LINESTRING (0 0, 0 4)")
+    line1 = LineString([(0, 0), (0, 4)])
     scaled_line1 = scale_line_to_length(line1, 4)
 
-    line2 = from_wkt("LINESTRING (10 10, 14 14)")
+    line2 = LineString([(10, 10), (14, 14)])
     scaled_line2 = scale_line_to_length(line2, 10)
 
-    line3 = from_wkt("LINESTRING (5 5, 3 -1)")
+    line3 = LineString([(5, 5), (3, -1)])
     scaled_line3 = scale_line_to_length(line3, 13)
 
-    line4 = from_wkt("LINESTRING (0 0, 0 1, 1 1, 1 5, 1 7)")
+    line4 = LineString([(0, 0), (0, 1), (1, 1), (1, 5), (1, 7)])
     scaled_line4 = scale_line_to_length(line4, 2)
 
     assert scaled_line1.length == 4
@@ -2056,7 +2056,7 @@ def test_equalize_z_raises():
     ],
 )
 def test_polygon_rings_to_multilinestring(
-    geom: Polygon | MultiLineString,
+    geom: Polygon | MultiPolygon,
     expected: MultiLineString,
 ):
     assert polygon_rings_to_multilinestring(geom) == expected
@@ -2506,7 +2506,7 @@ def test_snap_to_closest_vertex_or_segment(
 def test_add_topological_point_raises():
     with pytest.raises(ValueError, match=r"Tolerance should be 0 or above."):
         add_topological_point(
-            Point(),
+            LineString(),
             Point(),
             -1,
         )
@@ -2515,8 +2515,8 @@ def test_add_topological_point_raises():
 def test_add_topological_points_raises():
     with pytest.raises(ValueError, match=r"Tolerance should be 0 or above."):
         add_topological_points(
-            Point(),
-            Point(),
+            LineString(),
+            [Point()],
             -1,
         )
 
@@ -2789,7 +2789,7 @@ def test_ensure_geoms(
     input_geom: BaseGeometry,
     expected: list[BaseGeometry],
 ):
-    assert ensure_geoms(input_geom) == expected
+    assert ensure_geoms(input_geom) == expected  # ty: ignore[no-matching-overload]
 
 
 @pytest.mark.parametrize(
@@ -2833,8 +2833,8 @@ def test_ensure_geoms(
             Polygon(
                 shell=box(0, 0, 10, 10),
                 holes=[
-                    box(1, 1, 2, 2),
-                    box(4, 4, 5, 5),
+                    box(1, 1, 2, 2).exterior,
+                    box(4, 4, 5, 5).exterior,
                 ],
             ),
             0.0,
@@ -2844,16 +2844,16 @@ def test_ensure_geoms(
             Polygon(
                 shell=box(0, 0, 10, 10),
                 holes=[
-                    box(1, 1, 2, 2),
-                    box(4, 4, 5, 5),
-                    box(6, 6, 8, 8),
+                    box(1, 1, 2, 2).exterior,
+                    box(4, 4, 5, 5).exterior,
+                    box(6, 6, 8, 8).exterior,
                 ],
             ),
             1.0,
             Polygon(
                 shell=box(0, 0, 10, 10),
                 holes=[
-                    box(6, 6, 8, 8),
+                    box(6, 6, 8, 8).exterior,
                 ],
             ),
         ),
@@ -2863,15 +2863,15 @@ def test_ensure_geoms(
                     Polygon(
                         shell=box(0, 0, 10, 10),
                         holes=[
-                            box(1, 1, 2, 2),
-                            box(4, 4, 5, 5),
+                            box(1, 1, 2, 2).exterior,
+                            box(4, 4, 5, 5).exterior,
                         ],
                     ),
                     Polygon(
                         shell=box(20, 20, 30, 30),
                         holes=[
-                            box(21, 21, 22, 22),
-                            box(24, 24, 25, 25),
+                            box(21, 21, 22, 22).exterior,
+                            box(24, 24, 25, 25).exterior,
                         ],
                     ),
                 ]
@@ -2890,17 +2890,17 @@ def test_ensure_geoms(
                     Polygon(
                         shell=box(0, 0, 10, 10),
                         holes=[
-                            box(1, 1, 2, 2),
-                            box(4, 4, 5, 5),
-                            box(6, 6, 8, 8),
+                            box(1, 1, 2, 2).exterior,
+                            box(4, 4, 5, 5).exterior,
+                            box(6, 6, 8, 8).exterior,
                         ],
                     ),
                     Polygon(
                         shell=box(20, 20, 30, 30),
                         holes=[
-                            box(21, 21, 22, 22),
-                            box(24, 24, 25, 25),
-                            box(26, 26, 28, 28),
+                            box(21, 21, 22, 22).exterior,
+                            box(24, 24, 25, 25).exterior,
+                            box(26, 26, 28, 28).exterior,
                         ],
                     ),
                 ]
@@ -2911,13 +2911,13 @@ def test_ensure_geoms(
                     Polygon(
                         shell=box(0, 0, 10, 10),
                         holes=[
-                            box(6, 6, 8, 8),
+                            box(6, 6, 8, 8).exterior,
                         ],
                     ),
                     Polygon(
                         shell=box(20, 20, 30, 30),
                         holes=[
-                            box(26, 26, 28, 28),
+                            box(26, 26, 28, 28).exterior,
                         ],
                     ),
                 ]
@@ -2936,7 +2936,7 @@ def test_ensure_geoms(
     ],
 )
 def test_remove_holes(
-    input_geom: BaseGeometry,
+    input_geom: Polygon | MultiPolygon,
     area_threshold: float,
     expected: Polygon | MultiPolygon,
 ):

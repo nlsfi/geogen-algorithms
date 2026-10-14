@@ -308,16 +308,16 @@ class BaseAlgorithm(ABC, BaseModel):
             target_lines = (is_invalid | is_non_simple) & is_line
             if target_lines.any():
                 data.loc[target_lines, data.geometry.name] = (
-                    data.loc[target_lines, data.geometry.name]
+                    data.loc[target_lines, data.geometry.name]  # ty: ignore[invalid-argument-type]
                     .apply(make_valid_extract_linestrings)
                     .apply(node_non_simple)
-                    .apply(largest_part)
+                    .apply(largest_part)  # ty: ignore[invalid-assignment]
                 )
             target_polygons = is_invalid & is_polygon
             if target_polygons.any():
-                data.loc[target_polygons, data.geometry.name] = data.loc[
+                data.loc[target_polygons, data.geometry.name] = data.loc[  # ty: ignore[invalid-argument-type]
                     target_polygons, data.geometry.name
-                ].apply(make_valid_ensure_polygon)
+                ].apply(make_valid_ensure_polygon)  # ty: ignore[invalid-assignment]
 
             return data.loc[~data.geometry.is_empty]
 
@@ -325,16 +325,16 @@ class BaseAlgorithm(ABC, BaseModel):
         target_lines = (is_invalid | is_non_simple) & is_line
         if target_lines.any():
             data.loc[target_lines, data.geometry.name] = (
-                data.loc[target_lines, data.geometry.name]
+                data.loc[target_lines, data.geometry.name]  # ty: ignore[invalid-argument-type]
                 .apply(make_valid_extract_linestrings)
-                .apply(node_non_simple)
+                .apply(node_non_simple)  # ty: ignore[invalid-assignment]
             )
 
         target_polygons = is_invalid & is_polygon
         if target_polygons.any():
-            data.loc[target_polygons, data.geometry.name] = data.loc[
+            data.loc[target_polygons, data.geometry.name] = data.loc[  # ty: ignore[invalid-argument-type]
                 target_polygons, data.geometry.name
-            ].apply(make_valid_extract_polygons)
+            ].apply(make_valid_extract_polygons)  # ty: ignore[invalid-assignment]
 
         data = data.loc[~data.geometry.is_empty]
         return explode_and_hash_id(data, "basealgorithmgeometryrepair")
