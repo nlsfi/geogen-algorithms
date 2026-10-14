@@ -321,7 +321,7 @@ def test_subalgorithm_is_frozen():
             return data
 
     with pytest.raises(ValidationError, match=r"1 validation error for MockAlg"):
-        MockAlg().parameter = 5
+        MockAlg().parameter = 5  # ty: ignore[invalid-assignment]
 
 
 def test_limit_int_value():
@@ -358,7 +358,7 @@ def test_algorithm_raises_on_extra_input():
         ValidationError,
         match="Extra inputs are not permitted",
     ):
-        MockAlg(extra_argument=10)
+        MockAlg(extra_argument=10)  # ty: ignore[unknown-argument]
 
 
 def test_algorithm_raises_on_nonexistant_reference_key_member():
@@ -487,7 +487,7 @@ def test_algorithm_raises_on_none_reference_data():
     ):
         MockAlg().execute(
             GeoDataFrame(geometry=[], crs="EPSG:4326"),
-            {"reference_key": None},
+            {"reference_key": None},  # ty: ignore[invalid-argument-type]
         )
 
 

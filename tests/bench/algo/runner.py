@@ -35,6 +35,10 @@ class AlgorithmBenchmark:
 
         alg_data, control, reference_data = self.input_data.read()
 
+        if control is None:
+            msg = "No control data found."
+            raise ValueError(msg)
+
         result = fixture.pedantic(
             self.algorithm.execute,
             args=(alg_data, reference_data),
@@ -44,11 +48,13 @@ class AlgorithmBenchmark:
         )
 
         feature_count = alg_data.shape[0]
-        mean_duration_s = fixture.stats.stats.mean
 
-        if mean_duration_s > 0 and record_property is not None:
-            features_per_s = feature_count / mean_duration_s
-            record_property("features_per_sec", str(round(features_per_s, 2)))
+        if fixture.stats is not None:
+            mean_duration_s = fixture.stats.stats.mean
+
+            if mean_duration_s > 0 and record_property is not None:
+                features_per_s = feature_count / mean_duration_s
+                record_property("features_per_sec", str(round(features_per_s, 2)))
 
         # Save result to temp file and read again as a GDF so that column
         # dtypes etc. match with the control

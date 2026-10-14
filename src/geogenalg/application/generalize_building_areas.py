@@ -4,7 +4,7 @@
 #
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
-from typing import ClassVar, override
+from typing import ClassVar, cast, override
 
 from cartagen.enrichment.urban.urban_areas import boffet_areas
 from geopandas.geodataframe import GeoDataFrame
@@ -176,7 +176,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             parcels_gdf = buffer_and_merge_polygons(
                 parcels_gdf,
                 self.parcel_buffer_distance,
-            ).explode(as_index=False)
+            ).explode()
 
             if parcels_gdf.geometry.name != gdf.geometry.name:
                 parcels_gdf = parcels_gdf.rename_geometry(gdf.geometry.name)
@@ -188,7 +188,7 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
                 ]
             )
 
-        gdf = gdf.dissolve().explode(as_index=False).reset_index(drop=True)
+        gdf = gdf.dissolve().explode().reset_index(drop=True)
 
         gdf = GeneralizeLandcover(
             positive_buffer=self.positive_buffer,
@@ -216,8 +216,8 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
             self.roads_buffer_distance
         ).to_frame()
 
-        gdf = gdf.overlay(buffered_network, how="difference")
-        return gdf.dissolve().explode(as_index=False).reset_index(drop=True)
+        gdf = gdf.overlay(cast("GeoDataFrame", buffered_network), how="difference")
+        return gdf.dissolve().explode().reset_index(drop=True)
 
     @override
     def _execute(

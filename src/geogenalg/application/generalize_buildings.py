@@ -172,7 +172,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         # the building. Therefore go set them to the lowest z value found.
         large_buildings_gdf.geometry = large_buildings_gdf.geometry.apply(
             lambda geom: equalize_z(geom, method="min")
-        )
+        )  # ty: ignore[no-matching-overload]
 
         result = combine_gdfs(
             [
@@ -328,9 +328,16 @@ class GeneralizeBuildings(BaseAlgorithm):
         simplified_gdf = drop_empty_geometries(simplified_gdf)
         simplified_gdf = fix_invalid_geometries(simplified_gdf)
 
-        bounding_polygon = (
-            box(*simplified_gdf.total_bounds) if not simplified_gdf.empty else Polygon()
-        )
+        if simplified_gdf.empty:
+            bounding_polygon = Polygon()
+        else:
+            min_x, min_y, max_x, max_y = simplified_gdf.total_bounds
+            bounding_polygon = box(
+                float(min_x),
+                float(min_y),
+                float(max_x),
+                float(max_y),
+            )
         difference_gdf = GeoDataFrame(
             geometry=[bounding_polygon.difference(result_gdf.union_all())],
             crs=input_gdf.crs,
@@ -537,5 +544,5 @@ class GeneralizeBuildings(BaseAlgorithm):
 
         """
         gdf = input_gdf.copy()
-        gdf.geometry = gdf.geometry.apply(make_valid_ensure_polygon)
+        gdf.geometry = gdf.geometry.apply(make_valid_ensure_polygon)  # ty: ignore[no-matching-overload]
         return gdf.loc[gdf.geometry.is_valid]

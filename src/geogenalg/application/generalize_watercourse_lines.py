@@ -8,6 +8,7 @@ from typing import ClassVar, override
 
 import numpy as np
 from geopandas.geodataframe import GeoDataFrame
+from pandas import Index
 from pydantic import Field
 from shapely import (
     centroid,
@@ -138,7 +139,7 @@ class GeneralizeWaterCourseLines(BaseAlgorithm):
         return result
 
     @staticmethod
-    def _evaluate_perpendicular_intersections(gdf: GeoDataFrame) -> GeoDataFrame:  # noqa: PLR0914
+    def _evaluate_perpendicular_intersections(gdf: GeoDataFrame) -> GeoDataFrame:
         result = gdf.copy()
         flags = np.zeros(len(result), dtype=bool)
         geoms = result.geometry.to_numpy()
@@ -245,7 +246,7 @@ class GeneralizeWaterCourseLines(BaseAlgorithm):
         combined = combine_gdfs([combined, always_kept], ignore_index=True)
 
         result = combined[data.columns].copy()
-        result.index = combined["_index"]
+        result.index = Index(combined["_index"])
         result.index.name = data.index.name
 
         return result

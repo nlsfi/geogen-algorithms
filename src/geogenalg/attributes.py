@@ -36,14 +36,14 @@ def inherit_attributes(
     # Iterate over each row in the target GeoDataFrame and inherit the attributes from
     # the first intersecting source GeoDataFrame geometry.
     for _, target_row in target_gdf.iterrows():
-        target_geom = target_row[target_gdf.geometry.name]
+        target_geom = target_row[str(target_gdf.geometry.name)]
         new_attrs = None
 
         candidates = source_gdf[source_gdf.geometry.intersects(target_geom)]
 
         for _, source_row in candidates.iterrows():
             intersection = target_geom.intersection(
-                source_row[candidates.geometry.name]
+                source_row[str(candidates.geometry.name)]
             )
             if not intersection.is_empty:
                 new_attrs = source_row.drop(source_gdf.geometry.name).to_dict()
@@ -92,7 +92,7 @@ def inherit_attributes_from_largest(
     """
     new_features = []
     for _, feature in target_gdf.iterrows():
-        feature_geom = feature[target_gdf.geometry.name]
+        feature_geom = feature[str(target_gdf.geometry.name)]
         intersecting_features = source_gdf.loc[
             source_gdf.geometry.intersects(feature_geom)
         ].copy()

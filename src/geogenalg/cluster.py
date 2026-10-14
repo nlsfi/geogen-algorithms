@@ -131,7 +131,7 @@ def get_cluster_centroids(
 
         return centroid
 
-    gdf.geometry = gdf.geometry.apply(_make_centroid)
+    gdf.geometry = gdf.geometry.apply(_make_centroid)  # ty: ignore[no-matching-overload]
 
     return gdf
 

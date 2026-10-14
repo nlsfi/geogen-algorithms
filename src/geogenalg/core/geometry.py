@@ -5,12 +5,19 @@
 #  SPDX-License-Identifier: MIT
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from copy import deepcopy
 from enum import Enum
 from itertools import chain, pairwise
 from statistics import mean
-from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+    NamedTuple,
+    TypeAlias,
+    cast,
+    overload,
+)
 from warnings import warn
 
 import numpy as np
@@ -145,7 +152,21 @@ class Dimensions(NamedTuple):
     height: float
 
 
-def ensure_geoms(geom: BaseGeometry) -> list[BaseGeometry]:
+@overload
+def ensure_geoms(geom: Point) -> list[Point]: ...
+@overload
+def ensure_geoms(geom: MultiPoint) -> list[Point]: ...
+@overload
+def ensure_geoms(geom: LineString) -> list[LineString]: ...
+@overload
+def ensure_geoms(geom: MultiLineString) -> list[LineString]: ...
+@overload
+def ensure_geoms(geom: Polygon) -> list[Polygon]: ...
+@overload
+def ensure_geoms(geom: MultiPolygon) -> list[Polygon]: ...
+
+
+def ensure_geoms(geom: BaseGeometry) -> Sequence[BaseGeometry]:
     """Return list of geometry parts, even for single geometries.
 
     This is a convenience function to allow f.e. iterating over geometry parts
@@ -169,18 +190,57 @@ def ensure_geoms(geom: BaseGeometry) -> list[BaseGeometry]:
     return [geom]
 
 
+@overload
+def _modify_geometry_and_handle_multigeometries(
+    geom: Polygon,
+    func: Callable[[Polygon], Polygon],
+) -> Polygon: ...
+@overload
+def _modify_geometry_and_handle_multigeometries(
+    geom: MultiPolygon,
+    func: Callable[[Polygon], Polygon],
+) -> MultiPolygon: ...
+@overload
+def _modify_geometry_and_handle_multigeometries(
+    geom: Point,
+    func: Callable[[Point], Point],
+) -> Point: ...
+@overload
+def _modify_geometry_and_handle_multigeometries(
+    geom: MultiPoint,
+    func: Callable[[Point], Point],
+) -> MultiPoint: ...
+@overload
+def _modify_geometry_and_handle_multigeometries(
+    geom: MultiLineString,
+    func: Callable[[LineString], LineString],
+) -> MultiLineString: ...
+@overload
+def _modify_geometry_and_handle_multigeometries(
+    geom: LineString,
+    func: Callable[[LineString], LineString],
+) -> LineString: ...
+
+
 def _modify_geometry_and_handle_multigeometries(
     geom: BaseGeometry,
-    func: Callable[[BaseGeometry], BaseGeometry],
+    func: Callable[..., BaseGeometry],
 ) -> BaseGeometry:
     if isinstance(geom, GeometryCollection):
         msg = "Not implemented for GeometryCollection"
         raise NotImplementedError(msg)
 
     if isinstance(geom, BaseMultipartGeometry):
-        return type(geom)([func(part) for part in geom.geoms])
+        geom = cast("MultiPolygon | MultiPoint | MultiLineString", geom)
+        constructor = cast(
+            "Callable[[list[BaseGeometry]], BaseGeometry]",
+            type(geom),
+        )
+        return constructor([func(part) for part in geom.geoms])
 
-    return type(geom)(
+    geom = cast("Polygon | Point | LineString", geom)
+    constructor = cast("Callable[[BaseGeometry], BaseGeometry]", type(geom))
+    return constructor(
         func(geom),
     )
 
@@ -396,7 +456,7 @@ def perforate_polygon_with_gdf_exteriors(
 
     """
     features_within_geom = gdf.geometry.loc[gdf.geometry.within(geometry)]
-    exteriors = features_within_geom.apply(lambda geom: Polygon(geom.exterior))
+    exteriors = features_within_geom.apply(lambda geom: Polygon(geom.exterior))  # ty: ignore[no-matching-overload]
 
     return geometry.difference(exteriors.union_all())
 
@@ -479,7 +539,7 @@ def oriented_envelope_dimensions(geom: Polygon) -> Dimensions:
         msg = "Rectangle not valid"
         raise InvalidGeometryError(msg)
 
-    envelope = geom.oriented_envelope
+    envelope = cast("Polygon", geom.oriented_envelope)
 
     x, y = envelope.exterior.coords.xy
 
@@ -528,7 +588,7 @@ def extract_interior_rings_gdf(areas: GeoDataFrame) -> GeoDataFrame:
     interiors = areas
 
     # interiors are given as a list of LinearRings, polygonize
-    interiors.geometry = interiors.geometry.interiors.apply(polygonize)
+    interiors.geometry = interiors.geometry.interiors.apply(polygonize)  # ty: ignore[no-matching-overload]
 
     # polygonize gives a GeometryCollection, filter out empty ones
     interiors = interiors.loc[~interiors.geometry.is_empty]
@@ -850,24 +910,24 @@ def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
         interiors_with_z = [_coords_with_z(ring.coords) for ring in polygon.interiors]
         return Polygon(shell=exterior_with_z, holes=interiors_with_z)
 
-    if geometry.geom_type == "Polygon":
+    if isinstance(geometry, Polygon):
         return _polygon_with_z(geometry)
 
-    if geometry.geom_type == "MultiPolygon":
-        return MultiPolygon(_polygon_with_z(polygon) for polygon in geometry.geoms)
+    if isinstance(geometry, MultiPolygon):
+        return MultiPolygon([_polygon_with_z(polygon) for polygon in geometry.geoms])
 
-    if geometry.geom_type == "LineString":
+    if isinstance(geometry, LineString):
         return LineString(_coords_with_z(geometry.coords))
 
-    if geometry.geom_type == "MultiLineString":
+    if isinstance(geometry, MultiLineString):
         return MultiLineString(
             [LineString(_coords_with_z(line.coords)) for line in geometry.geoms]
         )
 
-    if geometry.geom_type == "Point":
+    if isinstance(geometry, Point):
         return Point(_coords_with_z(geometry.coords)[0])
 
-    if geometry.geom_type == "MultiPoint":
+    if isinstance(geometry, MultiPoint):
         return MultiPoint(
             [Point(_coords_with_z(point.coords)[0]) for point in geometry.geoms]
         )
@@ -932,7 +992,7 @@ def assign_nearest_z(
         lambda geom: _geometry_with_z_from_kd_tree(geom, kd_tree, source_z)  # noqa: SC200
         if (overwrite_z or not geom.has_z)
         else geom
-    )
+    )  # ty: ignore[no-matching-overload]
     return result_gdf
 
 
@@ -1026,7 +1086,7 @@ def remove_small_parts(
     threshold: float,
     *,
     size_function: Callable[[BaseGeometry], float] | None = None,
-) -> MultiLineString | MultiPolygon:
+) -> MultiLineString | MultiPolygon | LineString | Polygon:
     """Remove small parts of a geometry.
 
     By default size is determined by length for (Multi)LineStrings,
@@ -1071,14 +1131,17 @@ def remove_small_parts(
     if isinstance(geom, BaseMultipartGeometry):
         parts = [part for part in geom.geoms if size_function(part) > threshold]
 
+        geometry_type = cast("type[MultiPolygon | MultiLineString]", geometry_type)
+
         if parts:
             return geometry_type(parts)
 
         return geometry_type()
 
     if size_function(geom) > threshold:
-        return geom
+        return cast("Polygon | LineString", geom)
 
+    geometry_type = cast("type[Polygon | LineString]", geometry_type)
     return geometry_type()
 
 
@@ -1284,19 +1347,28 @@ def equalize_z(  # noqa: C901, PLR0911
     if geom.geom_type == "Point":
         return _make_point(geom.coords)
     if geom.geom_type == "MultiPoint":
-        return MultiPoint([_make_point(geom.coords) for geom in geom.geoms])
+        return MultiPoint(
+            [_make_point(geom.coords) for geom in cast("MultiPoint", geom).geoms]
+        )
     if geom.geom_type == "LineString":
         return LineString(_z_for_coord_seq(geom.coords))
     if geom.geom_type == "LinearRing":
         return LinearRing(_z_for_coord_seq(geom.coords))
     if geom.geom_type == "MultiLineString":
         return MultiLineString(
-            [LineString(_z_for_coord_seq(geom.coords)) for geom in geom.geoms]
+            [
+                LineString(
+                    _z_for_coord_seq(geom.coords),
+                )
+                for geom in cast("MultiLineString", geom).geoms
+            ]
         )
     if geom.geom_type == "Polygon":
-        return _make_polygon(geom)
+        return _make_polygon(cast("Polygon", geom))
     if geom.geom_type == "MultiPolygon":
-        return MultiPolygon([_make_polygon(polygon) for polygon in geom.geoms])
+        return MultiPolygon(
+            [_make_polygon(polygon) for polygon in cast("MultiPolygon", geom).geoms]
+        )
 
     msg = f"Function not implemented for geom type: {geom.geom_type}"
     raise NotImplementedError(msg)
@@ -1356,7 +1428,9 @@ def split_linear_geometry(  # noqa: C901
         return MultiLineString([geom])
 
     if not geom.is_ring:
-        return MultiLineString(split(geom, split_with).geoms)
+        return MultiLineString(
+            [cast("LineString", part) for part in split(geom, split_with).geoms]
+        )
 
     modified_split_with = split_with
 
@@ -1383,7 +1457,7 @@ def split_linear_geometry(  # noqa: C901
         raise GeometryOperationError(msg)
 
     if len(splits_at.geoms) < 2:  # noqa: PLR2004
-        return geom
+        return MultiLineString([geom])
 
     diff = geom.difference(modified_split_with)
 
@@ -1400,7 +1474,10 @@ def split_linear_geometry(  # noqa: C901
     # from the difference, as the first geometry in a MultiLineString.
     # Fix by merging it with the last part.
     parts_to_merge = [diff.geoms[0], diff.geoms[-1]]
-    parts = [linemerge(parts_to_merge), *list(diff.geoms)[1:-1]]
+    parts = [
+        cast("LineString", linemerge(parts_to_merge)),
+        *list(diff.geoms)[1:-1],
+    ]
 
     if len(splits_at.geoms) != len(parts):
         msg = "Got unexpected amount of parts in split operation."
@@ -1441,9 +1518,9 @@ def ramer_douglas_peucker_simplify_keep_coords(
 
     """
     if not keep_coords:
-        return geom.simplify(tolerance)
+        return cast("LineString", geom.simplify(tolerance))
 
-    CoordList = list[tuple[float, float]]  # noqa: N806
+    CoordList = list[tuple[float, float]] | list[tuple[float, ...]]  # noqa: N806
 
     def rdp(coords: CoordList) -> CoordList:
         furthest_distance = 0.0
@@ -1705,7 +1782,7 @@ def split_line_at_distances(
 
     result_segments: list[LineString] = []
 
-    current_coords = [coords[0]]
+    current_coords: list[tuple[float, ...]] = [coords[0]]
 
     distance_iter = iter(sorted(set(distances)))
     next_split = next(distance_iter, None)
@@ -1826,7 +1903,7 @@ def angle_difference(a: float, b: float) -> float:
     return abs((a - b + 180) % 360 - 180)
 
 
-def smooth_around_connection_point_of_two_lines(  # noqa: PLR0914
+def smooth_around_connection_point_of_two_lines(
     line_1: LineString,
     line_2: LineString,
     connection_point: Point,
@@ -2040,7 +2117,7 @@ def concatenate_lines(
     else:
         coords = np.concatenate((ca, cb))
 
-    return linestrings(coords)
+    return cast("LineString", linestrings(coords))
 
 
 def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
@@ -2069,16 +2146,17 @@ def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
     if isinstance(repaired, Polygon):
         return repaired
 
-    polygons = ()
+    polygons: list[Polygon] = []
     if isinstance(repaired, MultiPolygon):
-        polygons = repaired.geoms
+        polygons = list(repaired.geoms)
     elif isinstance(repaired, GeometryCollection):
-        polygons = tuple(g for g in repaired.geoms if isinstance(g, Polygon))
+        polygons = [g for g in repaired.geoms if isinstance(g, Polygon)]
 
     if polygons:
-        return (
-            polygons[0] if len(polygons) == 1 else largest_part(MultiPolygon(polygons))
-        )
+        if len(polygons) == 1:
+            return polygons[0]
+
+        return cast("Polygon", largest_part(MultiPolygon(polygons)))
 
     warn(
         "Geometry could not be repaired into a valid polygon."
@@ -2435,7 +2513,7 @@ def _get_shared_points(
     if shared_coords.size == 0:
         return np.array([], dtype="object")
 
-    return points(shared_coords)
+    return cast("np.ndarray", points(shared_coords))
 
 
 def get_topological_points(
@@ -2477,7 +2555,7 @@ def get_topological_points(
     if geoms.size == 0:
         return np.array([], dtype="object")
 
-    include_z = False if force_to_2d else has_z(geoms).any()
+    include_z = bool(not force_to_2d and has_z(geoms).any())
 
     coords, geom_idx = get_coordinates(
         geoms,
@@ -2516,7 +2594,7 @@ def get_line_connection_points(
     if geoms.size == 0:
         return np.array([], dtype="object")
 
-    include_z = False if force_to_2d else has_z(geoms).any()
+    include_z = bool(not force_to_2d and has_z(geoms).any())
 
     # Extract raw coordinates. This avoids the overhead of constructing Point
     # geometries which you'd get with get_point().
@@ -2588,10 +2666,10 @@ def chaikin_smooth_keep_topology(
             skip_coords=skipped_coords,
             distance_threshold=distance_threshold,
         ),
-    )
+    )  # ty: ignore[no-matching-overload]
 
 
-def gaussian_smooth(  # noqa: PLR0915, PLR0914
+def gaussian_smooth(  # noqa: PLR0915
     line_geoms: np.ndarray,
     sigma: float,
 ) -> np.ndarray:
@@ -2760,10 +2838,10 @@ def gaussian_smooth(  # noqa: PLR0915, PLR0914
 
     flat_smoothed_coords = np.vstack(smoothed_coords)
 
-    return linestrings(flat_smoothed_coords, indices=line_indexes)
+    return cast("np.ndarray", linestrings(flat_smoothed_coords, indices=line_indexes))
 
 
-def line_length_weighted_directions(  # noqa: PLR0914
+def line_length_weighted_directions(
     geoms: np.ndarray,
     *,
     unit: Literal["degrees", "radians"] = "degrees",
@@ -2934,10 +3012,10 @@ def build_collinear_chains(
         multilinestrings(parts[order], indices=part_chain_ids[order])
     )
 
-    return chain_ids, chain_geoms
+    return cast("np.ndarray", chain_ids), cast("np.ndarray", chain_geoms)
 
 
-def get_contiguous_line_components(  # noqa: PLR0914
+def get_contiguous_line_components(
     geoms: np.ndarray,
     precision: int | None = 6,
 ) -> tuple[np.ndarray, np.ndarray]:

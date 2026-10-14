@@ -4,7 +4,7 @@
 #
 #  This source code is licensed under the MIT license found in the
 #  LICENSE file in the root directory of this source tree.
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 from pydantic import Field
@@ -122,7 +122,7 @@ class GeneralizePowerLines(BaseAlgorithm):
             <= _SUBSTATION_FENCE_LENGTH_RATIO_THRESHOLD
         ]
 
-        gdf = cast("GeoDataFrame", data.copy())
+        gdf = data.copy()
 
         if self.classes_for_merge_parallel_lines:
             merged = self._merge_parallel_lines(
@@ -198,7 +198,7 @@ class GeneralizePowerLines(BaseAlgorithm):
         # Remove holes
         parallels.geometry = parallels.geometry.apply(
             lambda geom: Polygon(geom.exterior)
-        )
+        )  # ty: ignore[no-matching-overload]
 
         parallels = parallels.set_index(parallels.index.astype("string"))
         parallels = inherit_attributes_from_largest(
@@ -218,9 +218,9 @@ class GeneralizePowerLines(BaseAlgorithm):
                 simplifytolerance=0.5,
                 min_branch_length=self.length_threshold / 2,
             ),
-        )
+        )  # ty: ignore[no-matching-overload]
 
-        parallels = parallels.explode()
+        parallels = parallels.explode(column=parallels.geometry.name)
 
         fences_union = fences.union_all()
 
@@ -243,7 +243,7 @@ class GeneralizePowerLines(BaseAlgorithm):
                 ),
             ),
             axis=1,
-        )
+        )  # ty: ignore[invalid-assignment]
 
         subs_union = substations.union_all()
         parallels = flag_polygon_centerline_connections(
@@ -264,7 +264,7 @@ class GeneralizePowerLines(BaseAlgorithm):
                 self.distance_threshold_for_parallel_lines,
             ),
             axis=1,
-        )
+        )  # ty: ignore[invalid-assignment]
 
         def _process(gdf: GeoDataFrame) -> GeoDataFrame:
             # Remove lines from areas where parallel lines have been merged

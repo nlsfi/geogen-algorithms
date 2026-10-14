@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory, gettempdir
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast, overload
 from warnings import warn
 
 import numpy as np
@@ -359,6 +359,24 @@ def read_test_input_data(
     return input_data, control, reference_data
 
 
+@overload
+def dummy_geometry(geom_type: Literal["Point"]) -> Point: ...
+@overload
+def dummy_geometry(geom_type: Literal["LineString"]) -> LineString: ...
+@overload
+def dummy_geometry(geom_type: Literal["LinearRing"]) -> LinearRing: ...
+@overload
+def dummy_geometry(geom_type: Literal["Polygon"]) -> Polygon: ...
+@overload
+def dummy_geometry(geom_type: Literal["MultiPoint"]) -> MultiPoint: ...
+@overload
+def dummy_geometry(geom_type: Literal["MultiLineString"]) -> MultiLineString: ...
+@overload
+def dummy_geometry(geom_type: Literal["MultiPolygon"]) -> MultiPolygon: ...
+@overload
+def dummy_geometry(geom_type: Literal["GeometryCollection"]) -> GeometryCollection: ...
+
+
 def dummy_geometry(geom_type: ShapelyGeometryTypeString) -> BaseGeometry:  # noqa: PLR0911
     """Give dummy geometry for testing purposes according to given type.
 
@@ -377,7 +395,12 @@ def dummy_geometry(geom_type: ShapelyGeometryTypeString) -> BaseGeometry:  # noq
         case "Polygon":
             return Polygon([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0]])
         case "MultiPoint":
-            return MultiPoint([dummy_geometry("Point"), Point(1, 1, 0)])
+            return MultiPoint(
+                [
+                    dummy_geometry("Point"),
+                    Point(1, 1, 0),
+                ]
+            )
         case "MultiLineString":
             return MultiLineString(
                 [

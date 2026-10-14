@@ -11,6 +11,7 @@ from pydantic import Field
 from pygeoops import simplify
 from shapely import (
     MultiPoint,
+    MultiPolygon,
     Polygon,
     extract_unique_points,
     force_2d,
@@ -18,7 +19,6 @@ from shapely import (
     union_all,
 )
 from shapely.geometry import LineString, MultiLineString, Point
-from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -171,7 +171,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     @staticmethod
     def _get_shoreline_splitters(
         unmodified_shoreline: GeoDataFrame,
-        new_unsplit_shoreline: BaseGeometry,
+        new_unsplit_shoreline: LineString | MultiLineString,
         *,
         max_distance: float = 20,
     ) -> MultiLineString:
@@ -216,7 +216,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         splitters = unmodified_shoreline.copy()
         splitters.geometry = splitters.boundary
         splitters = splitters.loc[~splitters.geometry.is_empty]
-        splitters.geometry = splitters.geometry.apply(_to_splitter)
+        splitters.geometry = splitters.geometry.apply(_to_splitter)  # ty: ignore[no-matching-overload]
 
         result = splitters.union_all()
 
@@ -238,7 +238,11 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         original_shoreline: GeoDataFrame,
         non_shoreline_segments: GeoDataFrame,
     ) -> GeoDataFrame:
-        shoreline = cast("GeoDataFrame", gdf.copy())
+        shoreline = gdf.copy()
+
+        if shoreline.empty:
+            return GeoDataFrame(geometry=[], crs=gdf.crs)
+
         shoreline.geometry = shoreline.geometry.boundary
 
         # Remove segments which were originally identified to be present in
@@ -252,12 +256,12 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
         splitters = GeneralizeWaterAreas._get_shoreline_splitters(
             original_shoreline,
-            shoreline.union_all(),
+            cast("LineString | MultiLineString", shoreline.union_all()),
         )
 
         shoreline.geometry = shoreline.geometry.apply(
             lambda geom: split_linear_geometry(geom, splitters)
-        )
+        )  # ty: ignore[no-matching-overload]
         shoreline = shoreline.explode().reset_index(drop=True)
 
         return inherit_attributes_for_lines_by_buffer(
@@ -339,22 +343,24 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 ].union_all()
                 return geom.union(intersecting_geoms)
 
-            gdf.geometry = gdf.geometry.apply(add_exaggerated_parts)
+            gdf.geometry = gdf.geometry.apply(add_exaggerated_parts)  # ty: ignore[no-matching-overload]
 
         # Extract from unary union to catch islands which are between lake parts
-        islands_geom = extract_interior_rings(gdf.union_all())
+        islands_geom = extract_interior_rings(
+            cast("Polygon | MultiPolygon", gdf.union_all())
+        )
         islands = GeoDataFrame(
             geometry=GeoSeries(islands_geom).explode(index_parts=True)
         )
 
-        gdf.geometry = gdf.geometry.apply(lambda geom: Polygon(geom.exterior))
+        gdf.geometry = gdf.geometry.apply(lambda geom: Polygon(geom.exterior))  # ty: ignore[no-matching-overload]
 
         # When islands are extracted, we get just an exterior ring. Because of
         # recursive lakes and islands, it is required to add any lakes as
         # interior rings to the extracted islands.
         islands.geometry = islands.geometry.apply(
             lambda geom: perforate_polygon_with_gdf_exteriors(geom, gdf)
-        )
+        )  # ty: ignore[no-matching-overload]
 
         if self.island_exaggerate_by != 0.0:
             islands = exaggerate_thin_polygons(
@@ -371,7 +377,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             preserve_topology=True,
             preserve_common_boundaries=True,
             keep_points_on=skip_coords,
-        )
+        )  # ty: ignore[no-matching-overload]
         islands.geometry = islands.geometry.force_2d().apply(
             simplify,
             tolerance=self.island_simplification_tolerance,
@@ -379,7 +385,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             preserve_topology=True,
             preserve_common_boundaries=True,
             keep_points_on=skip_coords,
-        )
+        )  # ty: ignore[no-matching-overload]
         islands = islands.loc[islands.geometry.area > self.island_min_area]
 
         # Delete small areas
@@ -392,7 +398,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         # slivers and therefore change the geometry to a MultiPolygon. Resolve
         # this by transforming any MultiPolygons to Polygons, retaining only
         # the largest part.
-        gdf.geometry = gdf.geometry.apply(largest_part)
+        gdf.geometry = gdf.geometry.apply(largest_part)  # ty: ignore[no-matching-overload]
 
         if gdf.empty:
             return copy_gdf_as_empty(gdf)

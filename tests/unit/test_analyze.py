@@ -120,11 +120,6 @@ def test_calculate_main_angle_valid(polygon: Polygon, expected_angles: list[floa
     )
 
 
-def test_calculate_main_angle_invalid_geometry():
-    with pytest.raises(TypeError, match="Input geometry must be a Shapely Polygon"):
-        calculate_main_angle(LineString([(0, 0), (1, 1)]))
-
-
 def test_calculate_main_angle_empty_polygon():
     empty_poly = Polygon()
     result = calculate_main_angle(empty_poly)

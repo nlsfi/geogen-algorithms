@@ -63,7 +63,7 @@ def test_fix_invalid_geometries_with_self_intersection():
 
 def test_fix_invalid_geometries_with_empty_geometry():
     """Empty geometry should remain empty and valid."""
-    gdf = gpd.GeoDataFrame(geometry=[Polygon(), None])
+    gdf = gpd.GeoDataFrame(geometry=[Polygon(), None])  # ty: ignore[invalid-argument-type]
 
     result_gdf = fix_geometries.fix_invalid_geometries(gdf)
 

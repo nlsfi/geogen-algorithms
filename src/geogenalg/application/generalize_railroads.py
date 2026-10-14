@@ -78,7 +78,7 @@ class GeneralizeRailroads(BaseAlgorithm):
         return list(connected_components(g))
 
     @override
-    def _execute(  # noqa: C901, PLR0912, PLR0915, PLR0914
+    def _execute(  # noqa: C901, PLR0912, PLR0915
         self,
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
@@ -132,13 +132,13 @@ class GeneralizeRailroads(BaseAlgorithm):
         fan_tracks = fan_tracks.loc[fan_tracks["fan_area_id"] != -1]
 
         # Start typifying the remaining track types
+        pack_candidate_union = pack_candidates.union_all()
+        if isinstance(pack_candidate_union, MultiLineString):
+            pack_candidate_union = linemerge(pack_candidate_union)
+
         pack_candidates = (
             GeoDataFrame(
-                geometry=[
-                    linemerge(pack_candidates.union_all())
-                    if isinstance(pack_candidates.union_all(), MultiLineString)
-                    else pack_candidates.union_all()
-                ],
+                geometry=[pack_candidate_union],
                 crs=data.crs,
             )
             .explode()

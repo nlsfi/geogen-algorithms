@@ -45,10 +45,10 @@ from geogenalg.utility.validation import (
 )
 def test_check_gdf_geometry_type(
     gdf: GeoDataFrame,
-    accepted_types: list[str],
+    accepted_types: list[ShapelyGeometryTypeString],
     expected: bool,
 ):
-    assert check_gdf_geometry_type(gdf, accepted_types) == expected
+    assert check_gdf_geometry_type(gdf, set(accepted_types)) == expected
 
 
 @pytest.mark.parametrize(
@@ -66,10 +66,10 @@ def test_check_gdf_geometry_type(
 )
 def test_check_geoseries_geometry_type(
     geoseries: GeoSeries,
-    accepted_types: list[str],
+    accepted_types: list[ShapelyGeometryTypeString],
     expected: bool,
 ):
-    assert check_geoseries_geometry_type(geoseries, accepted_types) == expected
+    assert check_geoseries_geometry_type(geoseries, set(accepted_types)) == expected
 
 
 @pytest.mark.parametrize(

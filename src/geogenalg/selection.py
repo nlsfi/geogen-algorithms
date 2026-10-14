@@ -11,8 +11,9 @@ from warnings import catch_warnings
 import numpy as np
 from geopandas import GeoDataFrame
 from pandas import Series
-from shapely import distance, length, line_interpolate_point
+from shapely import MultiLineString, distance, length, line_interpolate_point
 from shapely.geometry import LineString, Point
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.continuity import find_all_endpoints
 from geogenalg.core.exceptions import GeometryTypeError
@@ -100,9 +101,11 @@ def split_polygons_by_point_intersection(
         - The second contains polygons that do not contain any points.
 
     """
-    polygons_intersecting_point = polygon_gdf.geometry.apply(
-        lambda poly: point_gdf.geometry.intersects(poly).any()
-    )
+
+    def intersects_any_point(poly: BaseGeometry) -> bool:
+        return bool(point_gdf.geometry.intersects(poly).any())
+
+    polygons_intersecting_point = polygon_gdf.geometry.apply(intersects_any_point)
 
     polygons_with_point: GeoDataFrame = polygon_gdf.loc[polygons_intersecting_point]
     polygons_without_point: GeoDataFrame = polygon_gdf.loc[~polygons_intersecting_point]
@@ -202,7 +205,7 @@ def remove_small_holes(input_gdf: GeoDataFrame, hole_threshold: float) -> GeoDat
     output_gdf.geometry = output_gdf.geometry.apply(
         remove_holes,
         area_threshold=hole_threshold,
-    )
+    )  # ty: ignore[no-matching-overload]
     return output_gdf
 
 
@@ -255,13 +258,16 @@ def reduce_nearby_points_by_selecting(
         if input_point_index in to_remove:
             continue
 
-        input_point_geom = getattr(input_point, gdf.geometry.name)
+        input_point_geom = getattr(input_point, str(gdf.geometry.name))
         possible_matches_idx = list(
             reference_sindex.intersection(
                 input_point_geom.buffer(distance_threshold).bounds
             )
         )
-        possible_matches: GeoDataFrame = reference_points_gdf.iloc[possible_matches_idx]
+        possible_matches_indices = np.asarray(possible_matches_idx, dtype=np.intp)
+        possible_matches: GeoDataFrame = reference_points_gdf.iloc[
+            possible_matches_indices
+        ]
 
         for other_point in possible_matches.itertuples():
             other_point_index = other_point.Index
@@ -269,7 +275,7 @@ def reduce_nearby_points_by_selecting(
                 continue
 
             distance = input_point_geom.distance(
-                getattr(other_point, possible_matches.geometry.name)
+                getattr(other_point, str(possible_matches.geometry.name))
             )
 
             prioritize_other = (
@@ -390,12 +396,22 @@ def rank_parallel_lines(
         directly based on their order rather than calculated from intersection
         distances.
 
+    Raises:
+    ------
+        GeometryTypeError: if input_gdf can't be unioned into a (MultiLineString)
+
     """
     if input_gdf.empty:
         return (Series(), [])
 
-    centroid = input_gdf.union_all().centroid
-    direction = line_mean_direction(input_gdf.union_all(), unit="radians") + np.pi / 2
+    union = input_gdf.union_all()
+
+    if not isinstance(union, LineString | MultiLineString):
+        msg = "Expected (MultiLineString) from union_all()."
+        raise GeometryTypeError(msg)
+
+    centroid = union.centroid
+    direction = line_mean_direction(union, unit="radians") + np.pi / 2
 
     min_x, min_y, max_x, max_y = input_gdf.total_bounds
     perpendicular_line_length = hypot(max_x - min_x, max_y - min_y) * 2
