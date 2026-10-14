@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from geogenalg.application import BaseAlgorithm
+from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
 from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.generalize_points import GeneralizePoints
 from geogenalg.application.keep_intersection import KeepIntersection
@@ -246,6 +247,35 @@ def test_generalize_watercourse_lines(
         check_missing_reference=False,
         algorithm=watercourse_lines_algorithm,
         dummy_data_mandatory_columns=frozenset(["watercourse_line_width_category_id"]),
+    ).run()
+
+
+def test_generalize_address_points(
+    address_points_input: TestInputData,
+    address_points_algorithm: GeneralizeAddressPoints,
+):
+    IntegrationTest(
+        input_data=address_points_input,
+        check_missing_reference=False,
+        algorithm=address_points_algorithm,
+        assert_function_arguments={
+            "check_less_precise": True,
+        },
+        dummy_data_mandatory_columns=frozenset(
+            [
+                address_points_algorithm.join_column,
+                address_points_algorithm.priority_column,
+                "number_part_of_address_number",
+                "address_fin",
+                "address_swe",
+            ]
+        ),
+        dummy_reference_data_mandatory_columns=frozenset(
+            [
+                str(address_points_algorithm.reference_join_column),
+                "building_function_id",
+            ]
+        ),
     ).run()
 
 

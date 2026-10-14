@@ -396,3 +396,16 @@ def test_generalize_watercourse_lines(
         input_data=watercourse_lines_input,
         algorithm=watercourse_lines_algorithm,
     ).run(benchmark, record_property)
+
+
+@pytest.mark.benchmark
+def test_generalize_address_points(
+    benchmark: BenchmarkFixture,
+    record_property: Callable,
+    address_points_input: TestInputData,
+    address_points_algorithm: BaseAlgorithm,
+):
+    AlgorithmBenchmark(
+        input_data=address_points_input,
+        algorithm=address_points_algorithm,
+    ).run(benchmark, record_property)

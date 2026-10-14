@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from geogenalg.application.dissolve_polygons import DissolvePolygons
+from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
 from geogenalg.application.generalize_building_areas import GeneralizeBuildingAreas
 from geogenalg.application.generalize_buildings import GeneralizeBuildings
 from geogenalg.application.generalize_cliffs import GeneralizeCliffs
@@ -534,4 +535,36 @@ def watercourse_lines_algorithm() -> GeneralizeWaterCourseLines:
         always_keep_column="watercourse_line_width_category_id",
         always_keep_values=frozenset([2]),
         reference_key="water_areas",
+    )
+
+
+@pytest.fixture
+def address_points_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "addresses.gpkg")
+    return TestInputData(
+        input_uri=gpkg.to_input("address_point"),
+        control_uri=gpkg.to_input("address_point_control"),
+        unique_id_column="id",
+        reference_uris={
+            "buildings": gpkg.to_input("building_part_area"),
+        },
+    )
+
+
+@pytest.fixture
+def address_points_algorithm() -> GeneralizeAddressPoints:
+    return GeneralizeAddressPoints(
+        join_column="permanent_building_identifier",
+        reference_join_column="vtj_prt",
+        address_number_column="number_part_of_address_number",
+        address_primary_column="address_fin",
+        address_secondary_column="address_swe",
+        priority_column="address_number",
+        duplicate_location_tolerance=1.0,
+        max_building_distance=200.0,
+        search_radius=500.0,
+        primary_function_values=frozenset({1, 3}),
+        building_function_column="building_function_id",
+        invalid_address_numbers=frozenset([0]),
+        reference_key="buildings",
     )
