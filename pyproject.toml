@@ -81,7 +81,7 @@ default-groups = ["dev", "lint"]
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.2.0",
+    "prek>=0.5.5",
     "pytest>=8.4.1",
     "pytest-benchmark>=5.3.0",
     "pytest-cov>=6.2.1",
