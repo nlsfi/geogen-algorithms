@@ -61,7 +61,7 @@ repos:
     hooks:
       - id: temporary-geopackage-files
         name: check-temp-files
-        entry: python tools/pre-commit/check_temp_files.py
+        entry: python tools/prek/check_temp_files.py
         language: system
         types: [file]
         pass_filenames: false
