@@ -19,7 +19,7 @@ from shapely import (
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
-from geogenalg.analyze import group_geometries_by_intersections_recursively
+from geogenalg.analyze import group_intersecting_geometries
 from geogenalg.core.exceptions import DuplicateIndexError, GeometryTypeError
 from geogenalg.core.geometry import get_contiguous_line_components
 from geogenalg.utility.dataframe_processing import (
@@ -262,7 +262,7 @@ def dissolve_and_inherit_attributes(  # noqa: C901
         **_kwargs: object,
     ) -> GeoDataFrame:
         group = cast("GeoDataFrame", group)
-        grouped_by_geom = group_geometries_by_intersections_recursively(group)
+        grouped_by_geom = group_intersecting_geometries(group)
 
         return cast(
             "GeoDataFrame",
