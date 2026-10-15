@@ -4,9 +4,9 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from typing import ClassVar, override
+from typing import ClassVar, cast, override
 
-from geopandas import GeoDataFrame
+from geopandas import GeoDataFrame, GeoSeries
 from pydantic import Field
 
 from geogenalg.application import (
@@ -144,7 +144,7 @@ class GeneralizeAddressPoints(BaseAlgorithm):
         gdf.index.name = index_name
 
         gdf[BUILDING_DISTANCE_COLUMN] = gdf.geometry.distance(
-            gdf[BUILDING_CENTROID_COLUMN]
+            cast("GeoSeries", gdf[BUILDING_CENTROID_COLUMN])
         )
         gdf = gdf.drop(columns=[BUILDING_CENTROID_COLUMN])
 
