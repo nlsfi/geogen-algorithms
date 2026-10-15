@@ -27,6 +27,7 @@ repos:
     rev: v0.0.87
     hooks:
       - id: ty
+        args: [--fix]
   - repo: https://github.com/PyCQA/flake8
     rev: 7.3.0
     hooks:
