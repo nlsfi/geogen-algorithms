@@ -141,6 +141,7 @@ triu
 typer
 unary
 unsplit
+unvisited
 utils
 vec
 vecs

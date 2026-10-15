@@ -9,7 +9,7 @@ from typing import Literal, cast
 import numpy as np
 from geopandas import GeoDataFrame, overlay
 from pandas import Series
-from scipy.sparse import csr_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely import (
     BufferJoinStyle,
@@ -25,7 +25,9 @@ from shapely import (
     convex_hull,
     get_coordinates,
     intersection,
+    intersects,
     length,
+    prepare,
     union_all,
 )
 from shapely.geometry.base import BaseGeometry
@@ -43,7 +45,7 @@ from geogenalg.core.geometry import (
     segment_bearing,
     segment_direction,
 )
-from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
+from geogenalg.utility.dataframe_processing import add_columns_to_gdf, copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -519,9 +521,77 @@ def calculate_edge_adjacency(
     return result_gdf
 
 
-def group_geometries_by_intersections_recursively(  # noqa: C901
+def _group_geoms_bulk(geoms: np.ndarray, tree: STRtree) -> np.ndarray:
+    geom_count = len(geoms)
+
+    left, right = tree.query(geoms)
+    mask = left < right
+    left = left[mask]
+    right = right[mask]
+
+    if left.size:
+        mask = intersects(geoms[left], geoms[right])
+        left = left[mask]
+        right = right[mask]
+
+    if left.size:
+        data = np.broadcast_to(1, left.shape)
+
+        graph = coo_matrix((data, (left, right)), shape=(geom_count, geom_count))
+        _, labels = connected_components(graph, directed=False)
+
+        return labels.astype(np.int64, copy=False) + 1
+
+    return np.arange(1, geom_count + 1, dtype=np.int64)
+
+
+def _group_geoms_iterative(geoms: np.ndarray, tree: STRtree) -> np.ndarray:
+    geom_count = len(geoms)
+
+    visited = np.zeros(geom_count, dtype=bool)
+    labels = np.empty(geom_count, dtype=np.int64)
+    current_label = 1
+
+    for root in range(geom_count):
+        if visited[root]:
+            continue
+
+        visited[root] = True
+        labels[root] = current_label
+
+        frontier = np.array([root], dtype=np.int64)
+
+        while frontier.size > 0:
+            frontier_idx, candidate_idx = tree.query(geoms[frontier])
+
+            unvisited_mask = ~visited[candidate_idx]
+            if not np.any(unvisited_mask):
+                break
+
+            frontier_idx = frontier_idx[unvisited_mask]
+            candidate_idx = candidate_idx[unvisited_mask]
+
+            hit_mask = intersects(geoms[frontier[frontier_idx]], geoms[candidate_idx])
+            if not np.any(hit_mask):
+                break
+
+            new_neighbors = np.unique(candidate_idx[hit_mask])
+
+            visited[new_neighbors] = True
+            labels[new_neighbors] = current_label
+
+            frontier = new_neighbors
+
+        current_label += 1
+
+    return labels
+
+
+def group_intersecting_geometries(
     input_gdf: GeoDataFrame,
     geometry_group_column: str = "_geometry_group",
+    *,
+    strategy: Literal["iterative", "bulk"] = "iterative",
 ) -> GeoDataFrame:
     """Recursively determine which geometries intersect.
 
@@ -533,86 +603,40 @@ def group_geometries_by_intersections_recursively(  # noqa: C901
 
     All of these will be in the same group.
 
-    The function works by determining which rows each row intersects via a
-    spatial join. The function then goes through each row and checks which
-    other rows it intersects, then recursively descending to check what other
-    rows those rows intersect (skipping already processed rows) and collecting
-    the indices of each row found.
-
     Args:
     ----
         input_gdf: GeoDataFrame with geometries to group.
         geometry_group_column: Name of column to save the group index of each feature.
+        strategy: Grouping strategy. `iterative` performs a BFS directly on the
+            spatial index, whereas `bulk` constructs an graph and finds connected
+            components. Generally speaking `bulk` may be faster with sparser
+            datasets with fewer intersecting geometries, whereas `iterative` may be
+            faster with dense datasets with lots of intersections.
 
     Returns:
     -------
         GeoDataFrame with group column added.
 
     """
-    gdf = input_gdf.copy()
-
-    # Initialize group column as each row being its own group, this way if row
-    # truly does not belong to a group it'll still have a valid value.
-    gdf[geometry_group_column] = range(gdf.shape[0])
-
-    geometry_group_sets = []
-    processed = set()
-
-    joined_group = input_gdf.sjoin(
-        input_gdf,
-        how="inner",
-        predicate="intersects",
-    )
-
-    if joined_group.empty:
-        return gdf
-
-    def group_by_geometry(
-        index: Hashable,
-        rows: GeoDataFrame,
-        geometry_group: set[Hashable],
-    ) -> None:
-        if index in processed:
-            return
-
-        intersects = rows["index_right"]
-
-        processed.add(index)
-
-        geometry_group.add(index)
-        geometry_group.update(intersects)
-
-        for intersecting_feature in intersects:
-            if intersecting_feature == index:
-                continue
-
-            if intersecting_feature in gdf.index:
-                group_by_geometry(
-                    intersecting_feature,
-                    joined_group.loc[joined_group.index == intersecting_feature],
-                    geometry_group,
-                )
-
-    unique_indices = joined_group.index.unique()
-
-    for index in unique_indices:
-        if index in processed:
-            continue
-
-        geometry_group: set[Hashable] = set()
-        group_by_geometry(
-            index,
-            joined_group.loc[joined_group.index == index],
-            geometry_group,
+    # TODO: BEFORE RELEASE: check if there's a meaningful difference with real
+    # data between iterative/bulk and if not; pick the fastest and remove the
+    # parameter
+    if input_gdf.empty:
+        return add_columns_to_gdf(
+            input_gdf.copy(),
+            add_columns={geometry_group_column: "int64"},
         )
-        geometry_group_sets.append(geometry_group)
 
-    for i, geometry_group in enumerate(geometry_group_sets, start=1):
-        for idx in geometry_group:
-            if idx in gdf.index:
-                gdf.at[idx, geometry_group_column] = i  # noqa: PD008
+    geoms = input_gdf.geometry.to_numpy()
+    tree = STRtree(geoms)
+    prepare(geoms)
 
-    return gdf
+    if strategy == "bulk":
+        labels = _group_geoms_bulk(geoms, tree)
+    else:  # bfs
+        labels = _group_geoms_iterative(geoms, tree)
+
+    return input_gdf.assign(**{geometry_group_column: labels})
 
 
 def polygonize_parallel_lines(
