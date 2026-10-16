@@ -116,6 +116,7 @@ searchsorted
 segmentize
 segmentized
 shapelysmooth
+shlex
 simplifier
 simplifytolerance
 sindex
