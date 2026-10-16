@@ -233,20 +233,20 @@ class GeneralizeBuildings(BaseAlgorithm):
         # Reduce density separately for each group
         low_priority_buildings_gdf = reduce_nearby_points_by_selecting(
             low_priority_buildings_gdf,
-            all_buildings_gdf,
             self.minimum_distance_to_isolated_building,
+            reference_points_gdf=all_buildings_gdf,
         )
 
         other_buildings_gdf = reduce_nearby_points_by_selecting(
             other_buildings_gdf,
-            all_buildings_gdf,
             self.point_size * POINT_SIZE_REDUCTION_MULTIPLIER,
+            reference_points_gdf=all_buildings_gdf,
         )
 
         always_kept_buildings_gdf = reduce_nearby_points_by_selecting(
             always_kept_buildings_gdf,
-            always_kept_buildings_gdf,
             self.point_size * POINT_SIZE_REDUCTION_MULTIPLIER,
+            reference_points_gdf=always_kept_buildings_gdf,
         )
 
         return combine_gdfs(
@@ -545,4 +545,4 @@ class GeneralizeBuildings(BaseAlgorithm):
         """
         gdf = input_gdf.copy()
         gdf.geometry = gdf.geometry.apply(make_valid_ensure_polygon)  # ty: ignore[no-matching-overload]
-        return gdf.loc[gdf.geometry.is_valid]
+        return gdf.loc[gdf.geometry.is_valid & (~gdf.geometry.is_empty)]

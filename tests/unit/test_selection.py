@@ -4,7 +4,6 @@
 #
 #  SPDX-License-Identifier: MIT
 
-import re
 from typing import Any
 
 import pytest
@@ -463,66 +462,65 @@ def test_remove_small_holes_correct(
     [
         (
             GeoDataFrame(
-                {"id": [1, 2], "priority": [10, 20]},
+                {"id": [1, 2]},
                 geometry=[Point(0, 0), Point(10, 0)],
             ),
             None,
             5.0,
             GeoDataFrame(
-                {"id": [1, 2], "priority": [10, 20]},
+                {"id": [1, 2]},
                 geometry=[Point(0, 0), Point(10, 0)],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [1, 2], "priority": [10, 20]},
+                {"id": [1, 2]},
                 geometry=[Point(0, 0), Point(1, 0)],
             ),
             None,
             2.0,
             GeoDataFrame(
-                {"id": [2], "priority": [20]},
-                geometry=[Point(1, 0)],
+                {"id": [1]},
+                geometry=[Point(0, 0)],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [1], "priority": [10]},
+                {"id": [1]},
                 geometry=[Point(0, 0)],
             ),
             GeoDataFrame(
-                {"id": [99], "priority": [5]},
-                geometry=[Point(1, 0)],
+                {"id": [99]},
+                geometry=[Point(10, 0)],
             ),
             2.0,
             GeoDataFrame(
-                {"id": [1], "priority": [10]},
+                {"id": [1]},
                 geometry=[Point(0, 0)],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [1], "priority": [10]},
+                {"id": [1]},
                 geometry=[Point(0, 0)],
             ),
             GeoDataFrame(
-                {"id": [2], "priority": [10]},
+                {"id": [2]},
                 geometry=[Point(1, 0)],
             ),
             2.0,
-            GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            GeoDataFrame(columns=["id"], geometry=[]),
         ),
         (
-            GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            GeoDataFrame(columns=["id"], geometry=[]),
             None,
             2.0,
-            GeoDataFrame(columns=["id", "priority"], geometry=[]),
+            GeoDataFrame(columns=["id"], geometry=[]),
         ),
         (
             GeoDataFrame(
                 {
                     "id": [1, 2, 3, 4, 5],
-                    "priority": [1, 2, 3, 4, 5],
                     "name": ["A", "B", "C", "D", "E"],
                 },
                 geometry=[Point(x, 0) for x in range(5)],
@@ -531,66 +529,41 @@ def test_remove_small_holes_correct(
             1.5,
             GeoDataFrame(
                 {
-                    "id": [5],
-                    "priority": [5],
-                    "name": ["E"],
+                    "id": [1, 3, 5],
+                    "name": ["A", "C", "E"],
                 },
-                geometry=[Point(4, 0)],
+                geometry=[Point(0, 0), Point(2, 0), Point(4, 0)],
             ),
         ),
         (
             GeoDataFrame(
-                {"id": [1], "priority": [5]},
+                {"id": [1]},
                 geometry=[Point(0, 0)],
             ),
             GeoDataFrame(
-                {
-                    "id": [1, 99],
-                    "priority": [5, 10],
-                },
-                geometry=[Point(0, 0), Point(1, 0)],
+                {"id": [1, 99]},
+                geometry=[Point(0, 0), Point(10, 0)],
             ),
-            2.0,
-            GeoDataFrame(columns=["id", "priority"], geometry=[]),
-        ),
-        (
+            5.0,
             GeoDataFrame(
-                {"id": list(range(1, 11)), "priority": [1] * 9 + [100]},
-                geometry=[
-                    Point(5, 0),
-                    Point(3.5, 3.5),
-                    Point(0, 5),
-                    Point(-3.5, 3.5),
-                    Point(-5, 0),
-                    Point(-3.5, -3.5),
-                    Point(0, -5),
-                    Point(3.5, -3.5),
-                    Point(4, 1),
-                    Point(0, 0),
-                ],
-            ),
-            None,
-            6.0,
-            GeoDataFrame(
-                {"id": [10], "priority": [100]},
+                {"id": [1]},
                 geometry=[Point(0, 0)],
             ),
         ),
     ],
     ids=[
         "no reference, no removals",
-        "no reference, remove lower priority",
+        "no reference, remove nearby point",
         "separate reference_gdf, no removal",
-        "equal priority keeps candidate",
+        "separate reference_gdf, removes nearby candidate",
         "empty input_gdf",
-        "chain should remove many points",
-        "same point in both and removed",
-        "circle with strong center point",
+        "chain alternating points kept",
+        "reference superset self-match ignored",
     ],
 )
 def test_reduce_nearby_points_selects_points_correctly(
     input_gdf: GeoDataFrame,
-    reference_gdf: GeoDataFrame,
+    reference_gdf: GeoDataFrame | None,
     distance_threshold: float,
     expected_gdf: GeoDataFrame,
 ):
@@ -598,9 +571,8 @@ def test_reduce_nearby_points_selects_points_correctly(
 
     result_gdf = reduce_nearby_points_by_selecting(
         input_gdf,
-        reference_gdf,
         distance_threshold,
-        priority_column="priority",
+        reference_points_gdf=reference_gdf,
     )
 
     expected_gdf = expected_gdf.set_index("id")
@@ -620,21 +592,6 @@ def test_reduce_nearby_points_selects_points_correctly(
         expected_sorted.drop(columns="geometry"),
         check_dtype=False,
     )
-
-
-def test_reduce_nearby_points_by_selecting_raises_on_invalid_geometry():
-    invalid_gdf = GeoDataFrame(
-        {"id": [1], "priority": [10]},
-        geometry=[LineString([(0, 0), (1, 1)])],
-    )
-
-    with pytest.raises(
-        GeometryTypeError,
-        match=re.escape(
-            "reduce_nearby_points_by_selecting only supports Point geometries."
-        ),
-    ):
-        reduce_nearby_points_by_selecting(invalid_gdf, None, 2.0, "priority")
 
 
 def test_remove_small_polygons_a():  # test A - simple case of a few different-sized squares
