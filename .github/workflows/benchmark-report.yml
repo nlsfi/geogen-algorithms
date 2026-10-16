@@ -1,0 +1,60 @@
+name: Benchmark report
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'tests/bench/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark-comparison:
+    # Only run on branches starting with "perf"
+    if: startsWith(github.head_ref, 'perf')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -q uv
+          python -m uv sync --no-group lint --extra=cli
+
+      - name: Run tests and generate benchmark report
+        run: |
+          git checkout ${{ github.base_ref }}
+          .venv/bin/python -m pytest tests/bench --benchmark-only --benchmark-json=base.json
+
+      - name: Benchmark head (PR branch)
+        run: |
+          git checkout ${{ github.head_ref }}
+          .venv/bin/python -m pytest tests/bench --benchmark-only --benchmark-json=head.json
+
+      - name: Compare results and produce report
+        run: |
+          python tools/bench/compare_and_report.py \
+            --base base.json \
+            --head head.json \
+            --output report.md \
+            --threshold 25.0 \
+            --base-ref "${{ github.base_ref }}" \
+            --head-ref "${{ github.head_ref }}"
+      - name: Add report as a comment to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body-file report.md
