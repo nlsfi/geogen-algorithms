@@ -77,7 +77,6 @@ def dissolve_polygons_algorithm() -> DissolvePolygons:
     return DissolvePolygons(
         hash_prefix="dissolvepolygons",
         by_column=frozenset(),
-        inherit_from="most_intersection",
     )
 
 

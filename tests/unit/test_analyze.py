@@ -23,7 +23,7 @@ from geogenalg.analyze import (
     classify_polygons_by_size_of_minimum_bounding_rectangle,
     flag_parallel_lines,
     get_polygons_for_parallel_lines,
-    group_geometries_by_intersections_recursively,
+    group_intersecting_geometries,
     polygonize_parallel_lines,
 )
 from geogenalg.core.exceptions import GeometryTypeError
@@ -861,14 +861,25 @@ def test_calculate_edge_adjacency_non_polygon_raises():
         "single_point_touching_polygon",
     ],
 )
-def test_group_geometries_by_intersections_recursively(
+def test_group_intersecting_geometries(
     input_gdf: GeoDataFrame,
     expected: GeoDataFrame,
 ):
-    result = group_geometries_by_intersections_recursively(input_gdf)
-
+    result_bulk = group_intersecting_geometries(
+        input_gdf,
+        strategy="bulk",
+    )
+    result_iterative = group_intersecting_geometries(
+        input_gdf,
+        strategy="iterative",
+    )
     assert_frame_equal(
-        result,
+        result_bulk,
+        expected,
+        check_like=True,
+    )
+    assert_frame_equal(
+        result_iterative,
         expected,
         check_like=True,
     )

@@ -5,7 +5,6 @@
 #  SPDX-License-Identifier: MIT
 
 import re
-from typing import Literal
 
 import numpy as np
 import pytest
@@ -150,7 +149,11 @@ def test_merge_lines_with_same_attribute_value_into_one(
 
 
 @pytest.mark.parametrize(
-    ("input_gdf", "expected_gdf", "by_column", "inherit_from"),
+    (
+        "input_gdf",
+        "expected_gdf",
+        "by_column",
+    ),
     [
         # 1.
         (
@@ -167,7 +170,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             ),
             "group",
-            "min_id",
         ),
         # 2.
         (
@@ -180,9 +182,9 @@ def test_merge_lines_with_same_attribute_value_into_one(
             ),
             GeoDataFrame(
                 {
-                    "id": [1],
+                    "id": [2],
                     "group": ["A"],
-                    "old_ids": [(1, 2)],
+                    "old_ids": [(2, 1)],
                 },
                 geometry=[
                     Polygon(
@@ -199,7 +201,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 ],
             ),
             "group",
-            "min_id",
         ),
         # 3.
         (
@@ -222,7 +223,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 ],
             ),
             "group",
-            "min_id",
         ),
         # 4.
         (
@@ -254,7 +254,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 ],
             ),
             None,
-            "min_id",
         ),
         # 5.
         (
@@ -277,7 +276,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 ],
             ),
             "group",
-            "min_id",
         ),
         # 6.
         (
@@ -317,7 +315,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 ],
             ),
             "group",
-            "min_id",
         ),
         # 7.
         (
@@ -358,7 +355,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 ],
             ),
             "group",
-            "most_intersection",
         ),
         # 8.
         (
@@ -401,7 +397,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 ],
             ),
             ["group_first", "group_second"],
-            "most_intersection",
         ),
         # 9.
         (
@@ -425,7 +420,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 }
             ),
             None,
-            "most_intersection",
         ),
         # 10.
         (
@@ -449,7 +443,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 }
             ),
             None,
-            "most_intersection",
         ),
         # 11.
         (
@@ -484,7 +477,6 @@ def test_merge_lines_with_same_attribute_value_into_one(
                 }
             ),
             None,
-            "most_intersection",
         ),
     ],
     ids=[
@@ -505,7 +497,6 @@ def test_dissolve_and_inherit_attributes(
     input_gdf: GeoDataFrame,
     expected_gdf: GeoDataFrame,
     by_column: str | list[str] | None,
-    inherit_from: Literal["min_id", "most_intersection"],
 ):
     input_gdf = input_gdf.set_index("id", drop=True)
     expected_gdf = expected_gdf.set_index("id", drop=True)
@@ -514,7 +505,6 @@ def test_dissolve_and_inherit_attributes(
         input_gdf,
         by_column,
         "old_ids",
-        inherit_from,
     )
 
     assert_frame_equal(

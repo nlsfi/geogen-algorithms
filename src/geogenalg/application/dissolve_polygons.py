@@ -3,7 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from typing import ClassVar, Literal, override
+from typing import ClassVar, override
 
 from geopandas.geodataframe import GeoDataFrame
 
@@ -18,9 +18,8 @@ class DissolvePolygons(BaseAlgorithm):
 
     Optionally input data can be dissolved by column(s).
 
-    Attributes for dissolved polygons are inherited from the original polygon
-    features, by default from the feature which has the most amount of
-    intersection with the dissolved polygon.
+    Attributes for dissolved polygons are inherited from the largest original
+    polygon features.
 
     If a polygon feature is not dissolved, it retains its index. For dissolved
     polygons, the index is formed as a SHA256 hash, where the input is
@@ -33,9 +32,6 @@ class DissolvePolygons(BaseAlgorithm):
     by_column: frozenset[str] = frozenset()
     """Column(s) whose values define the groups to be dissolved. If left empty,
     all input data is considered a single group to dissolve."""
-    inherit_from: Literal["min_id", "most_intersection"] = "most_intersection"
-    """Method for determining which intersecting feature is considered as the
-    representative original polygon to inherit attributes from."""
 
     valid_input_geometry_types: ClassVar = {"Polygon"}
     requires_projected_crs: ClassVar = False
@@ -49,7 +45,6 @@ class DissolvePolygons(BaseAlgorithm):
         dissolved = dissolve_and_inherit_attributes(
             data,
             by_column=list(self.by_column) or None,
-            inherit_from=self.inherit_from,
         )
 
         return hash_index_from_old_ids(
