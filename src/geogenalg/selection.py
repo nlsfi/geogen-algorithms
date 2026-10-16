@@ -11,7 +11,13 @@ from warnings import catch_warnings
 import numpy as np
 from geopandas import GeoDataFrame
 from pandas import Series
-from shapely import MultiLineString, distance, length, line_interpolate_point
+from scipy.spatial import KDTree
+from shapely import (
+    MultiLineString,
+    distance,
+    length,
+    line_interpolate_point,
+)
 from shapely.geometry import LineString, Point
 from shapely.geometry.base import BaseGeometry
 
@@ -211,9 +217,9 @@ def remove_small_holes(input_gdf: GeoDataFrame, hole_threshold: float) -> GeoDat
 
 def reduce_nearby_points_by_selecting(
     input_points_gdf: GeoDataFrame,
-    reference_points_gdf: GeoDataFrame | None,
     distance_threshold: float,
-    priority_column: str | None = None,
+    *,
+    reference_points_gdf: GeoDataFrame | None = None,
 ) -> GeoDataFrame:
     """Reduce nearby points by keeping the higher-priority point within a threshold.
 
@@ -230,66 +236,73 @@ def reduce_nearby_points_by_selecting(
         A GeoDataFrame containing the reduced set of points after applying the
         distance and priority rules.
 
-    Raises:
-    ------
-        GeometryTypeError: If the input GeoDataFrames contain other than point
-              geometries.
-
     """
-    # Use self-comparison if no reference set is provided
-    if reference_points_gdf is None:
-        reference_points_gdf = input_points_gdf
     if input_points_gdf.empty:
-        return input_points_gdf
+        return input_points_gdf.copy()
 
-    if input_points_gdf.geometry.type.unique().tolist() != [
-        "Point"
-    ] or reference_points_gdf.geometry.type.unique().tolist() != ["Point"]:
-        msg = "reduce_nearby_points_by_selecting only supports Point geometries."
-        raise GeometryTypeError(msg)
+    self_referencing = (
+        reference_points_gdf is None or reference_points_gdf is input_points_gdf
+    )
 
-    reference_sindex = reference_points_gdf.sindex
-    to_remove = set()
+    input_coords = np.column_stack(
+        (input_points_gdf.geometry.x, input_points_gdf.geometry.y)
+    )
 
-    gdf = input_points_gdf.copy()
+    if self_referencing:
+        tree = KDTree(input_coords)
+        neighbor_indexes = tree.query_ball_point(input_coords, r=distance_threshold)
 
-    for input_point in gdf.itertuples():
-        input_point_index = input_point.Index
-        if input_point_index in to_remove:
-            continue
+        eliminated = np.zeros(len(input_coords), dtype=bool)
+        retained = []
 
-        input_point_geom = getattr(input_point, str(gdf.geometry.name))
-        possible_matches_idx = list(
-            reference_sindex.intersection(
-                input_point_geom.buffer(distance_threshold).bounds
-            )
-        )
-        possible_matches_indices = np.asarray(possible_matches_idx, dtype=np.intp)
-        possible_matches: GeoDataFrame = reference_points_gdf.iloc[
-            possible_matches_indices
-        ]
+        for i, neighbor in enumerate(neighbor_indexes):
+            if not eliminated[i]:
+                retained.append(i)
+                eliminated[neighbor] = True
 
-        for other_point in possible_matches.itertuples():
-            other_point_index = other_point.Index
-            if other_point_index == input_point_index or other_point_index in to_remove:
+        return input_points_gdf.iloc[retained].copy()
+
+    coords_reference = np.column_stack(
+        (reference_points_gdf.geometry.x, reference_points_gdf.geometry.y)
+    )
+    reference_tree = KDTree(coords_reference)
+    neighbor_indexes = reference_tree.query_ball_point(
+        input_coords,
+        r=distance_threshold,
+    )
+
+    distances, closest_reference_positions = reference_tree.query(input_coords, k=1)
+
+    self_reference_positions = np.where(
+        distances < 1e-6,  # noqa: PLR2004
+        closest_reference_positions,
+        -1,
+    )
+
+    input_labels = input_points_gdf.index.to_numpy()
+    reference_labels = reference_points_gdf.index.to_numpy()
+
+    labels_to_remove = set()
+
+    for input_position, neighbor_reference_positions in enumerate(neighbor_indexes):
+        current_label = input_labels[input_position]
+        self_reference_position = self_reference_positions[input_position]
+
+        for reference_position in neighbor_reference_positions:
+            # Skip if it's the same point
+            if (
+                reference_position == self_reference_position
+                or reference_labels[reference_position] == current_label
+            ):
                 continue
 
-            distance = input_point_geom.distance(
-                getattr(other_point, str(possible_matches.geometry.name))
-            )
+            if reference_labels[reference_position] in labels_to_remove:
+                continue
 
-            prioritize_other = (
-                (getattr(input_point, priority_column))
-                <= getattr(other_point, priority_column)
-                if priority_column is not None
-                else True
-            )
+            labels_to_remove.add(current_label)
+            break
 
-            if distance < distance_threshold and prioritize_other:
-                to_remove.add(input_point_index)
-                break
-
-    return gdf.loc[~gdf.index.isin(to_remove)]
+    return input_points_gdf.loc[~input_points_gdf.index.isin(labels_to_remove)].copy()
 
 
 def remove_close_line_segments(

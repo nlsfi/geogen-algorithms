@@ -389,9 +389,9 @@ def test_simplify_buildings_raises_on_invalid_geometry():
             frozenset(),
             frozenset([1]),
             GeoDataFrame(
-                {"id": [2], "class": [1], "attribute": [4]},
+                {"id": [1], "class": [1], "attribute": [5]},
                 geometry=[
-                    Point(0, 0.5),
+                    Point(0, 0),
                 ],
             ),
         ),
