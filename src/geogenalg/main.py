@@ -4,16 +4,9 @@
 #
 #  SPDX-License-Identifier: MIT
 import os
-from ast import AnnAssign, Assign, ClassDef, Constant, Expr, Name, parse
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from inspect import Parameter, cleandoc, getmro, getsource, signature
-from itertools import pairwise
-from textwrap import dedent
+from inspect import Parameter, signature
 from types import FunctionType
 from typing import Annotated, Any, cast
-
-from annotated_types import BaseMetadata, Ge, Gt, Le, Lt
 
 from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
 from geogenalg.application.generalize_conservation_areas import (
@@ -24,6 +17,15 @@ from geogenalg.application.generalize_railroads import GeneralizeRailroads
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
 from geogenalg.application.generalize_watercourse_lines import (
     GeneralizeWaterCourseLines,
+)
+from geogenalg.utility.cli import (
+    IGNORED_TYPES_FOR_CLI,
+    GeoPackageURI,
+    NamedGeoPackageURI,
+    TransformedTypeInformation,
+    basemetadata_to_string,
+    get_basealgorithm_attribute_docstrings,
+    int_or_str_list,
 )
 
 try:
@@ -36,7 +38,6 @@ except ImportError:
     sys.exit(0)
 
 from geopandas import GeoDataFrame, read_file
-from pandas import Series
 
 from geogenalg.application import BaseAlgorithm
 from geogenalg.application.dissolve_polygons import DissolvePolygons
@@ -68,46 +69,6 @@ GEOPACKAGE_URI_HELP = (
     'examples: "my_geopackage.gpkg" "my_geopackage.gpkg@my_layer_name" '
     '"file.gpkg|layer"'
 )
-
-BASE_ALGORITHM_CLASS_VARS = {
-    "valid_input_geometry_types",
-    "reference_data_schema",
-    "requires_projected_crs",
-}
-
-
-@dataclass(frozen=True)
-class GeoPackageURI:
-    """Custom input type for CLI.
-
-    Allows specifying GeoPackage file and picking a specific layer in one argument.
-    """
-
-    file: str
-    layer_name: str | None
-
-
-@dataclass(frozen=True)
-class NamedGeoPackageURI:
-    """Custom input type for CLI.
-
-    Allows specifying a GeoPackageURI by name, to be used as reference data in
-    algorithms.
-    """
-
-    name: str
-    uri: GeoPackageURI
-
-
-@dataclass(frozen=True)
-class TransformedTypeInformation:
-    """Class to describe how to transform an unsupported type to a supported one."""
-
-    transformed_type: type
-    parser: Callable[[str], Any] | None = None
-    custom_default: Any | None = None
-    extra_parse_help: str | None = None
-    transform_function: Callable[[Any], Any] | None = None
 
 
 def geopackage_uri(value: str) -> GeoPackageURI:
@@ -201,136 +162,6 @@ def input_geopackage_uris(value: str) -> list[GeoPackageURI]:
     return [geopackage_uri(uri) for uri in value.split("+")]
 
 
-def int_or_str_list(value: str) -> int | str:
-    """Parse string into an int if possible, keep as is otherwise.
-
-    If value is encoded as f.e. str:10 the returned type will be a string
-    "10".
-
-    Args:
-    ----
-        value: string to parse
-
-    Returns:
-    -------
-        Parsed int or string.
-
-    """
-    if value.startswith("str:") and len(value) > 4:  # noqa: PLR2004
-        integer_part = value[4:]
-
-        try:
-            # This might be redundant, maybe you could do just some kind of nop
-            # call here, but I got worried that could be optimized out, which
-            # is the reason for the funny looking assignments here.
-            integer = int(integer_part)
-            return str(integer)
-        except ValueError:
-            return value
-
-    try:
-        return int(value)
-    except ValueError:
-        return value
-
-
-def get_class_attribute_docstrings(cls: type[Any]) -> dict[str, str]:
-    """Get any docstrings placed after attribute assignments in a class body.
-
-    Adapted from https://davidism.com/attribute-docstrings/ on 2025-10-24 (MIT
-    License).
-
-    Returns
-    -------
-        Dictionary containing docstring for each attribute found in class.
-
-    Raises
-    ------
-        TypeError: If input object is not a class.
-
-    """
-    cls_node = parse(dedent(getsource(cls))).body[0]
-
-    if not isinstance(cls_node, ClassDef):
-        msg = "Given object was not a class."
-        raise TypeError(msg)
-
-    out = {}
-
-    # Consider each pair of nodes.
-    for a, b in pairwise(cls_node.body):
-        # Must be an assignment then a constant string.
-        if (
-            not isinstance(a, Assign | AnnAssign)
-            or not isinstance(b, Expr)
-            or not isinstance(b.value, Constant)
-            or not isinstance(b.value.value, str)
-        ):
-            continue
-
-        doc = cleandoc(b.value.value)
-
-        targets = a.targets if isinstance(a, Assign) else [a.target]
-
-        for target in targets:
-            # Must be assigning to a plain name.
-            if not isinstance(target, Name):
-                continue
-
-            out[target.id] = doc
-
-    return out
-
-
-def get_basealgorithm_attribute_docstrings(cls: type[BaseAlgorithm]) -> dict[str, str]:
-    """Get docstrings of a BaseAlgorithm subclass, including parent algorithm classes.
-
-    Returns
-    -------
-        Dictionary containing docstring for each attribute found in class.
-
-    """
-    output: dict[str, str] = {}
-    base_classes = getmro(cls)
-    for base_class in base_classes:
-        if not issubclass(base_class, BaseAlgorithm):
-            continue
-
-        if base_class == cls:
-            continue
-
-        output |= get_class_attribute_docstrings(base_class)
-
-    output |= get_class_attribute_docstrings(cls)
-
-    return {k: v for k, v in output.items() if k not in BASE_ALGORITHM_CLASS_VARS}
-
-
-def basemetadata_to_string(data: BaseMetadata) -> str:
-    """Get displayable string out of pydantic metadata object.
-
-    Returns
-    -------
-        Displayable string.
-
-    Raises
-    ------
-        NotImplementedError: if function is not implemented for given object type.
-
-    """
-    if isinstance(data, Ge):
-        return f"greater than or equal to {data.ge}"
-    if isinstance(data, Gt):
-        return f"greater than {data.gt}"
-    if isinstance(data, Le):
-        return f"less than or equal to {data.le}"
-    if isinstance(data, Lt):
-        return f"less than {data.lt}"
-
-    msg = f"Function not implemented for {type(data)}"
-    raise NotImplementedError(msg)
-
-
 MultipleGeoPackagesArgument = Annotated[
     GeoPackageURI,
     typer.Argument(
@@ -373,6 +204,9 @@ ReferenceGeoPackageList = Annotated[
         ),
     ),
 ]
+
+
+app = typer.Typer()
 
 
 def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
@@ -440,9 +274,6 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
         output.to_file(output_geopackage.file, layer=output_geopackage.layer_name)
 
     return _command_function
-
-
-app = typer.Typer()
 
 
 def build_app() -> None:
@@ -517,10 +348,6 @@ def build_app() -> None:
             ),
         ]
 
-        # This should include any parameter types which are unnecessary/too
-        # complex to support entering in the CLI.
-        ignored_types_for_cli = (Mapping[str, Callable[[Series], Any] | str] | None,)
-
         # Transform certain types defined on the algorithm-level to a helper
         # type with a custom parser.
         transformed_types_for_cli: dict[type, TransformedTypeInformation] = {
@@ -552,7 +379,7 @@ def build_app() -> None:
         for field_name, field_info in alg.model_fields.items():
             type_annotation = field_info.annotation
 
-            if type_annotation in ignored_types_for_cli:
+            if type_annotation in IGNORED_TYPES_FOR_CLI:
                 continue
 
             docstring = docstrings[field_name]
