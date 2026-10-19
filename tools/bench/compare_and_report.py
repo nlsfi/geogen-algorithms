@@ -22,6 +22,7 @@ class BenchmarkDiff:
     head_mean_duration: float
     delta_percentage: float
     status: str
+    passes_threshold: bool
 
 
 def format_duration(seconds: float) -> str:
@@ -42,7 +43,7 @@ def extract_means(report_path: Path) -> dict[str, float]:
     }
 
 
-def get_meaningful_diffs(
+def get_diffs(
     base_stats: dict[str, float],
     head_stats: dict[str, float],
     threshold_percentage: float,
@@ -56,13 +57,12 @@ def get_meaningful_diffs(
             0.0 if base_mean == 0 else ((head_mean - base_mean) / base_mean) * 100.0
         )
 
-        if abs(delta_percentage) < threshold_percentage:
-            continue
-
         if delta_percentage < 0:
             status = "![](https://img.shields.io/badge/-Faster-238636)"
         else:
             status = "![](https://img.shields.io/badge/-Slower-da3633)"
+
+        passes_threshold = abs(delta_percentage) >= threshold_percentage
 
         diffs.append(
             BenchmarkDiff(
@@ -71,6 +71,7 @@ def get_meaningful_diffs(
                 head_mean_duration=head_mean,
                 delta_percentage=delta_percentage,
                 status=status,
+                passes_threshold=passes_threshold,
             )
         )
 
@@ -79,35 +80,57 @@ def get_meaningful_diffs(
 
 
 def render_markdown(
-    diffs: Sequence[BenchmarkDiff],
+    all_diffs: Sequence[BenchmarkDiff],
     base_ref: str,
     head_ref: str,
     threshold_percentage: float,
 ) -> str:
-    header = "## Benchmark Change Report\n"
-
-    if not diffs:
+    def _write_columns() -> str:
         return (
-            f"{header}\n"
-            f"Comparing `{head_ref}` against `{base_ref}`:\n\n"
-            f"**No benchmarks changed by more than ±{threshold_percentage}%**."
+            "| Benchmark | Base Mean | PR Mean | Change | Status |\n"
+            "| :--- | :--- | :--- | :--- | :--- |"
         )
 
-    lines = [
-        header,
-        f"Comparing `{head_ref}` against `{base_ref}` "
-        f"(Threshold ±{threshold_percentage})\n",
-        "| Benchmark | Base Mean | PR Mean | Change | Status |",
-        "| :--- | :--- | :--- | :--- | :--- |",
-    ]
-
-    for diff in diffs:
+    def _write_row(diff: BenchmarkDiff) -> str:
         sign = "+" if diff.delta_percentage > 0 else ""
-        lines.append(
+
+        return (
             f"| `{diff.name}` | {format_duration(diff.base_mean_duration)} | "
             f"{format_duration(diff.head_mean_duration)} | "
             f"{sign}{diff.delta_percentage:.2f}% | {diff.status} |"
         )
+
+    header = "## Benchmark Change Report\n\n"
+    header += (
+        f"Comparing `{head_ref}` against `{base_ref}` "
+        "f(threshold at ±{threshold_percentage})\n"
+    )
+
+    passing_diffs = [diff for diff in all_diffs if diff.passes_threshold]
+    non_passing_diffs = [diff for diff in all_diffs if not diff.passes_threshold]
+
+    lines = [
+        header,
+    ]
+
+    if not passing_diffs:
+        lines.append(
+            f"**No benchmarks changed by more than ±{threshold_percentage}%**.",
+        )
+    else:
+        lines.append("Passes threshold:\n")
+        lines.append(_write_columns())
+        for diff in passing_diffs:
+            lines.append(_write_row(diff))  # noqa: PERF401
+
+    if non_passing_diffs:
+        lines.append("\n<details>")
+        lines.append("<summary><strong>Does not pass threshold</strong></summary>\n")
+        lines.append(_write_columns())
+        for diff in non_passing_diffs:
+            lines.append(_write_row(diff))  # noqa: PERF401
+        lines.append("</details>")
+
     return "\n".join(lines)
 
 
@@ -134,7 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     base_stats = extract_means(args.base)
     head_stats = extract_means(args.head)
-    diffs = get_meaningful_diffs(base_stats, head_stats, args.threshold)
+    diffs = get_diffs(base_stats, head_stats, args.threshold)
     report = render_markdown(diffs, args.base_ref, args.head_ref, args.threshold)
 
     if args.output:
