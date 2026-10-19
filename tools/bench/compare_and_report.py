@@ -103,7 +103,7 @@ def render_markdown(
     header = "## Benchmark Change Report\n\n"
     header += (
         f"Comparing `{head_ref}` against `{base_ref}` "
-        "f(threshold at ±{threshold_percentage})\n"
+        f"(threshold at ±{threshold_percentage})\n"
     )
 
     passing_diffs = [diff for diff in all_diffs if diff.passes_threshold]
