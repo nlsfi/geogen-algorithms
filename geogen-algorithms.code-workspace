@@ -5,7 +5,7 @@
       "mikestead.dotenv",
       "tamasfe.even-better-toml",
       "ms-python.python",
-      "astral-sh.ty"
+      "astral-sh.ty",
       "ms-python.flake8",
       "charliermarsh.ruff",
       "davidanson.vscode-markdownlint"
