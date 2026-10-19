@@ -25,7 +25,7 @@ from geogenalg.utility.cli import (
     TransformedTypeInformation,
     basemetadata_to_string,
     get_basealgorithm_attribute_docstrings,
-    int_or_str_list,
+    try_parse_int,
 )
 
 try:
@@ -355,7 +355,7 @@ def build_app() -> None:
             # transformed to frozensets in _function_generator()
             frozenset[int | str]: TransformedTypeInformation(
                 transformed_type=list[Any],
-                parser=int_or_str_list,
+                parser=try_parse_int,
                 custom_default=frozenset(),
                 extra_parse_help=(
                     "Either an integer or a string. Can be specified multiple times. "

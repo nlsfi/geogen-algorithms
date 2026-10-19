@@ -16,7 +16,7 @@ from geogenalg.utility.cli import (
     dump_cli_parameters,
     get_basealgorithm_attribute_docstrings,
     get_class_attribute_docstrings,
-    int_or_str_list,
+    try_parse_int,
 )
 
 
@@ -106,8 +106,8 @@ def test_get_basealgorithm_docstrings():
         "negative",
     ],
 )
-def test_int_or_str_list(input_string: str, expected: NamedGeoPackageURI):
-    assert int_or_str_list(input_string) == expected
+def test_try_parse_int(input_string: str, expected: NamedGeoPackageURI):
+    assert try_parse_int(input_string) == expected
 
 
 def test_dump_cli_parameters():

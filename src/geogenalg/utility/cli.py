@@ -68,7 +68,7 @@ class TransformedTypeInformation:
     transform_function: Callable[[Any], Any] | None = None
 
 
-def int_or_str_list(value: str) -> int | str:
+def try_parse_int(value: str) -> int | str:
     """Parse string into an int if possible, keep as is otherwise.
 
     If value is encoded as f.e. str:10 the returned type will be a string
@@ -83,7 +83,7 @@ def int_or_str_list(value: str) -> int | str:
         Parsed int or string.
 
     """
-    if value.startswith("str:") and len(value) > 4:  # noqa: PLR2004
+    if value.startswith("str:"):
         integer_part = value[4:]
 
         try:
