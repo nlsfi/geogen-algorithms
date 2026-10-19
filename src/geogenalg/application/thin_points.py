@@ -4,7 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from typing import ClassVar, cast
+from typing import ClassVar
 
 import numpy as np
 from geopandas import GeoDataFrame
@@ -16,7 +16,7 @@ from geogenalg.application import BaseAlgorithm, supports_identity
 
 
 @supports_identity
-class GeneralizeReducePoints(BaseAlgorithm):
+class ThinPoints(BaseAlgorithm):
     """Generalizes points by spatial thinning.
 
     No reference data used.
@@ -73,4 +73,4 @@ class GeneralizeReducePoints(BaseAlgorithm):
             if not np.any(retained_mask[neighbors]):
                 retained_mask[idx] = True
 
-        return cast("GeoDataFrame", data.iloc[retained_mask].copy())
+        return data.iloc[retained_mask].copy()

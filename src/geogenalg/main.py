@@ -14,11 +14,11 @@ from geogenalg.application.generalize_conservation_areas import (
 )
 from geogenalg.application.generalize_contours import GeneralizeContours
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
-from geogenalg.application.generalize_reduce_points import GeneralizeReducePoints
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
 from geogenalg.application.generalize_watercourse_lines import (
     GeneralizeWaterCourseLines,
 )
+from geogenalg.application.thin_points import ThinPoints
 from geogenalg.utility.cli import (
     IGNORED_TYPES_FOR_CLI,
     GeoPackageURI,
@@ -305,7 +305,7 @@ def build_app() -> None:
         "watercourse_areas": GeneralizeWaterCourseAreas,
         "watercourse_lines": GeneralizeWaterCourseLines,
         "water_areas": GeneralizeWaterAreas,
-        "reduce_points": GeneralizeReducePoints,
+        "thin_points": ThinPoints,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
