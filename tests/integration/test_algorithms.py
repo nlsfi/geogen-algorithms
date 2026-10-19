@@ -464,12 +464,12 @@ def test_generalize_tall_building_areas(
     ).run()
 
 
-def test_generalize_reduce_points(
-    reduce_points_input: TestInputData,
-    reduce_points_algorithm: BaseAlgorithm,
+def test_thin_points(
+    thin_points_input: TestInputData,
+    thin_points_algorithm: BaseAlgorithm,
 ) -> None:
     IntegrationTest(
-        input_data=reduce_points_input,
+        input_data=thin_points_input,
         check_missing_reference=False,
-        algorithm=reduce_points_algorithm,
+        algorithm=thin_points_algorithm,
     ).run()

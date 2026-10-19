@@ -24,7 +24,6 @@ from geogenalg.application.generalize_polygons_to_points import (
 )
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
-from geogenalg.application.generalize_reduce_points import GeneralizeReducePoints
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
@@ -35,6 +34,7 @@ from geogenalg.application.generalize_watercourse_areas import (
 from geogenalg.application.generalize_watercourse_lines import (
     GeneralizeWaterCourseLines,
 )
+from geogenalg.application.thin_points import ThinPoints
 from geogenalg.testing import GeoPackagePath, TestInputData
 
 
@@ -552,17 +552,6 @@ def address_points_input(algorithm_testdata_path: Path) -> TestInputData:
     )
 
 
-def reduce_points_input(algorithm_testdata_path: Path) -> TestInputData:
-    gpkg = GeoPackagePath(algorithm_testdata_path / "block_fields.gpkg")
-    return TestInputData(
-        input_uri=[
-            gpkg.to_input("block_fields"),
-        ],
-        control_uri=gpkg.to_input("control"),
-        unique_id_column="kmtk_id",
-    )
-
-
 @pytest.fixture
 def address_points_algorithm() -> GeneralizeAddressPoints:
     return GeneralizeAddressPoints(
@@ -582,7 +571,20 @@ def address_points_algorithm() -> GeneralizeAddressPoints:
     )
 
 
-def reduce_points_algorithm() -> GeneralizeReducePoints:
-    return GeneralizeReducePoints(
+@pytest.fixture
+def thin_points_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "block_fields.gpkg")
+    return TestInputData(
+        input_uri=[
+            gpkg.to_input("block_fields"),
+        ],
+        control_uri=gpkg.to_input("control"),
+        unique_id_column="kmtk_id",
+    )
+
+
+@pytest.fixture
+def thin_points_algorithm() -> ThinPoints:
+    return ThinPoints(
         min_distance=75.0,
     )
