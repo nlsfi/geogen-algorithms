@@ -119,13 +119,15 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         data: GeoDataFrame,
     ) -> tuple[GeoDataFrame, GeoDataFrame, MultiPoint]:
         shoreline_gdf = data.loc[data.geometry.geom_type == "LineString"].copy()
+        shoreline_gdf.geometry = shoreline_gdf.geometry.force_2d()
+
         if not shoreline_gdf.empty:
             # Extract out any points which are found in the input (Polygon)
             # data, but not the shoreline LineString data. This allows to
             # determine non-shoreline vertices (e.g. territorial water borders
             # in case of sea areas) and skip smoothing them later.
             segments = get_segments_in_polygon_boundary_but_not_in_lines(
-                data,
+                data.geometry.force_2d(),
                 shoreline_gdf,
             )
 
