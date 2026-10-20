@@ -9,7 +9,7 @@ from typing import Literal
 from warnings import warn
 
 import numpy as np
-from geopandas import GeoDataFrame
+from geopandas import GeoDataFrame, GeoSeries
 from networkx.classes.graph import Graph
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
@@ -994,7 +994,7 @@ def add_contiguous_lines_information(  # noqa: PLR0913
 
 
 def get_segments_in_polygon_boundary_but_not_in_lines(
-    polygons: GeoDataFrame,
+    polygons: GeoDataFrame | GeoSeries,
     lines: GeoDataFrame,
 ) -> GeoDataFrame:
     """Find line segments present in polygons but not lines.
