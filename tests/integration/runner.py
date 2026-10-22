@@ -13,6 +13,7 @@ from typing import Any, Literal
 from uuid import uuid4
 from warnings import warn
 
+import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
@@ -331,6 +332,17 @@ class IntegrationTest:
 
         if control.has_z.all() != result.has_z.all():
             msg = "Control or result data has z when other does not."
+            raise AssertionError(msg)
+
+        control_coords = control.geometry.get_coordinates(include_z=True).to_numpy()
+        result_coords = result.geometry.get_coordinates(include_z=True).to_numpy()
+
+        if np.isnan(result_coords).any():
+            msg = "Result data contains geometries with NaN coordinates."
+            raise AssertionError(msg)
+
+        if np.isnan(control_coords).any():
+            msg = "Control data contains geometries with NaN coordinates."
             raise AssertionError(msg)
 
     def _check_test_data_geometries(
