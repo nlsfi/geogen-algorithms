@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 from collections.abc import Callable
+from typing import Literal
 
 import pytest
 from geopandas.geodataframe import GeoDataFrame
@@ -49,6 +50,36 @@ def test_merge_connecting_lines_by_attribute(
 
 
 @pytest.mark.benchmark
+@pytest.mark.parametrize("grouping_strategy", ["iterative", "bulk"])
+@pytest.mark.parametrize(
+    ("polygon_count"),
+    [
+        (100),
+        (1000),
+        (5000),
+        (10000),
+    ],
+)
+def test_dissolve_and_inherit_attributes_dense(
+    benchmark: BenchmarkFixture,
+    make_overlapping_polygons: Callable[..., GeoDataFrame],
+    polygon_count: int,
+    grouping_strategy: Literal["iterative", "bulk"],
+):
+    gdf = make_overlapping_polygons(polygon_count, spacing=0.1)
+
+    result = benchmark(
+        dissolve_and_inherit_attributes,
+        gdf,
+        "category",
+        grouping_strategy=grouping_strategy,
+    )
+
+    assert sum(len(ids) for ids in result["old_ids"]) == polygon_count
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize("grouping_strategy", ["iterative", "bulk"])
 @pytest.mark.parametrize(
     ("polygon_count"),
     [
@@ -64,13 +95,19 @@ def test_merge_connecting_lines_by_attribute(
         "10000",
     ],
 )
-def test_dissolve_and_inherit_attributes(
+def test_dissolve_and_inherit_attributes_sparse(
     benchmark: BenchmarkFixture,
-    make_overlapping_polygons: Callable[[int], GeoDataFrame],
+    make_overlapping_polygons: Callable[..., GeoDataFrame],
     polygon_count: int,
+    grouping_strategy: Literal["iterative", "bulk"],
 ):
-    gdf = make_overlapping_polygons(polygon_count)
+    gdf = make_overlapping_polygons(polygon_count, spacing=10)
 
-    result = benchmark(dissolve_and_inherit_attributes, gdf, "category")
+    result = benchmark(
+        dissolve_and_inherit_attributes,
+        gdf,
+        "category",
+        grouping_strategy=grouping_strategy,
+    )
 
     assert sum(len(ids) for ids in result["old_ids"]) == polygon_count
