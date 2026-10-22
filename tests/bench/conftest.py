@@ -82,6 +82,7 @@ def make_point_gdf():
     return _factory
 
 
+@pytest.fixture
 def make_overlapping_polygons():
     def _factory(
         polygon_count: int,
