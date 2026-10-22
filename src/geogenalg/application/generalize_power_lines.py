@@ -175,7 +175,7 @@ class GeneralizePowerLines(BaseAlgorithm):
         gdf = gdf.loc[get_contiguous_lengths(gdf) > self.length_threshold]
         gdf = connect_lines_to_polygon_centroids(gdf, substations)
 
-        return assign_nearest_z(data, gdf)
+        return assign_nearest_z(data, gdf, overwrite_z=True)
 
     def _merge_parallel_lines(
         self,
