@@ -7,7 +7,8 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from tempfile import NamedTemporaryFile
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from geopandas.testing import assert_geodataframe_equal
 from pytest_benchmark.fixture import BenchmarkFixture
@@ -58,8 +59,8 @@ class AlgorithmBenchmark:
 
         # Save result to temp file and read again as a GDF so that column
         # dtypes etc. match with the control
-        with NamedTemporaryFile(suffix=".gpkg", delete=True) as temp_file:
-            output_path = temp_file.name
+        with TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "output.gpkg"
             result.to_file(
                 output_path,
                 layer="result",
