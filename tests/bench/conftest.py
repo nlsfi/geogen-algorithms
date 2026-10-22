@@ -7,6 +7,8 @@
 
 import numpy as np
 import pytest
+from geopandas import GeoDataFrame
+from shapely import points
 from shapely.geometry import LineString
 
 
@@ -48,5 +50,33 @@ def make_linestring():
         coords = np.cumsum(steps, axis=0)
 
         return LineString(coords)
+
+    return _factory
+
+
+@pytest.fixture
+def make_point_gdf():
+    def _factory(
+        point_count: int,
+        seed: int = 0,
+        spacing: float = 2.0,
+        has_z: bool = False,
+    ) -> GeoDataFrame:
+        rng = np.random.default_rng(seed=seed)
+
+        extent = spacing * np.sqrt(point_count)
+        coords = rng.uniform(0.0, extent, size=(point_count, 2))
+
+        if has_z:
+            z = rng.uniform(10.0, 500.0, size=(point_count, 1))
+            coords = np.hstack([coords, z])
+
+        geometries = points(coords)
+
+        return GeoDataFrame(
+            {"category": rng.integers(0, 3, size=point_count)},
+            geometry=geometries,
+            crs="EPSG:3857",
+        )
 
     return _factory
