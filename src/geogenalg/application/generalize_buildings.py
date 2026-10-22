@@ -307,6 +307,7 @@ class GeneralizeBuildings(BaseAlgorithm):
         # Dissolve the expanded narrow parts and already large enough parts
         result_gdf = combine_gdfs([simplified_gdf, narrow_parts_gdf])
         result_gdf["_temp_id"] = result_gdf.index
+        result_gdf = self._validate_polygon_geometries(result_gdf)
         result_gdf = explode_and_hash_id(result_gdf, "buildings")
         result_gdf = self._validate_polygon_geometries(result_gdf)
         result_gdf = dissolve_and_inherit_attributes(
