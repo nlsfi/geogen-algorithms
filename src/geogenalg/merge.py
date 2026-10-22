@@ -3,20 +3,23 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-import operator
 from typing import Literal, cast
 
 import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
-from pandas import DataFrame, Index, Series
+from pandas import Index, Series, factorize
 from shapely import (
     GeometryCollection,
     MultiPolygon,
     Polygon,
+    STRtree,
+    area,
+    get_dimensions,
+    intersection,
     line_merge,
     multilinestrings,
+    union_all,
 )
-from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.analyze import group_intersecting_geometries
@@ -122,11 +125,46 @@ def merge_connecting_lines_by_attribute(
     return result
 
 
-def dissolve_and_inherit_attributes(  # noqa: C901
+def _separate_point_touching_polygons(
+    group_geoms: np.ndarray,
+    positions: np.ndarray,
+) -> tuple[np.ndarray, list[int], BaseGeometry | None]:
+    """dissolve_and_inherit_attributes() helper.
+
+    Identifies which polygons in a group touch others only by points.
+    """
+    geom_count = len(group_geoms)
+    if geom_count == 2:  # noqa: PLR2004
+        # No need for further processing, we already know these can't be
+        # merged.
+        return np.empty(0, dtype=int), list(positions), None
+
+    tree = STRtree(group_geoms)
+    left, right = tree.query(group_geoms, predicate="intersects")
+    mask = left != right
+
+    left = left[mask]
+    right = right[mask]
+
+    intersections = intersection(group_geoms[left], group_geoms[right])
+    has_edge_or_overlap = get_dimensions(intersections) > 0  # not a (multi)point
+
+    is_connected = np.zeros(geom_count, dtype=bool)
+    is_connected[left[has_edge_or_overlap]] = True
+
+    unmerged_positions = list(positions[~is_connected])
+    merged_positions = positions[is_connected]
+    union = union_all(group_geoms[is_connected]) if len(merged_positions) > 0 else None
+
+    return merged_positions, unmerged_positions, union
+
+
+def dissolve_and_inherit_attributes(  # noqa: PLR0915
     input_gdf: GeoDataFrame,
     by_column: str | list[str] | None = None,
     old_ids_column: str = "old_ids",
-    inherit_from: Literal["min_id", "most_intersection"] = "most_intersection",
+    *,
+    grouping_strategy: Literal["iterative", "bulk"] = "iterative",
 ) -> GeoDataFrame:
     """Dissolve polygons and inherit attributes from a representative original polygon.
 
@@ -140,6 +178,11 @@ def dissolve_and_inherit_attributes(  # noqa: C901
             containing a tuple of the cluster's old identifiers.
         inherit_from: Method for determining which intersecting feature is considered as
             the representative original polygon to inherit attributes from.
+        grouping_strategy: `iterative` performs a BFS directly on the spatial
+            index, whereas `bulk` constructs an graph and finds connected
+            components. Generally speaking `bulk` may be faster with sparser
+            datasets with fewer intersecting geometries, whereas `iterative` may be
+            faster with dense datasets with lots of intersections.
 
     Returns:
     -------
@@ -160,144 +203,135 @@ def dissolve_and_inherit_attributes(  # noqa: C901
         return copy_gdf_as_empty(input_gdf, add_columns={old_ids_column: "object"})
 
     gdf = input_gdf.copy()
-
     old_index_name = gdf.index.name
     gdf.index.name = None
 
-    # Create a dummy column to get every row to the same group if no column(s)
-    # was given.
-    by = np.zeros(len(gdf), dtype="int64") if by_column is None else by_column
+    if by_column is None:
+        attribute_group_indexes = [np.arange(len(gdf))]
+    else:
+        attribute_group_indexes = [
+            idx
+            for idx in gdf.groupby(by=by_column, sort=False).indices.values()
+            if len(idx) > 0
+        ]
 
-    # This function works by first grouping rows by the given column(s) (or all
-    # in the same group if nothing was given). Then we group rows by their
-    # geometries such that rows which intersect each other are grouped
-    # together. Those rows are then dissolved together and their geometries
-    # combined.
+    if not attribute_group_indexes:
+        return copy_gdf_as_empty(input_gdf, add_columns={old_ids_column: "object"})
 
-    # The reason for having special handling for dissolving instead of using
-    # GeoPandas dissolve and exploding features out of the multipolygon is that
-    # if disjoint features are added as parts of a multipolygon their vertex
-    # order may be changed, which may affect simplify etc. results, but more
-    # importantly index handling when the geometry is used to hash a new index.
+    next_group = 0
+    geom_group_ids = []
 
-    def most_intersection_sort(geoms: Series, union: BaseGeometry) -> Series:
-        return geoms.apply(lambda geom: union.intersection(geom).area)
-
-    def dissolve_geometry_group(
-        geometry_group: DataFrame,
-        **_kwargs: object,
-    ) -> GeoDataFrame:
-        geometry_group = cast("GeoDataFrame", geometry_group)
-        union = geometry_group.geometry.union_all()
-
-        used_geometry_group = geometry_group
-        single_touching_point_features = copy_gdf_as_empty(
-            geometry_group,
-            add_columns={old_ids_column: "object"},
+    for indexes in attribute_group_indexes:
+        grouped = group_intersecting_geometries(
+            gdf.iloc[indexes],
+            strategy=grouping_strategy,
         )
 
+        codes, _ = factorize(grouped["_geometry_group"].to_numpy(), sort=False)
+        geom_group_ids.append(codes + next_group)
+        next_group += codes.max() + 1
+
+    # We sort features into a contiguous array which allows for fast slicing
+    # later on
+    feature_positions = np.concatenate(attribute_group_indexes)
+    geom_group_ids = np.concatenate(geom_group_ids)
+
+    order = np.argsort(geom_group_ids, kind="stable")
+    feature_positions = feature_positions[order]
+    geom_group_ids = geom_group_ids[order]
+
+    geoms = gdf.geometry.to_numpy()[feature_positions]
+    index_values = gdf.index.to_numpy()[feature_positions]
+
+    # Geometry group slice boundaries
+    geom_group_sizes = np.bincount(geom_group_ids)
+    geom_group_offsets = np.concatenate(([0], np.cumsum(geom_group_sizes)))
+
+    single_geom_groups = np.flatnonzero(geom_group_sizes == 1)
+    single_geom_positions = geom_group_offsets[single_geom_groups]
+
+    representative_feature_positions: list[int] = []
+    out_geoms: list = []
+    out_old_ids: list[tuple] = []
+    out_geom_groups: list[int] = []
+
+    # Union geometry groups with more than one member
+    for group_id in np.flatnonzero(geom_group_sizes > 1):
+        start, end = geom_group_offsets[group_id], geom_group_offsets[group_id + 1]
+        group_geoms = geoms[start:end]
+
+        # group_intersecting_geometries groups purely by intersection. This
+        # means there may be polygons intersect another polygon in the group,
+        # but only at points (no shared edge or overlap), which means we cannot
+        # dissolve the group into a single polygon. Thus we keep track of what
+        # geometries at what indices we can actually merge.
+        merged_positions = np.arange(start, end)
+        unmerged_positions: list[int] = []
+
+        union = union_all(group_geoms)
+
+        # Union returns MultiPolygon -> we need to find which polygons touch
+        # another such that the whole group can't be dissolved
         if isinstance(union, MultiPolygon):
-            # This means we have now have polygons which intersect some other
-            # polygon in the group, but only by one point which means the
-            # geometries can't be dissolved into a single polygon. We have to
-            # extract out the features which will not dissolve into the union
-            # and keep them as separate features.
-            union_without_feature = geometry_group.geometry.apply(
-                union.difference,
-            )
-            intersection = geometry_group.geometry.intersection(
-                cast("GeoSeries", union_without_feature)
-            )
-            single_intersection_point_only = intersection.apply(
-                lambda geom: isinstance(geom, Point),
-            )
-
-            used_geometry_group = geometry_group.loc[~single_intersection_point_only]
-
-            single_touching_point_features = geometry_group.loc[
-                single_intersection_point_only
-            ].copy()
-
-            single_touching_point_features[old_ids_column] = (
-                single_touching_point_features.index.to_series().apply(
-                    lambda idx: (idx,)
+            merged_positions, unmerged_positions, union = (
+                _separate_point_touching_polygons(
+                    group_geoms,
+                    merged_positions,
                 )
             )
 
-            if used_geometry_group.empty:
-                return single_touching_point_features
+        if len(merged_positions) > 0:
+            areas = area(geoms[merged_positions])
+            ranking = np.argsort(-areas, kind="stable")
+            ranked = merged_positions[ranking]
 
-            union = used_geometry_group.union_all()
+            representative_feature_positions.append(ranked[0])
 
-        match inherit_from:
-            case "min_id":
-                used_geometry_group = used_geometry_group.sort_index(
-                    ascending=True,
-                )
-            case "most_intersection":
-                used_geometry_group = used_geometry_group.sort_values(
-                    by=cast("str", used_geometry_group.geometry.name),
-                    key=lambda geom: most_intersection_sort(geom, union),
-                    ascending=False,
-                )
+            out_geoms.append(union)
+            out_old_ids.append(tuple(index_values[ranked]))
+            out_geom_groups.append(int(group_id))
 
-        old_ids = tuple(used_geometry_group.index)
+        for pos in unmerged_positions:
+            representative_feature_positions.append(pos)
 
-        dissolved_group = used_geometry_group[:1].copy()
-        dissolved_group[old_ids_column] = [old_ids]
-        dissolved_group.geometry = [union]
+            out_geoms.append(geoms[pos])
+            out_old_ids.append((index_values[pos],))
+            out_geom_groups.append(int(group_id))
 
-        if not single_touching_point_features.empty:
-            dissolved_group = combine_gdfs(
-                [
-                    dissolved_group,
-                    single_touching_point_features,
-                ]
-            )
-
-        return dissolved_group
-
-    def dissolve_attribute_group(
-        group: DataFrame,
-        **_kwargs: object,
-    ) -> GeoDataFrame:
-        group = cast("GeoDataFrame", group)
-        grouped_by_geom = group_intersecting_geometries(group)
-
-        return cast(
-            "GeoDataFrame",
-            grouped_by_geom.groupby(
-                by="_geometry_group",
-                as_index=False,
-                level=None,
-                sort=False,
-            )[grouped_by_geom.columns]
-            .apply(
-                dissolve_geometry_group,
-                include_groups=False,
-            )
-            .drop("_geometry_group", axis=1),
-        )
-
-    attribute_groups = cast(
-        "GeoDataFrame",
-        gdf.groupby(
-            by=by,
-            as_index=False,
-            level=None,
-            sort=False,
-        )[gdf.columns].apply(
-            dissolve_attribute_group,
-            include_groups=False,
-        ),
+    all_representative_feature_positions = np.concatenate(
+        [
+            single_geom_positions,
+            np.asarray(representative_feature_positions, dtype="int64"),
+        ],
+    )
+    all_geom_groups = np.concatenate(
+        [
+            single_geom_groups,
+            np.asarray(out_geom_groups, dtype="int64"),
+        ],
     )
 
-    attribute_groups.index = Index(
-        attribute_groups[old_ids_column].apply(operator.itemgetter(0))
-    )
-    attribute_groups.index.name = old_index_name
+    all_geoms = np.empty(len(all_representative_feature_positions), dtype=object)
+    all_geoms[: len(single_geom_positions)] = geoms[single_geom_positions]
+    all_geoms[len(single_geom_positions) :] = out_geoms
+    all_old_ids = [(idx,) for idx in index_values[single_geom_positions]] + out_old_ids
 
-    return attribute_groups
+    final = np.argsort(all_geom_groups, kind="stable")
+    final_rep_feature_positions = all_representative_feature_positions[final]
+
+    result = gdf.iloc[feature_positions[final_rep_feature_positions]].copy()
+    result[old_ids_column] = Series(
+        [all_old_ids[i] for i in final],
+        index=result.index,
+        dtype="object",
+    )
+    result = result.set_geometry(
+        GeoSeries(all_geoms[final], index=result.index, crs=gdf.crs),
+        crs=gdf.crs,
+    )
+    result.index = Index(index_values[final_rep_feature_positions], name=old_index_name)
+
+    return result
 
 
 def buffer_and_merge_polygons(
