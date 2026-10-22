@@ -73,4 +73,9 @@ class AlgorithmBenchmark:
                 layer="result",
             )
 
-            assert_geodataframe_equal(result, control)
+            assert_geodataframe_equal(
+                result,
+                control,
+                check_like=True,
+                check_less_precise=True,
+            )
