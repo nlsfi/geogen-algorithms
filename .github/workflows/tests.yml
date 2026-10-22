@@ -32,6 +32,24 @@ jobs:
         run: |
           .venv/bin/python -m pytest --cov --cov-report=xml
 
+      - name: Rerun integration tests with reporting
+        if: failure()
+        continue-on-error: true
+        env:
+          GEOGENALG_TEST_REPORT_DIR: ./test_report
+          GEOGENALG_TEST_REPORT_SAVE: "1"
+        run: |
+          mkdir -p test_report
+          .venv/bin/python -m pytest tests/integration
+
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.python-version }}
+          path: test_report/
+          if-no-files-found: ignore
+
       - name: Check code coverage for changed lines
         if: ${{ matrix.python-version == '3.12' }}
         # Check coverage (80% or more) if more than 20 lines changed
