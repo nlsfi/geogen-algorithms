@@ -81,4 +81,4 @@ class GeneralizeSharedPaths(BaseAlgorithm):
             length_tolerance=self.detection_distance * 1.25,
         )
 
-        return assign_nearest_z(data, gdf)
+        return assign_nearest_z(data, gdf, overwrite_z=True)
