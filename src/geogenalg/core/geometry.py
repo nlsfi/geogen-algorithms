@@ -45,6 +45,8 @@ from shapely import (
     get_point,
     has_z,
     is_closed,
+    is_empty,
+    is_missing,
     length,
     line_interpolate_point,
     line_merge,
@@ -54,6 +56,7 @@ from shapely import (
     node,
     points,
     polygonize,
+    set_coordinates,
     shortest_line,
 )
 from shapely.affinity import rotate, scale, translate
@@ -868,77 +871,11 @@ def extend_line_by(
     return insert_vertex(new_line, point_2, len(line.coords) + 1)
 
 
-def _geometry_with_z_from_kd_tree(  # noqa: PLR0911, SC200
-    geometry: BaseGeometry,
-    kd_tree: KDTree,  # noqa: SC200
-    source_z: np.ndarray,  # noqa: SC200
-) -> BaseGeometry:
-    """Create new geometry using nearest Z and given KDTree.
-
-    This function is meant to be used by `assign_nearest_z`.
-
-    Works for Polygon, LineString, and Point geometries and their
-    multi versions.
-
-    Args:
-    ----
-        geometry: Geometry to attach Z value to.
-        kd_tree: KDTree created from XY coordinates. `source_z`
-            should be from same dataset.
-        source_z: Array of Z values.
-
-    Returns:
-    -------
-        New geometry that matches input `geometry` with nearest Z
-        value added from `source_z`.
-
-    """
-    if geometry is None or geometry.is_empty:
-        return geometry
-
-    def _coords_with_z(coords: CoordinateSequence) -> list[tuple[float, float, float]]:
-        x_values, y_values = coords.xy  # Ignore possible pre-existing Z
-        _, idx = kd_tree.query(np.column_stack((x_values, y_values)))  # noqa: SC200
-        z_values = source_z[idx]
-        return [
-            (x, y, float(z))
-            for x, y, z in zip(x_values, y_values, z_values, strict=True)
-        ]
-
-    def _polygon_with_z(polygon: Polygon) -> Polygon:
-        exterior_with_z = _coords_with_z(polygon.exterior.coords)
-        interiors_with_z = [_coords_with_z(ring.coords) for ring in polygon.interiors]
-        return Polygon(shell=exterior_with_z, holes=interiors_with_z)
-
-    if isinstance(geometry, Polygon):
-        return _polygon_with_z(geometry)
-
-    if isinstance(geometry, MultiPolygon):
-        return MultiPolygon([_polygon_with_z(polygon) for polygon in geometry.geoms])
-
-    if isinstance(geometry, LineString):
-        return LineString(_coords_with_z(geometry.coords))
-
-    if isinstance(geometry, MultiLineString):
-        return MultiLineString(
-            [LineString(_coords_with_z(line.coords)) for line in geometry.geoms]
-        )
-
-    if isinstance(geometry, Point):
-        return Point(_coords_with_z(geometry.coords)[0])
-
-    if isinstance(geometry, MultiPoint):
-        return MultiPoint(
-            [Point(_coords_with_z(point.coords)[0]) for point in geometry.geoms]
-        )
-
-    return geometry
-
-
 def assign_nearest_z(
     source_gdf: GeoDataFrame,
     target_gdf: GeoDataFrame,
-    overwrite_z: bool = False,  # noqa: FBT001, FBT002
+    *,
+    overwrite_z: bool = False,
 ) -> GeoDataFrame:
     """Copy nearest Z values from source to target geometries.
 
@@ -948,6 +885,9 @@ def assign_nearest_z(
 
     Works for Polygon, LineString, and Point geometries and their
     multi versions.
+
+    Replaces any NaN Z coordinate in `target_gdf` with a nearest
+    value even if `overwrite_z` is False.
 
     Args:
     ----
@@ -962,37 +902,55 @@ def assign_nearest_z(
         if no Z values where found in `source_gdf`.
 
     """
-    # No Z values, return unchanged
-    if not any(geom.has_z for geom in source_gdf.geometry if geom is not None):
+    if source_gdf.empty or target_gdf.empty:
         return target_gdf
 
-    # Find all coordinates
-    coords_list = []
-    for geom in source_gdf.geometry:
-        if geom is None or geom.is_empty:
-            continue
-        arr = get_coordinates(geom, include_z=True)
-        # Check that coordinates are 3D
-        if arr.shape[1] == 3:  # noqa: PLR2004
-            coords_list.append(arr)
-
-    # Return unchanged if no 3D coordinates were found
-    if not coords_list:
+    source_geoms = source_gdf.geometry.values
+    source_mask = (
+        has_z(source_geoms) & ~is_empty(source_geoms) & ~is_missing(source_geoms)
+    )
+    if not np.any(source_mask):
         return target_gdf
 
-    source_coords = np.vstack(coords_list)  # noqa: SC200
+    source_coords = get_coordinates(source_geoms[source_mask], include_z=True)
 
-    # Build KD-tree
-    kd_tree = KDTree(source_coords[:, :2])  # noqa: SC200
-    source_z = source_coords[:, 2]
+    valid_z_mask = ~np.isnan(source_coords[:, 2])
+    if not np.any(valid_z_mask):
+        return target_gdf
 
-    # Create output
+    clean_source = source_coords[valid_z_mask]
+
+    tree = KDTree(clean_source[:, :2])
+    source_z = clean_source[:, 2]
+
+    target_geoms = target_gdf.geometry.to_numpy()
+    valid_geom_mask = ~is_empty(target_geoms) & ~is_missing(target_geoms)
+
+    if not np.any(valid_geom_mask):
+        return target_gdf
+
+    geoms_to_update = force_3d(target_geoms[valid_geom_mask])
+    target_coords = get_coordinates(geoms_to_update, include_z=True)
+
+    if overwrite_z:
+        missing_z_mask = np.ones(len(target_coords), dtype=bool)
+    else:
+        original_coords = get_coordinates(target_geoms[valid_geom_mask], include_z=True)
+        missing_z_mask = np.isnan(original_coords[:, 2])
+
+    if np.any(missing_z_mask):
+        # TODO: instead of workers=-1 use thread manager num_workers() once it's added?
+        _, idx = tree.query(target_coords[missing_z_mask, :2], workers=-1)
+        target_coords[missing_z_mask, 2] = source_z[idx]
+
+        set_coordinates(geoms_to_update, target_coords)
+
+    updated_geoms = target_geoms.copy()
+    updated_geoms[valid_geom_mask] = geoms_to_update
+
     result_gdf = target_gdf.copy()
-    result_gdf.geometry = result_gdf.geometry.apply(
-        lambda geom: _geometry_with_z_from_kd_tree(geom, kd_tree, source_z)  # noqa: SC200
-        if (overwrite_z or not geom.has_z)
-        else geom
-    )  # ty: ignore[no-matching-overload]
+    result_gdf.geometry = updated_geoms
+
     return result_gdf
 
 
