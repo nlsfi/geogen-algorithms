@@ -15,6 +15,7 @@ from shapely import get_num_coordinates
 from shapely.geometry import LineString, Point
 
 from geogenalg.core.geometry import (
+    assign_nearest_z,
     assign_z_from_attribute,
     concatenate_lines,
     gaussian_smooth,
@@ -174,3 +175,28 @@ def test_substring(
     result = benchmark(substring, line, 40, 50)
 
     assert isclose(result.length, 10)
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    "geom_count",
+    [
+        100,
+        1_000,
+        5_000,
+        20_000,
+    ],
+)
+def test_assign_nearest_z(
+    geom_count: int,
+    benchmark: BenchmarkFixture,
+    make_point_gdf: Callable[..., GeoDataFrame],
+):
+    source_gdf = make_point_gdf(geom_count, seed=0, has_z=True)
+    target_gdf = source_gdf.copy()
+    target_gdf.geometry = target_gdf.geometry.buffer(10, resolution=64)
+
+    result = benchmark(assign_nearest_z, source_gdf, target_gdf)
+
+    assert len(result) == geom_count
+    assert result.geometry.has_z.all()
