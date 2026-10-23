@@ -7,6 +7,8 @@ from typing import Literal
 from warnings import warn
 
 from geopandas import GeoDataFrame
+from scipy.spatial import KDTree
+from shapely import get_coordinates
 
 from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 
@@ -201,3 +203,34 @@ def inherit_attributes_for_lines_by_buffer(
         geometry=original.geometry.name,
         crs=new.crs,
     )
+
+
+def inherit_attributes_for_lines_by_centroid_distances(
+    original: GeoDataFrame,
+    new: GeoDataFrame,
+) -> GeoDataFrame:
+    """Inherit attributes from a line found by closest distance between centroid.
+
+    Args:
+    ----
+        original: Original line features.
+        new: Modified line features.
+
+    Returns:
+    -------
+        Modified lines with inherited attributes and index.
+
+    """
+    tree = KDTree(get_coordinates(original.geometry.centroid))
+
+    _, idx = tree.query(get_coordinates(new.geometry.centroid), workers=-1)
+
+    matches = original.iloc[idx].copy()
+
+    gdf = new.copy()
+    columns = original.columns.difference([original.geometry.name])
+
+    gdf[columns] = matches[columns].to_numpy()
+    gdf.index = matches.index
+
+    return gdf

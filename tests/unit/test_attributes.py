@@ -14,6 +14,7 @@ from shapely.geometry import LineString, Polygon
 from geogenalg.attributes import (
     inherit_attributes,
     inherit_attributes_for_lines_by_buffer,
+    inherit_attributes_for_lines_by_centroid_distances,
     inherit_attributes_from_largest,
 )
 
@@ -343,3 +344,73 @@ def test_inherit_attributes_for_lines_by_buffer_warns():
         )
 
     assert result.empty
+
+
+@pytest.mark.parametrize(
+    (
+        "original",
+        "new",
+        "expected",
+    ),
+    [
+        (
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[0, 0], [10, 0]])],
+            ),
+            GeoDataFrame(
+                geometry=[LineString([[1, 0], [9, 0]])],
+            ),
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[1, 0], [9, 0]])],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[0, 0], [5, 0]])],
+            ),
+            GeoDataFrame(
+                geometry=[LineString([[5, 0], [10, 0]])],
+            ),
+            GeoDataFrame(
+                {"attribute": ["original"]},
+                geometry=[LineString([[5, 0], [10, 0]])],
+            ),
+        ),
+        (
+            GeoDataFrame(
+                {"attribute": ["short", "long"]},
+                geometry=[
+                    LineString([[0, 0], [4, 0]]),
+                    LineString([[0, 0], [10, 0]]),
+                ],
+            ),
+            GeoDataFrame(
+                geometry=[LineString([[2, 0], [8, 0]])],
+            ),
+            GeoDataFrame(
+                {"attribute": ["long"]},
+                geometry=[LineString([[2, 0], [8, 0]])],
+                index=[1],
+            ),
+        ),
+    ],
+    ids=[
+        "matching_line",
+        "matching_at_endpoint",
+        "best_match",
+    ],
+)
+def test_inherit_attributes_for_lines_by_centroid_distances(
+    original: GeoDataFrame,
+    new: GeoDataFrame,
+    expected: GeoDataFrame,
+):
+    result = inherit_attributes_for_lines_by_centroid_distances(
+        original,
+        new,
+    )
+
+    assert_geodataframe_equal(result, expected, check_like=True)
