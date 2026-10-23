@@ -24,7 +24,9 @@ from geogenalg.application import (
     BaseAlgorithm,
     supports_identity,
 )
-from geogenalg.attributes import inherit_attributes_for_lines_by_buffer
+from geogenalg.attributes import (
+    inherit_attributes_for_lines_by_centroid_distances,
+)
 from geogenalg.continuity import (
     get_segments_in_polygon_boundary_but_not_in_lines,
 )
@@ -266,14 +268,9 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         )  # ty: ignore[no-matching-overload]
         shoreline = shoreline.explode().reset_index(drop=True)
 
-        return inherit_attributes_for_lines_by_buffer(
+        return inherit_attributes_for_lines_by_centroid_distances(
             original_shoreline,
             shoreline,
-            buffer_distance=max(
-                self.island_exaggerate_by,
-                self.thin_section_exaggerate_by,
-            )
-            + 1,
         )
 
     def _post_process(
