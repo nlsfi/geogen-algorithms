@@ -9,11 +9,16 @@ from dataclasses import dataclass
 from typing import Literal
 
 from geopandas import GeoDataFrame
-from shapely import BufferCapStyle, BufferJoinStyle, Polygon
+from shapely import (
+    BufferCapStyle,
+    BufferJoinStyle,
+    Polygon,
+)
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import elongation, oriented_envelope_dimensions
+from geogenalg.core.parallel import in_parallel
 from geogenalg.utility.validation import check_gdf_geometry_type
 
 
@@ -51,7 +56,8 @@ def buffer_with_options(
 
 
 def extract_narrow_polygon_parts(
-    input_gdf: GeoDataFrame, threshold: float
+    input_gdf: GeoDataFrame,
+    threshold: float,
 ) -> GeoDataFrame:
     """Extract polygon parts narrower than the threshold.
 
@@ -69,36 +75,30 @@ def extract_narrow_polygon_parts(
         geometry in the result will be empty (a GeometryCollection), but the row
         will still be present.
 
-    Raises:
-    ------
-        GeometryTypeError: If the input GeoDataFrame contains other than
-              polygon geometries.
-
     """
     if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
         msg = "Extract narrow parts only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
-    # Apply buffer(0) to clean geometries. It fixes invalid polygons and
-    # ensures resulting geometries are valid before further processing.
-    input_gdf.geometry = input_gdf.geometry.buffer(0)
-    wide_parts_gdf = input_gdf.copy()
+    wide_parts = (
+        in_parallel(input_gdf.geometry)
+        .buffer(-(threshold / 2), cap_style="flat", join_style="mitre")
+        .buffer(threshold / 2, cap_style="flat", join_style="mitre")
+        .resolve_geoseries()
+    )
 
-    # Remove polygon parts narrower than threshold
-    wide_parts_gdf.geometry = wide_parts_gdf.buffer(
-        -0.5 * threshold, cap_style="flat", join_style="mitre"
-    ).buffer(0.5 * threshold, cap_style="flat", join_style="mitre")
+    gdf = input_gdf.copy()
+    gdf.geometry = (
+        in_parallel(gdf.geometry)
+        .difference(wide_parts)
+        # Clean small slivers
+        # TODO: consider minimum_width() for this?
+        .buffer(-0.1, cap_style="flat", join_style="mitre")
+        .buffer(0.1, cap_style="flat", join_style="mitre")
+        .resolve_geoseries()
+    )
 
-    # Extract narrow parts by difference
-    narrow_parts_gdf = wide_parts_gdf.copy()
-    narrow_parts_gdf.geometry = input_gdf.difference(wide_parts_gdf.union_all())
-
-    # Clean small slivers
-    narrow_parts_gdf.geometry = narrow_parts_gdf.buffer(
-        -0.1, cap_style="flat", join_style="mitre"
-    ).buffer(0.1, cap_style="flat", join_style="mitre")
-
-    return narrow_parts_gdf
+    return gdf
 
 
 def exaggerate_thin_polygons(
