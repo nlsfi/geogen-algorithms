@@ -40,7 +40,7 @@ def test_benchmark_buffer(
     elif mode == "threadmanager_pool":
 
         def run_process() -> Series | GeoSeries:
-            return in_parallel(geoms).buffer(5.0).resolve_parallel()
+            return in_parallel(geoms).buffer(5.0).resolve_geoseries()
 
     else:  # non_cached_threadpool
 
@@ -49,7 +49,7 @@ def test_benchmark_buffer(
                 return (
                     in_parallel(geoms, executor=fresh_pool)
                     .buffer(5.0)
-                    .resolve_parallel()
+                    .resolve_geoseries()
                 )
 
     result = benchmark(run_process)
@@ -78,7 +78,7 @@ def test_benchmark_intersects_single_geom(
     elif mode == "threadmanager_pool":
 
         def run_process() -> Series | GeoSeries:
-            return in_parallel(geoms).run(intersects, target_box).resolve_parallel()
+            return in_parallel(geoms).run(intersects, target_box).resolve_series()
 
     else:  # non_cached_threadpool
 
@@ -87,7 +87,7 @@ def test_benchmark_intersects_single_geom(
                 return (
                     in_parallel(geoms, executor=fresh_pool)
                     .run(intersects, target_box)
-                    .resolve_parallel()
+                    .resolve_series()
                 )
 
     result = benchmark(run_process)
@@ -116,7 +116,7 @@ def test_benchmark_intersection_pairwise(
     elif mode == "threadmanager_pool":
 
         def run_process() -> Series | GeoSeries:
-            return in_parallel(geoms_1).intersection(geoms_2).resolve_parallel()
+            return in_parallel(geoms_1).intersection(geoms_2).resolve_geoseries()
 
     else:  # non_cached_threadpool
 
@@ -125,7 +125,7 @@ def test_benchmark_intersection_pairwise(
                 return (
                     in_parallel(geoms_1, executor=fresh_pool)
                     .intersection(geoms_2)
-                    .resolve_parallel()
+                    .resolve_geoseries()
                 )
 
     result = benchmark(run_process)
@@ -153,14 +153,16 @@ def test_benchmark_area(
     elif mode == "threadmanager_pool":
 
         def run_process() -> Series | GeoSeries:
-            return in_parallel(geoms).run(area).resolve_parallel()
+            return in_parallel(geoms).run(area).resolve_geoseries()
 
     else:  # non_cached_threadpool
 
         def run_process() -> Series | GeoSeries:
             with ThreadPoolExecutor(max_workers=num_workers()) as fresh_pool:
                 return (
-                    in_parallel(geoms, executor=fresh_pool).run(area).resolve_parallel()
+                    in_parallel(geoms, executor=fresh_pool)
+                    .run(area)
+                    .resolve_geoseries()
                 )
 
     result = benchmark(run_process)
@@ -196,7 +198,7 @@ def test_process_with_multiple_steps(
                 .buffer(5.0)
                 .run(simplify, tolerance=0.5)
                 .buffer(5.0)
-                .resolve_parallel()
+                .resolve_geoseries()
             )
 
     else:  # non_cached_threadpool
@@ -208,7 +210,7 @@ def test_process_with_multiple_steps(
                     .buffer(5.0)
                     .run(simplify, tolerance=0.5)
                     .buffer(5.0)
-                    .resolve_parallel()
+                    .resolve_geoseries()
                 )
 
     result = benchmark(run_process)

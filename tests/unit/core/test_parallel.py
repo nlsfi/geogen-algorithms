@@ -331,13 +331,13 @@ def test_in_parallel(sample_points: GeoSeries):
     assert len(process._data) == len(sample_points)
 
 
-def test_resolve_parallel(sample_points: GeoSeries):
-    process = in_parallel(sample_points).resolve_parallel()
+def test_resolve_geoseries(sample_points: GeoSeries):
+    process = in_parallel(sample_points).resolve_geoseries()
 
     assert isinstance(process, GeoSeries)
     assert_geoseries_equal(process, sample_points)
 
-    process = in_parallel(sample_points).run(length).resolve_parallel()
+    process = in_parallel(sample_points).run(length).resolve_geoseries()
 
     assert isinstance(process, Series)
     assert (process == 0.0).all()
@@ -345,7 +345,7 @@ def test_resolve_parallel(sample_points: GeoSeries):
 
 def test_buffer_with_scalar_distance(sample_points: GeoSeries):
     set_num_workers(4)
-    result = in_parallel(sample_points).buffer(1.5).resolve_parallel()
+    result = in_parallel(sample_points).buffer(1.5).resolve_geoseries()
 
     assert isinstance(result, GeoSeries)
     assert result.crs == sample_points.crs
@@ -359,7 +359,7 @@ def test_buffer_with_non_scalar_distance(sample_points: GeoSeries):
     set_num_workers(4)
     distances = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 
-    result = in_parallel(sample_points).buffer(distances).resolve_parallel()
+    result = in_parallel(sample_points).buffer(distances).resolve_geoseries()
     expected = buffer(sample_points, distances, quad_segs=16)
 
     assert equals(result, expected).all()
@@ -368,7 +368,7 @@ def test_buffer_with_non_scalar_distance(sample_points: GeoSeries):
 def test_intersection_against_single_geom(sample_points: GeoSeries):
     poly = box(-0.1, -0.1, 0.1, 0.1)
 
-    result = in_parallel(sample_points).intersection(poly).resolve_parallel()
+    result = in_parallel(sample_points).intersection(poly).resolve_geoseries()
 
     assert result.iloc[0] == Point(0, 0)
 
@@ -379,7 +379,7 @@ def test_intersection_against_single_geom(sample_points: GeoSeries):
 def test_difference_against_single_geom(sample_points: GeoSeries):
     poly = box(-0.1, -0.1, 0.1, 0.1)
 
-    result = in_parallel(sample_points).difference(poly).resolve_parallel()
+    result = in_parallel(sample_points).difference(poly).resolve_geoseries()
 
     assert result.iloc[0].is_empty
 
@@ -393,7 +393,7 @@ def test_intersection_pairwise(sample_points: GeoSeries):
         dtype=object,
     )
 
-    result = in_parallel(sample_points).intersection(boxes).resolve_parallel()
+    result = in_parallel(sample_points).intersection(boxes).resolve_geoseries()
 
     for i in range(len(sample_points)):
         assert result.iloc[i] == Point(i, i)
@@ -405,14 +405,14 @@ def test_difference_pairwise(sample_points: GeoSeries):
         dtype=object,
     )
 
-    result = in_parallel(sample_points).difference(boxes).resolve_parallel()
+    result = in_parallel(sample_points).difference(boxes).resolve_geoseries()
 
     for i in range(len(sample_points)):
         assert result.iloc[i].is_empty
 
 
 def test_in_parallel_chaining(sample_points: GeoSeries):
-    result = in_parallel(sample_points).buffer(1.0).buffer(5.0).resolve_parallel()
+    result = in_parallel(sample_points).buffer(1.0).buffer(5.0).resolve_geoseries()
 
     assert isinstance(result, GeoSeries)
 
@@ -427,7 +427,7 @@ def test_in_parallel_chaining_non_cached_pool(sample_points: GeoSeries):
             in_parallel(sample_points, executor=pool)
             .buffer(1.0)
             .buffer(5.0)
-            .resolve_parallel()
+            .resolve_geoseries()
         )
 
         assert isinstance(result, GeoSeries)
