@@ -287,15 +287,16 @@ class ParallelGeometryProcess:
         """Run shapely symmetric difference in parallel."""
         return self.run(symmetric_difference, other, grid_size=grid_size)
 
-    def resolve_parallel(self) -> Series | GeoSeries:
-        """Resolve process back into pandas object."""
-        if self._data.dtype == object:
-            return GeoSeries(
-                GeometryArray(self._data, crs=self._crs),
-                index=self._index,
-            )
-
+    def resolve_series(self) -> Series:
+        """Turn to series."""
         return Series(self._data, index=self._index)
+
+    def resolve_geoseries(self) -> GeoSeries:
+        """Turn to geoseries."""
+        return GeoSeries(
+            GeometryArray(self._data, crs=self._crs),
+            index=self._index,
+        )
 
 
 def in_parallel(
