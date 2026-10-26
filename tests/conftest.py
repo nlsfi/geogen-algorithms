@@ -24,6 +24,7 @@ from geogenalg.application.generalize_polygons_to_points import (
 )
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
+from geogenalg.application.generalize_road_network import GeneralizeRoadNetwork
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
@@ -587,3 +588,21 @@ def thin_points_algorithm() -> ThinPoints:
     return ThinPoints(
         min_distance=75.0,
     )
+
+
+@pytest.fixture
+def road_network_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "road_network.gpkg")
+    return TestInputData(
+        input_uri=gpkg.to_input("tieviivat"),
+        control_uri=gpkg.to_input("control"),
+        unique_id_column="mtk_id",
+        reference_uris={
+            "roads": gpkg.to_input("roads"),
+        },
+    )
+
+
+@pytest.fixture
+def road_network_algorithm() -> GeneralizeRoadNetwork:
+    return GeneralizeRoadNetwork()
