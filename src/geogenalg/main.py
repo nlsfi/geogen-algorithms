@@ -15,6 +15,7 @@ from geogenalg.application.generalize_conservation_areas import (
 from geogenalg.application.generalize_contours import GeneralizeContours
 from geogenalg.application.generalize_navigation_marks import GeneralizeNavigationMarks
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
+from geogenalg.application.generalize_road_network import GeneralizeRoadNetwork
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
 from geogenalg.application.generalize_watercourse_lines import (
     GeneralizeWaterCourseLines,
@@ -311,6 +312,7 @@ def build_app() -> None:
         "water_areas": GeneralizeWaterAreas,
         "thin_points": ThinPoints,
         "navigation_marks": GeneralizeNavigationMarks,
+        "road_network": GeneralizeRoadNetwork,
     }
 
     for cli_command_name, alg in commands_and_algs.items():
