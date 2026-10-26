@@ -78,7 +78,7 @@ def test_benchmark_intersects_single_geom(
     elif mode == "threadmanager_pool":
 
         def run_process() -> Series | GeoSeries:
-            return in_parallel(geoms).run(intersects, target_box).resolve_series()
+            return in_parallel(geoms)._run(intersects, target_box).resolve_series()
 
     else:  # non_cached_threadpool
 
@@ -86,7 +86,7 @@ def test_benchmark_intersects_single_geom(
             with ThreadPoolExecutor(max_workers=num_workers()) as fresh_pool:
                 return (
                     in_parallel(geoms, executor=fresh_pool)
-                    .run(intersects, target_box)
+                    ._run(intersects, target_box)
                     .resolve_series()
                 )
 
@@ -153,7 +153,7 @@ def test_benchmark_area(
     elif mode == "threadmanager_pool":
 
         def run_process() -> Series | GeoSeries:
-            return in_parallel(geoms).run(area).resolve_geoseries()
+            return in_parallel(geoms)._run(area).resolve_geoseries()
 
     else:  # non_cached_threadpool
 
@@ -161,7 +161,7 @@ def test_benchmark_area(
             with ThreadPoolExecutor(max_workers=num_workers()) as fresh_pool:
                 return (
                     in_parallel(geoms, executor=fresh_pool)
-                    .run(area)
+                    ._run(area)
                     .resolve_geoseries()
                 )
 
@@ -196,7 +196,7 @@ def test_process_with_multiple_steps(
             return (
                 in_parallel(geoms)
                 .buffer(5.0)
-                .run(simplify, tolerance=0.5)
+                ._run(simplify, tolerance=0.5)
                 .buffer(5.0)
                 .resolve_geoseries()
             )
@@ -208,7 +208,7 @@ def test_process_with_multiple_steps(
                 return (
                     in_parallel(geoms, executor=fresh_pool)
                     .buffer(5.0)
-                    .run(simplify, tolerance=0.5)
+                    ._run(simplify, tolerance=0.5)
                     .buffer(5.0)
                     .resolve_geoseries()
                 )
