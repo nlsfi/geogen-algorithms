@@ -194,6 +194,8 @@ class ParallelGeometryProcess:
 
     All operations are are executed in parallel (depending on the number of
     workers configured.)
+
+    Objects are intended to be instantiated with the in_parallel() function.
     """
 
     def __init__(
