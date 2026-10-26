@@ -337,7 +337,9 @@ def test_resolve_geoseries(sample_points: GeoSeries):
     assert isinstance(process, GeoSeries)
     assert_geoseries_equal(process, sample_points)
 
-    process = in_parallel(sample_points).run(length).resolve_geoseries()
+
+def test_resolve_series(sample_points: GeoSeries):
+    process = in_parallel(sample_points)._run(length).resolve_series()
 
     assert isinstance(process, Series)
     assert (process == 0.0).all()

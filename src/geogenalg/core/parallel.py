@@ -211,7 +211,7 @@ class ParallelGeometryProcess:
         self._crs = crs
         self._executor = executor
 
-    def run(
+    def _run(
         self,
         func: Callable[..., Any],
         *args: object,
@@ -253,7 +253,7 @@ class ParallelGeometryProcess:
         single_sided: bool = False,
     ) -> ParallelGeometryProcess:
         """Run shapely buffer in parallel."""
-        return self.run(
+        return self._run(
             buffer,
             distance,
             quad_segs=resolution,
@@ -269,7 +269,7 @@ class ParallelGeometryProcess:
         grid_size: float | None = None,
     ) -> ParallelGeometryProcess:
         """Run shapely intersection in parallel."""
-        return self.run(intersection, other, grid_size=grid_size)
+        return self._run(intersection, other, grid_size=grid_size)
 
     def difference(
         self,
@@ -277,7 +277,7 @@ class ParallelGeometryProcess:
         grid_size: float | None = None,
     ) -> ParallelGeometryProcess:
         """Run shapely difference in parallel."""
-        return self.run(difference, other, grid_size=grid_size)
+        return self._run(difference, other, grid_size=grid_size)
 
     def symmetric_difference(
         self,
@@ -285,7 +285,7 @@ class ParallelGeometryProcess:
         grid_size: float | None = None,
     ) -> ParallelGeometryProcess:
         """Run shapely symmetric difference in parallel."""
-        return self.run(symmetric_difference, other, grid_size=grid_size)
+        return self._run(symmetric_difference, other, grid_size=grid_size)
 
     def resolve_series(self) -> Series:
         """Turn to series."""
