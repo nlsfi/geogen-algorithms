@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from geopandas import GeoDataFrame
 from shapely import buffer, points
-from shapely.geometry import LineString
+from shapely.geometry import LineString, box
 
 
 def pytest_terminal_summary(
@@ -101,6 +101,23 @@ def make_overlapping_polygons():
             {"category": rng.integers(0, 3, size=polygon_count)},
             geometry=geometries,
             crs="EPSG:3857",
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def make_adjacent_polygons_with_boundary_lines():
+    def _factory(polygon_count: int) -> tuple[GeoDataFrame, GeoDataFrame]:
+        polygons = [box(i, 0, i + 1, 1) for i in range(polygon_count)]
+        lines = [
+            LineString([(i, 0), (i + 1, 0), (i + 1, 1), (i, 1)])
+            for i in range(polygon_count)
+        ]
+
+        return (
+            GeoDataFrame(geometry=polygons, crs="EPSG:3857"),
+            GeoDataFrame(geometry=lines, crs="EPSG:3857"),
         )
 
     return _factory

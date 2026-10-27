@@ -4,7 +4,10 @@
 #
 #  SPDX-License-Identifier: MIT
 
+from collections.abc import Callable
+
 import pytest
+from geopandas import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
 
 from geogenalg.continuity import (
@@ -13,6 +16,7 @@ from geogenalg.continuity import (
     flag_connections,
     flag_connections_to_reference,
     get_contiguous_lengths,
+    get_segments_in_polygon_boundary_but_not_in_lines,
 )
 from geogenalg.testing import GeoPackagePath, TestInputData
 
@@ -165,3 +169,30 @@ def test_get_contiguous_lengths(
     gdf, _, _ = test_input.read()
 
     benchmark(get_contiguous_lengths, gdf)
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    "feature_count",
+    [
+        100,
+        1000,
+        10_000,
+    ],
+)
+def test_get_segments_in_polygon_boundary_but_not_in_lines(
+    benchmark: BenchmarkFixture,
+    make_adjacent_polygons_with_boundary_lines: Callable[
+        [int], tuple[GeoDataFrame, GeoDataFrame]
+    ],
+    feature_count: int,
+):
+    polygons, lines = make_adjacent_polygons_with_boundary_lines(feature_count)
+
+    result = benchmark(
+        get_segments_in_polygon_boundary_but_not_in_lines,
+        polygons,
+        lines,
+    )
+
+    assert result.shape[0] == 1
