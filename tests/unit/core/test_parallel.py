@@ -338,6 +338,16 @@ def test_resolve_geoseries(sample_points: GeoSeries):
     assert_geoseries_equal(process, sample_points)
 
 
+def test_resolve_numpy(sample_points: GeoSeries):
+    result = in_parallel(sample_points)._run(length).resolve_numpy()
+
+    assert isinstance(result, np.ndarray)
+    np.testing.assert_array_equal(
+        result,
+        np.array([0.0 for _ in range(12)]),
+    )
+
+
 def test_resolve_series(sample_points: GeoSeries):
     process = in_parallel(sample_points)._run(length).resolve_series()
 
