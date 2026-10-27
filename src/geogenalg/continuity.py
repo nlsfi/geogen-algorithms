@@ -17,8 +17,11 @@ from shapely import (
     STRtree,
     force_2d,
     get_coordinates,
+    get_parts,
     get_point,
+    is_empty,
     length,
+    union_all,
 )
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
@@ -30,6 +33,7 @@ from geogenalg.core.geometry import (
     get_line_connection_points,
     smooth_around_connection_point_of_two_lines,
 )
+from geogenalg.core.parallel import in_parallel
 from geogenalg.utility.dataframe_processing import (
     add_columns_to_gdf,
     combine_gdfs,
@@ -1016,20 +1020,23 @@ def get_segments_in_polygon_boundary_but_not_in_lines(
     if polygons.empty or lines.empty:
         return GeoDataFrame(geometry=[], crs=polygons.crs)
 
-    boundary = polygons.geometry.boundary.union_all()
-    segments = boundary.difference(lines.union_all())
+    boundaries = get_parts(polygons.geometry.boundary.union_all())
+    line_geoms = lines.geometry.to_numpy()
+    tree = STRtree(line_geoms)
 
-    if segments.is_empty:
-        return GeoDataFrame(geometry=[], crs=polygons.crs)
-
-    return (
-        GeoDataFrame(
-            geometry=[segments],
-            crs=polygons.crs,
-        )
-        .explode()
-        .reset_index(drop=True)
+    nearby_lines = np.array(
+        [
+            union_all(line_geoms[tree.query(part, predicate="intersects")])
+            for part in boundaries
+        ],
+        dtype=object,
     )
+    segments = get_parts(
+        in_parallel(GeoSeries(boundaries)).difference(nearby_lines).resolve_numpy()
+    )
+    segments = segments[~is_empty(segments)]
+
+    return GeoDataFrame(geometry=segments, crs=polygons.crs)
 
 
 def smooth_linestring_connections(
