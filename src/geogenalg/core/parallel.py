@@ -287,6 +287,10 @@ class ParallelGeometryProcess:
         """Run shapely symmetric difference in parallel."""
         return self._run(symmetric_difference, other, grid_size=grid_size)
 
+    def resolve_numpy(self) -> np.ndarray:
+        """Return the underlying NumPy array without copying."""
+        return self._data
+
     def resolve_series(self) -> Series:
         """Turn to series."""
         return Series(self._data, index=self._index)
