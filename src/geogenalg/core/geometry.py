@@ -527,38 +527,14 @@ def perforate_polygons_with_gdf_exteriors(
         dtype=object,
     )
 
-    # We find the exteriors contained in each geometry and group them together
+    # Only the exteriors fully inside a geometry become holes in it
+    holes = union_by_predicate(geoms, exteriors, "contains")
 
-    geom_positions, exterior_positions = gdf.sindex.query(
-        geoms.to_numpy(),
-        predicate="contains",
-    )
+    has_holes = ~is_empty(holes)
+    result = geoms.to_numpy().copy()
+    result[has_holes] = difference(result[has_holes], holes[has_holes])
 
-    if len(geom_positions) == 0:
-        return geoms.copy()
-
-    # Sort so that each geometry's exteriors are adjacent as required by np.split
-    order = np.argsort(geom_positions, kind="stable")
-    geom_positions = geom_positions[order]
-    exterior_positions = exterior_positions[order]
-
-    # Initialize with empty geometry for geometries which contain no exteriors
-    holes = np.full(len(geoms), GeometryCollection(), dtype=object)
-
-    # Iterate over geometry and the exteriors it contains
-    unique_geoms, group_start_positions = np.unique(geom_positions, return_index=True)
-    for geom_position, contained in zip(
-        unique_geoms,
-        np.split(exterior_positions, group_start_positions[1:]),
-        strict=True,
-    ):
-        holes[geom_position] = union_all(exteriors[contained])
-
-    return GeoSeries(
-        difference(geoms.to_numpy(), holes),
-        index=geoms.index,
-        crs=geoms.crs,
-    )
+    return GeoSeries(result, index=geoms.index, crs=geoms.crs)
 
 
 def extract_interior_rings(geometry: Polygon | MultiPolygon) -> MultiPolygon:
@@ -3232,3 +3208,60 @@ def visvalingam_whyatt_simplify_conditional(
         simplified_geoms.append(repaired if repaired.is_valid else polygon)
 
     return GeoSeries(simplified_geoms, index=geoms.index, crs=geoms.crs)
+
+
+def union_by_predicate(
+    geoms: np.ndarray | GeoSeries,
+    others: np.ndarray | GeoSeries,
+    predicate: Literal[
+        "intersects",
+        "within",
+        "contains",
+        "overlaps",
+        "crosses",
+        "touches",
+        "covers",
+        "covered_by",
+        "contains_properly",
+    ],
+) -> np.ndarray:
+    """For each input geometry union `others` geometries which satisfy the predicate.
+
+    Args:
+    ----
+        geoms: Geometries to find related geometries for.
+        others: Geometries to union.
+        predicate: Spatial predicate to find related geometries by.
+
+    Returns:
+    -------
+        Array with a geometry per input geometry.
+
+    """
+    geoms = np.asarray(geoms, dtype=object)
+    others = np.asarray(others, dtype=object)
+
+    unions = np.full(len(geoms), GeometryCollection(), dtype=object)
+
+    target_positions, source_positions = STRtree(others).query(
+        geoms,
+        predicate=predicate,
+    )
+
+    # Sort so that each target's sources are adjacent as required by np.split
+    order = np.argsort(target_positions, kind="stable")
+    target_positions = target_positions[order]
+    source_positions = source_positions[order]
+
+    matched_targets, group_start_positions = np.unique(
+        target_positions,
+        return_index=True,
+    )
+    for target_position, matching in zip(
+        matched_targets,
+        np.split(source_positions, group_start_positions[1:]),
+        strict=len(matched_targets) > 0,
+    ):
+        unions[target_position] = union_all(others[matching])
+
+    return unions
