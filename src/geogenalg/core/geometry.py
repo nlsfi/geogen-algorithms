@@ -37,9 +37,11 @@ from shapely import (
     STRtree,
     area,
     count_coordinates,
+    difference,
     force_2d,
     force_3d,
     get_coordinates,
+    get_exterior_ring,
     get_num_coordinates,
     get_parts,
     get_point,
@@ -56,8 +58,10 @@ from shapely import (
     node,
     points,
     polygonize,
+    polygons,
     set_coordinates,
     shortest_line,
+    union_all,
 )
 from shapely.affinity import rotate, scale, translate
 from shapely.geometry import LinearRing
@@ -495,11 +499,11 @@ def _chaikin_smooth_geometry(
     raise TypeError(msg)
 
 
-def perforate_polygon_with_gdf_exteriors(
-    geometry: Polygon,
+def perforate_polygons_with_gdf_exteriors(
+    geoms: GeoSeries,
     gdf: GeoDataFrame,
-) -> Polygon:
-    """Add the exteriors of a polygon GeoDataFrame as holes to a Polygon.
+) -> GeoSeries:
+    """Add the exteriors of a polygon GeoDataFrame as holes to polygons.
 
     The purpose of this function over a simple difference operation is to
     handle cases where there are polygon(s) inside interior rings of the input
@@ -509,18 +513,51 @@ def perforate_polygon_with_gdf_exteriors(
 
     Args:
     ----
-        geometry: A Polygon to which holes will be added
+        geoms: Polygons to which holes will be added
         gdf: A GeoDataFrame whose geometry exteriors will be added as holes
 
     Returns:
     -------
-        A new Polygon with the holes added.
+        The new polygons with the holes added.
 
     """
-    features_within_geom = gdf.geometry.loc[gdf.geometry.within(geometry)]
-    exteriors = features_within_geom.apply(lambda geom: Polygon(geom.exterior))  # ty: ignore[no-matching-overload]
+    exteriors = np.asarray(
+        polygons(get_exterior_ring(gdf.geometry.to_numpy())),
+        dtype=object,
+    )
 
-    return geometry.difference(exteriors.union_all())
+    # We find the exteriors contained in each geometry and group them together
+
+    geom_positions, exterior_positions = gdf.sindex.query(
+        geoms.to_numpy(),
+        predicate="contains",
+    )
+
+    if len(geom_positions) == 0:
+        return geoms.copy()
+
+    # Sort so that each geometry's exteriors are adjacent as required by np.split
+    order = np.argsort(geom_positions, kind="stable")
+    geom_positions = geom_positions[order]
+    exterior_positions = exterior_positions[order]
+
+    # Initialize with empty geometry for geometries which contain no exteriors
+    holes = np.full(len(geoms), GeometryCollection(), dtype=object)
+
+    # Iterate over geometry and the exteriors it contains
+    unique_geoms, group_start_positions = np.unique(geom_positions, return_index=True)
+    for geom_position, contained in zip(
+        unique_geoms,
+        np.split(exterior_positions, group_start_positions[1:]),
+        strict=True,
+    ):
+        holes[geom_position] = union_all(exteriors[contained])
+
+    return GeoSeries(
+        difference(geoms.to_numpy(), holes),
+        index=geoms.index,
+        crs=geoms.crs,
+    )
 
 
 def extract_interior_rings(geometry: Polygon | MultiPolygon) -> MultiPolygon:
