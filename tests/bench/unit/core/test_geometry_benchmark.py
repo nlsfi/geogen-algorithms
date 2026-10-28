@@ -17,6 +17,7 @@ from shapely.geometry import LineString, Point
 from geogenalg.core.geometry import (
     assign_nearest_z,
     assign_z_from_attribute,
+    chaikin_smooth_keep_topology,
     concatenate_lines,
     gaussian_smooth,
     get_line_connection_points,
@@ -200,3 +201,30 @@ def test_assign_nearest_z(
 
     assert len(result) == geom_count
     assert result.geometry.has_z.all()
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    "grid_size",
+    [
+        5,
+        15,
+        30,
+    ],
+)
+def test_chaikin_smooth_keep_topology(
+    grid_size: int,
+    benchmark: BenchmarkFixture,
+    make_polygon_grid: Callable[..., GeoDataFrame],
+):
+    polygons = make_polygon_grid(grid_size, vertices_per_edge=50)
+
+    result = benchmark(
+        chaikin_smooth_keep_topology,
+        polygons.geometry,
+        iterations=3,
+        extra_skip_coords=None,
+        distance_threshold=0.05,
+    )
+
+    assert len(result) == grid_size * grid_size

@@ -253,8 +253,13 @@ def _normalize_skip_coords(
 ) -> set[tuple[float, ...]]:
     if not skip_coords:
         return set()
+
     if isinstance(skip_coords, MultiPoint):
-        return {tuple(pt.coords[0]) for pt in skip_coords.geoms}
+        coordinates = get_coordinates(
+            skip_coords,
+            include_z=bool(skip_coords.has_z),
+        )
+        return set(map(tuple, coordinates.tolist()))
 
     normalized = set()
     for item in skip_coords:
@@ -262,6 +267,7 @@ def _normalize_skip_coords(
             normalized.add(tuple(item.coords[0]))
         else:
             normalized.add(tuple(item))
+
     return normalized
 
 
@@ -299,7 +305,7 @@ def _chaikin_conditional_pass(
 
     if skip_set:
         skip_mask = np.fromiter(
-            (tuple(pt) in skip_set for pt in coords),
+            map(skip_set.__contains__, map(tuple, coords.tolist())),
             dtype=bool,
             count=len(coords),
         )
@@ -350,14 +356,40 @@ def _chaikin_conditional_pass(
     return np.vstack([smoothed_vertices, smoothed_vertices[0:1]])
 
 
+@overload
 def chaikin_smooth_conditional(
     geom: LineString | Polygon,
     *,
     skip_coords: SkipCoordsInput = None,
     iterations: int = 1,
     distance_threshold: float | None = None,
-) -> LineString | Polygon:
-    """Smooth input linestring or polygon.
+) -> LineString | Polygon: ...
+@overload
+def chaikin_smooth_conditional(
+    geom: GeoSeries,
+    *,
+    skip_coords: SkipCoordsInput = None,
+    iterations: int = 1,
+    distance_threshold: float | None = None,
+) -> GeoSeries: ...
+@overload
+def chaikin_smooth_conditional(
+    geom: np.ndarray,
+    *,
+    skip_coords: SkipCoordsInput = None,
+    iterations: int = 1,
+    distance_threshold: float | None = None,
+) -> np.ndarray: ...
+
+
+def chaikin_smooth_conditional(
+    geom: LineString | Polygon | GeoSeries | np.ndarray,
+    *,
+    skip_coords: SkipCoordsInput = None,
+    iterations: int = 1,
+    distance_threshold: float | None = None,
+) -> LineString | Polygon | GeoSeries | np.ndarray:
+    """Smooth input geometry or geometries.
 
     This is an implementation of Chaikin's corner cutting line smoothing
     algorithm, with the addition of being able to skip the smoothing of
@@ -366,7 +398,7 @@ def chaikin_smooth_conditional(
 
     Args:
     ----
-        geom: Geometry to smooth.
+        geom: Geometry or geometries to smooth.
         skip_coords: List of points to skip. If a corresponding coordinate exists
             in the input geometry, it is guaranteed to remain unchanged.
         iterations: Number of iterations i.e. smoothing passes. Each pass
@@ -377,7 +409,7 @@ def chaikin_smooth_conditional(
 
     Returns:
     -------
-        Smoothed geometry.
+        Smoothed geometry or geometries.
 
     Note:
     ----
@@ -395,6 +427,33 @@ def chaikin_smooth_conditional(
 
     skip_set = _normalize_skip_coords(skip_coords)
 
+    if isinstance(geom, GeoSeries):
+        return geom.apply(
+            lambda single: _chaikin_smooth_geometry(
+                single,
+                skip_set,
+                iterations,
+                distance_threshold,
+            ),
+        )  # ty: ignore[no-matching-overload]
+
+    if isinstance(geom, np.ndarray):
+        smoothed = np.empty(len(geom), dtype=object)
+        smoothed[:] = [
+            _chaikin_smooth_geometry(single, skip_set, iterations, distance_threshold)
+            for single in geom
+        ]
+        return smoothed
+
+    return _chaikin_smooth_geometry(geom, skip_set, iterations, distance_threshold)
+
+
+def _chaikin_smooth_geometry(
+    geom: LineString | Polygon,
+    skip_set: set[tuple[float, ...]],
+    iterations: int,
+    distance_threshold: float | None,
+) -> LineString | Polygon:
     if isinstance(geom, LineString):
         coords = np.asarray(geom.coords, dtype=np.float64)
         for _ in range(iterations):
@@ -2610,21 +2669,24 @@ def chaikin_smooth_keep_topology(
     # TODO: move this to a different module, probably continuity
     copy = geoseries.copy()
 
-    skipped_coords = {(point.x, point.y) for point in get_topological_points(copy)}
+    skipped_coords = set(
+        map(tuple, get_coordinates(get_topological_points(copy)).tolist()),
+    )
 
     extra_skip_coords = _normalize_skip_coords(extra_skip_coords)
 
     if extra_skip_coords:
         skipped_coords.update((point[0], point[1]) for point in extra_skip_coords)
 
-    return copy.apply(
-        lambda geom: chaikin_smooth_conditional(
-            force_2d(geom),
-            iterations=iterations,
-            skip_coords=skipped_coords,
-            distance_threshold=distance_threshold,
-        ),
-    )  # ty: ignore[no-matching-overload]
+    if iterations <= 0:
+        return copy.force_2d()
+
+    return chaikin_smooth_conditional(
+        copy.force_2d(),
+        skip_coords=skipped_coords,
+        iterations=iterations,
+        distance_threshold=distance_threshold,
+    )
 
 
 def gaussian_smooth(  # noqa: PLR0915

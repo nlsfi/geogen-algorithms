@@ -391,6 +391,26 @@ def test_chaikin_smooth_conditional(
         == expected_geometry
     )
 
+    geoseries_result = chaikin_smooth_conditional(
+        GeoSeries(input_geometry),
+        skip_coords=skip_coords,
+        iterations=iterations,
+        distance_threshold=distance_threshold,
+    )
+
+    assert len(geoseries_result) == 1
+    assert geoseries_result.iloc[0] == expected_geometry
+
+    array_result = chaikin_smooth_conditional(
+        np.array([input_geometry]),
+        skip_coords=skip_coords,
+        iterations=iterations,
+        distance_threshold=distance_threshold,
+    )
+
+    assert len(array_result) == 1
+    assert array_result[0] == expected_geometry
+
 
 @pytest.mark.parametrize(
     ("input_geoseries", "expected_points"),
