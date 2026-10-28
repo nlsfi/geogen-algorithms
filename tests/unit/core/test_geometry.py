@@ -98,6 +98,7 @@ from geogenalg.core.geometry import (
     split_line_at_distances,
     split_linear_geometry,
     substring,
+    union_by_predicate,
     visvalingam_whyatt_simplify_conditional,
 )
 
@@ -4964,3 +4965,72 @@ def test_visvalingam_whyatt_simplify_conditional(
     )
 
 
+@pytest.mark.parametrize(
+    ("geoms", "others", "predicate", "expected"),
+    [
+        pytest.param(
+            [box(0, 0, 10, 10)],
+            [box(1, 1, 2, 2), box(2, 1, 3, 2)],
+            "contains",
+            [box(1, 1, 3, 2)],
+            id="unions_multiple_matches",
+        ),
+        pytest.param(
+            [box(0, 0, 10, 10), box(20, 20, 30, 30)],
+            [box(1, 1, 2, 2)],
+            "contains",
+            [box(1, 1, 2, 2), GeometryCollection()],
+            id="no_match_gives_empty",
+        ),
+        pytest.param(
+            [box(0, 0, 10, 10), box(20, 20, 30, 30)],
+            [box(21, 21, 22, 22), box(1, 1, 2, 2)],
+            "contains",
+            [box(1, 1, 2, 2), box(21, 21, 22, 22)],
+            id="keeps_geoms_order",
+        ),
+        pytest.param(
+            [box(0, 0, 10, 10)],
+            [box(5, 5, 15, 15)],
+            "contains",
+            [GeometryCollection()],
+            id="predicate_is_respected",
+        ),
+        pytest.param(
+            [box(0, 0, 10, 10)],
+            [box(5, 5, 15, 15)],
+            "intersects",
+            [box(5, 5, 15, 15)],
+            id="intersects",
+        ),
+        pytest.param(
+            [box(0, 0, 10, 10)],
+            [],
+            "contains",
+            [GeometryCollection()],
+            id="empty_others",
+        ),
+        pytest.param(
+            [],
+            [box(0, 0, 1, 1)],
+            "contains",
+            [],
+            id="empty_geoms",
+        ),
+    ],
+)
+def test_union_by_predicate(
+    geoms: list[BaseGeometry],
+    others: list[BaseGeometry],
+    predicate: Literal["contains", "intersects"],
+    expected: list[BaseGeometry],
+):
+    result = union_by_predicate(
+        GeoSeries(geoms),
+        GeoSeries(others),
+        predicate,
+    )
+
+    assert len(result) == len(expected)
+    for actual_geom, expected_geom in zip(result, expected, strict=True):
+        assert actual_geom.equals(expected_geom)
