@@ -83,7 +83,7 @@ from geogenalg.core.geometry import (
     node_non_simple,
     orient_line_toward_point,
     oriented_envelope_dimensions,
-    perforate_polygon_with_gdf_exteriors,
+    perforate_polygons_with_gdf_exteriors,
     point_on_line,
     polygon_rings_to_multilinestring,
     ramer_douglas_peucker_simplify_keep_coords,
@@ -476,26 +476,31 @@ def test_get_topological_points(
 
 
 @pytest.mark.parametrize(
-    ("input_geometry", "gdf", "expected_geometry"),
+    ("input_geoms", "gdf", "expected_geoms"),
     [
-        (
-            box(0, 0, 20, 20),
+        pytest.param(
+            GeoSeries([box(0, 0, 20, 20)]),
             GeoDataFrame(
                 geometry=[
                     box(5, 5, 6, 6),
                     box(7, 7, 8, 8),
                 ],
             ),
-            Polygon(
-                shell=[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]],
-                holes=[
-                    [[6, 5], [6, 6], [5, 6], [5, 5], [6, 5]],
-                    [[8, 7], [8, 8], [7, 8], [7, 7], [8, 7]],
+            GeoSeries(
+                [
+                    Polygon(
+                        shell=[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]],
+                        holes=[
+                            [[6, 5], [6, 6], [5, 6], [5, 5], [6, 5]],
+                            [[8, 7], [8, 8], [7, 8], [7, 7], [8, 7]],
+                        ],
+                    ),
                 ],
             ),
+            id="two exteriors",
         ),
-        (
-            box(0, 0, 20, 20),
+        pytest.param(
+            GeoSeries([box(0, 0, 20, 20)]),
             GeoDataFrame(
                 geometry=[
                     # Feature within ring
@@ -525,28 +530,54 @@ def test_get_topological_points(
                     box(1, 11, 9, 19),
                 ],
             ),
-            Polygon(
-                shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
-                holes=[
-                    [[1, 10], [1, 1], [10, 1], [10, 10], [1, 10]],
-                    [[1, 11], [9, 11], [9, 19], [1, 19], [1, 11]],
-                    [[19, 19], [11, 19], [11, 11], [19, 11], [19, 19]],
+            GeoSeries(
+                [
+                    Polygon(
+                        shell=[[0, 0], [0, 20], [20, 20], [20, 0]],
+                        holes=[
+                            [[1, 10], [1, 1], [10, 1], [10, 10], [1, 10]],
+                            [[1, 11], [9, 11], [9, 19], [1, 19], [1, 11]],
+                            [[19, 19], [11, 19], [11, 11], [19, 11], [19, 19]],
+                        ],
+                    ),
                 ],
             ),
+            id="recursive features",
+        ),
+        pytest.param(
+            GeoSeries([box(0, 0, 10, 10), box(20, 0, 30, 10), box(40, 0, 50, 10)]),
+            GeoDataFrame(geometry=[box(41, 1, 42, 2), box(1, 1, 2, 2)]),
+            GeoSeries(
+                [
+                    box(0, 0, 10, 10).difference(box(1, 1, 2, 2)),
+                    box(20, 0, 30, 10),
+                    box(40, 0, 50, 10).difference(box(41, 1, 42, 2)),
+                ],
+            ),
+            id="multiple_geoms_only_some_exteriors",
+        ),
+        pytest.param(
+            GeoSeries([box(0, 0, 5, 5)]),
+            GeoDataFrame(geometry=[box(10, 10, 11, 11)]),
+            GeoSeries([box(0, 0, 5, 5)]),
+            id="no_exteriors_contained",
+        ),
+        pytest.param(
+            GeoSeries([]),
+            GeoDataFrame(geometry=[box(1, 1, 2, 2)]),
+            GeoSeries([]),
+            id="empty",
         ),
     ],
-    ids=[
-        "two exteriors",
-        "recursive features",
-    ],
 )
-def test_perforate_polygon_with_gdf_exteriors(
-    input_geometry: Polygon,
+def test_perforate_polygons_with_gdf_exteriors(
+    input_geoms: GeoSeries,
     gdf: GeoDataFrame,
-    expected_geometry: Polygon,
+    expected_geoms: GeoSeries,
 ):
-    assert (
-        perforate_polygon_with_gdf_exteriors(input_geometry, gdf) == expected_geometry
+    assert_geoseries_equal(
+        perforate_polygons_with_gdf_exteriors(input_geoms, gdf),
+        expected_geoms,
     )
 
 
