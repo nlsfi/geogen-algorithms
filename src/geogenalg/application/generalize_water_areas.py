@@ -3,22 +3,34 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+from itertools import pairwise
 from typing import ClassVar, cast, override
 
+import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
 from pandas.api.types import is_string_dtype
 from pydantic import Field
-from pygeoops import simplify
 from shapely import (
     MultiPoint,
     MultiPolygon,
     Polygon,
+    STRtree,
     extract_unique_points,
     force_2d,
+    get_coordinates,
+    get_exterior_ring,
+    get_parts,
+    get_segments,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
+    is_empty,
+    length,
+    linestrings,
+    polygons,
     shortest_line,
+    union,
     union_all,
 )
-from shapely.geometry import LineString, MultiLineString, Point
+from shapely.geometry import LineString, MultiLineString
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -32,16 +44,16 @@ from geogenalg.continuity import (
 )
 from geogenalg.core.exceptions import GeometryOperationError
 from geogenalg.core.geometry import (
-    LineExtendFrom,
     assign_nearest_z,
     chaikin_smooth_keep_topology,
     create_crossing_line_at_vertex,
-    ensure_geoms,
-    extend_line_by,
     extract_interior_rings,
+    get_topological_points,
     largest_part,
-    perforate_polygon_with_gdf_exteriors,
+    perforate_polygons_with_gdf_exteriors,
     split_linear_geometry,
+    union_by_predicate,
+    visvalingam_whyatt_simplify_conditional,
 )
 from geogenalg.exaggeration import (
     exaggerate_thin_polygons,
@@ -49,6 +61,13 @@ from geogenalg.exaggeration import (
 )
 from geogenalg.identity import hash_duplicate_indexes
 from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
+
+
+def _disjoint_from(geoms: GeoSeries, other: BaseGeometry) -> np.ndarray:
+    mask = np.ones(len(geoms), dtype=bool)
+    if not other.is_empty:
+        mask[geoms.sindex.query(other, predicate="intersects")] = False
+    return mask
 
 
 @supports_identity
@@ -175,66 +194,95 @@ class GeneralizeWaterAreas(BaseAlgorithm):
     @staticmethod
     def _get_shoreline_splitters(
         unmodified_shoreline: GeoDataFrame,
-        new_unsplit_shoreline: LineString | MultiLineString,
+        new_unsplit_shoreline: GeoSeries,
         *,
         max_distance: float = 20,
-    ) -> MultiLineString:
+    ) -> list[MultiLineString]:
+        """Build splitters for each new shoreline feature.
+
+        Returns
+        -------
+            A MultiLineString per feature of new_unsplit_shoreline, containing
+                the splitters which touch that feature.
+
+        """
         # For the best shoreline splitting result, build splitter lines which
         # cut through the lines. Splitting by points (even if snapped) can be
         # inconsistent.
-        def _to_splitter(point: Point | MultiPoint) -> MultiLineString:
-            lines = []
+        no_splitters = [MultiLineString() for _ in range(len(new_unsplit_shoreline))]
 
-            for p in ensure_geoms(point):
-                line = shortest_line(
-                    p,
-                    new_unsplit_shoreline,
-                )
+        shoreline_union = cast(
+            "LineString | MultiLineString", new_unsplit_shoreline.union_all()
+        )
+        segments = np.asarray(
+            get_segments(get_parts(shoreline_union)),
+            dtype=object,
+        )
+        tree = STRtree(segments)
 
-                if line.length > max_distance:
-                    continue
+        points = get_parts(unmodified_shoreline.geometry.boundary.to_numpy())
+        points = points[~is_empty(points)]
 
-                if line.length == 0:
-                    crossing = create_crossing_line_at_vertex(
-                        new_unsplit_shoreline,
-                        p,
-                        length=0.00001,
-                    )
+        if len(points) == 0 or len(segments) == 0:
+            return no_splitters
 
-                    if crossing.is_empty:
-                        continue
+        nearest = tree.nearest(points)
+        lines = shortest_line(points, segments[nearest])
+        lengths = length(lines)
 
-                    lines.append(crossing)
-                    continue
+        within_range = lengths <= max_distance
+        extend_by = 0.00001
 
-                lines.append(
-                    extend_line_by(
-                        line,
-                        0.00001,
-                        LineExtendFrom.END,
-                    )
-                )
+        # Extend lines slightly so they are guaranteed to cross the line
+        extendable = within_range & (lengths > 0)
+        start, end = get_coordinates(lines[extendable]).reshape(-1, 2, 2).swapaxes(0, 1)
+        direction = end - start
+        new_end = end + direction / np.hypot(*direction.T)[:, np.newaxis] * extend_by
+        splitter_lines: list[LineString] = list(
+            np.asarray(
+                linestrings(np.stack([start, end, new_end], axis=1)),
+                dtype=object,
+            )
+        )
 
-            return MultiLineString(lines) if lines else MultiLineString()
+        # Points which form a line with length 0.0 sit directly on the shoreline.
+        # These require special handling.
+        on_shoreline = points[within_range & (lengths == 0)]
+        point_idx, segment_idx = tree.query(
+            on_shoreline,
+            predicate="dwithin",
+            distance=1e-6,
+        )
+        bounds = np.searchsorted(point_idx, np.arange(len(on_shoreline) + 1))
+        segments_per_point = [segment_idx[a:b] for a, b in pairwise(bounds)]
+        for point, connected in zip(on_shoreline, segments_per_point, strict=True):
+            crossing = create_crossing_line_at_vertex(
+                MultiLineString(segments[connected].tolist()),
+                point,
+                length=extend_by,
+            )
 
-        splitters = unmodified_shoreline.copy()
-        splitters.geometry = splitters.boundary
-        splitters = splitters.loc[~splitters.geometry.is_empty]
-        splitters.geometry = splitters.geometry.apply(_to_splitter)  # ty: ignore[no-matching-overload]
+            if not crossing.is_empty:
+                splitter_lines.append(crossing)
 
-        result = splitters.union_all()
+        if not splitter_lines:
+            return no_splitters
 
-        if isinstance(result, LineString):
-            return MultiLineString([result])
+        # Only give each feature the splitters which actually touch it.
+        splitter_parts = get_parts(union_all(splitter_lines))
+        feature_idx, part_idx = STRtree(splitter_parts).query(
+            new_unsplit_shoreline.to_numpy(),
+            predicate="intersects",
+        )
+        parts_per_feature = np.split(
+            part_idx,
+            np.searchsorted(feature_idx, np.arange(1, len(new_unsplit_shoreline))),
+        )
 
-        if result.is_empty:
-            return MultiLineString()
-
-        if not isinstance(result, MultiLineString):
-            msg = "Did not get MultiLineString"
-            raise GeometryOperationError(msg)
-
-        return result
+        return [
+            MultiLineString(splitter_parts[np.sort(parts)].tolist())
+            for parts in parts_per_feature
+        ]
 
     def _build_generalized_shoreline(
         self,
@@ -260,17 +308,42 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
         splitters = GeneralizeWaterAreas._get_shoreline_splitters(
             original_shoreline,
-            cast("LineString | MultiLineString", shoreline.union_all()),
+            shoreline.geometry,
         )
 
-        shoreline.geometry = shoreline.geometry.apply(
-            lambda geom: split_linear_geometry(geom, splitters)
-        )  # ty: ignore[no-matching-overload]
+        shoreline.geometry = [
+            MultiLineString([geom])
+            if splitter.is_empty
+            else split_linear_geometry(geom, splitter)
+            for geom, splitter in zip(shoreline.geometry, splitters, strict=True)
+        ]
         shoreline = shoreline.explode().reset_index(drop=True)
 
         return inherit_attributes_for_lines_by_centroid_distances(
             original_shoreline,
             shoreline,
+        )
+
+    @staticmethod
+    def _simplify(
+        geoseries: GeoSeries,
+        tolerance: float,
+        skip_coords: MultiPoint,
+        *,
+        has_shoreline: bool,
+    ) -> GeoSeries:
+        geoseries = geoseries.force_2d()
+
+        coords_to_keep = (
+            skip_coords
+            if has_shoreline
+            else MultiPoint(get_topological_points(geoseries))
+        )
+
+        return visvalingam_whyatt_simplify_conditional(
+            geoseries,
+            tolerance,
+            skip_coords=coords_to_keep,
         )
 
     def _post_process(
@@ -316,6 +389,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         )
 
         gdf = data.loc[data.geometry.geom_type == "Polygon"].copy()
+        non_shoreline_union = non_shoreline_segments.union_all()
 
         if self.thin_section_exaggerate_by != 0.0:
             thin_sections = (
@@ -330,19 +404,19 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
             # Skip exaggerating near sections which should be preserved
             thin_sections = thin_sections.loc[
-                thin_sections.geometry.disjoint(non_shoreline_segments.union_all())
-                & thin_sections.geometry.disjoint(skip_coords)
+                _disjoint_from(thin_sections.geometry, non_shoreline_union)
+                & _disjoint_from(thin_sections.geometry, skip_coords)
             ]
             # TODO: fix this issue by removing the generated overlap?
             # A straightforward intersection removal would move the edge however.
 
-            def add_exaggerated_parts(geom: Polygon) -> Polygon:
-                intersecting_geoms = thin_sections.loc[
-                    thin_sections.geometry.intersects(geom)
-                ].union_all()
-                return geom.union(intersecting_geoms)
+            exaggerated_parts = union_by_predicate(
+                gdf.geometry,
+                thin_sections,
+                "intersects",
+            )
 
-            gdf.geometry = gdf.geometry.apply(add_exaggerated_parts)  # ty: ignore[no-matching-overload]
+            gdf.geometry = union(gdf.geometry.to_numpy(), exaggerated_parts)
 
         # Extract from unary union to catch islands which are between lake parts
         islands_geom = extract_interior_rings(
@@ -352,14 +426,18 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             geometry=GeoSeries(islands_geom).explode(index_parts=True)
         )
 
-        gdf.geometry = gdf.geometry.apply(lambda geom: Polygon(geom.exterior))  # ty: ignore[no-matching-overload]
+        gdf.geometry = np.asarray(
+            polygons(get_exterior_ring(gdf.geometry.to_numpy())),
+            dtype=object,
+        )
 
         # When islands are extracted, we get just an exterior ring. Because of
         # recursive lakes and islands, it is required to add any lakes as
         # interior rings to the extracted islands.
-        islands.geometry = islands.geometry.apply(
-            lambda geom: perforate_polygon_with_gdf_exteriors(geom, gdf)
-        )  # ty: ignore[no-matching-overload]
+        islands.geometry = perforate_polygons_with_gdf_exteriors(
+            islands.geometry,
+            gdf,
+        )
 
         if self.island_exaggerate_by != 0.0:
             islands = exaggerate_thin_polygons(
@@ -369,22 +447,19 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 self.island_exaggerate_by,
             )
 
-        gdf.geometry = gdf.geometry.force_2d().apply(
-            simplify,
-            tolerance=self.area_simplification_tolerance,
-            algorithm="vw",
-            preserve_topology=True,
-            preserve_common_boundaries=True,
-            keep_points_on=skip_coords,
-        )  # ty: ignore[no-matching-overload]
-        islands.geometry = islands.geometry.force_2d().apply(
-            simplify,
-            tolerance=self.island_simplification_tolerance,
-            algorithm="vw",
-            preserve_topology=True,
-            preserve_common_boundaries=True,
-            keep_points_on=skip_coords,
-        )  # ty: ignore[no-matching-overload]
+        gdf.geometry = self._simplify(
+            gdf.geometry,
+            self.area_simplification_tolerance,
+            skip_coords,
+            has_shoreline=not shoreline_gdf.empty,
+        )
+        islands.geometry = self._simplify(
+            islands.geometry,
+            self.island_simplification_tolerance,
+            skip_coords,
+            has_shoreline=not shoreline_gdf.empty,
+        )
+
         islands = islands.loc[islands.geometry.area > self.island_min_area]
 
         # Delete small areas
