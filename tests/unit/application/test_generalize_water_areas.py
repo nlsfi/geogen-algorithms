@@ -6,6 +6,7 @@
 
 
 import pytest
+from geopandas import GeoSeries
 from geopandas.geodataframe import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 from shapely import equals_exact
@@ -156,9 +157,10 @@ def test_get_shoreline_splitters(
 ):
     result = GeneralizeWaterAreas._get_shoreline_splitters(
         unmodified_shoreline,
-        new_unsplit_shoreline,
+        GeoSeries([new_unsplit_shoreline]),
     )
-    assert equals_exact(result, expected, tolerance=0.00001)
+    assert len(result) == 1
+    assert equals_exact(result[0], expected, tolerance=0.00001)
 
 
 @pytest.mark.parametrize(

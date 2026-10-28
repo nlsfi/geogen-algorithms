@@ -100,6 +100,7 @@ multipolygon
 mutex
 ndarray
 networkx
+newaxis
 nodata
 num
 peucker
