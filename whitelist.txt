@@ -39,6 +39,7 @@ coords
 crs
 csgraph
 csr
+cutil
 dataframe
 dataset
 DBSCAN
@@ -149,6 +150,7 @@ triu
 typer
 unary
 unmerged
+unrepairable
 unsplit
 unvisited
 utils
@@ -156,6 +158,8 @@ vec
 vecs
 visvalingam
 vstack
+vw
+whyatt
 wkb
 wkt
 xy

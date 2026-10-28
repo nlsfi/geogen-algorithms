@@ -68,6 +68,7 @@ from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from shapely.ops import linemerge, nearest_points, split
 from shapelysmooth import catmull_rom_smooth
+from simplification.cutil import simplify_coords_vw_idx
 
 from geogenalg.core.exceptions import (
     GeometryOperationError,
@@ -2223,6 +2224,8 @@ def make_valid_ensure_polygon(geom: Polygon) -> Polygon:
 
 def make_valid_extract_polygons(
     geom: Polygon,
+    *,
+    warn_if_unrepairable: bool = True,
 ) -> Polygon | MultiPolygon:
     """Make a polygon valid and extract only its polygon components.
 
@@ -2234,6 +2237,8 @@ def make_valid_extract_polygons(
     Args:
     ----
         geom: Polygon to repair.
+        warn_if_unrepairable: Whether to warn when the polygon can't be
+            repaired and the original geometry is returned.
 
     Returns:
     -------
@@ -2259,12 +2264,13 @@ def make_valid_extract_polygons(
         if polys:
             return MultiPolygon(polys) if len(polys) > 1 else polys[0]
 
-    warn(
-        "Geometry could not be repaired into valid (multi)polygon."
-        " Returning original geometry.",
-        UserWarning,
-        stacklevel=2,
-    )
+    if warn_if_unrepairable:
+        warn(
+            "Geometry could not be repaired into valid (multi)polygon."
+            " Returning original geometry.",
+            UserWarning,
+            stacklevel=2,
+        )
     return geom
 
 
@@ -3158,3 +3164,71 @@ def get_contiguous_line_components(
     _, component_ids = connected_components(adjacency_matrix, directed=False)
 
     return component_ids[u], node_degrees
+
+
+def _simplify_coords_vw_keep(
+    coords: np.ndarray,
+    tolerance: float,
+    keep_coords: set[tuple[float, ...]],
+) -> np.ndarray:
+    keep_idx = simplify_coords_vw_idx(coords, tolerance)
+
+    if keep_coords:
+        drop_mask = np.ones(len(coords), dtype=bool)
+        drop_mask[keep_idx] = False
+        drop_idx = drop_mask.nonzero()[0]
+
+        restore_idx = [
+            i for i in drop_idx.tolist() if tuple(coords[i].tolist()) in keep_coords
+        ]
+
+        if restore_idx:
+            keep_idx = np.sort(
+                np.concatenate([keep_idx, restore_idx]).astype(np.int64),
+            )
+
+    return coords[keep_idx]
+
+
+def visvalingam_whyatt_simplify_conditional(
+    geoms: GeoSeries,
+    tolerance: float,
+    *,
+    skip_coords: SkipCoordsInput = None,
+) -> GeoSeries:
+    """Simplify polygons using the Visvalingam-Whyatt algorithm.
+
+    Additionally you can pass a set of coordinates which will always be kept
+    unchanged in the output.
+
+    Args:
+    ----
+        geoms: Polygons to simplify.
+        tolerance: Area tolerance for the simplification algorithm.
+        skip_coords: List of points to skip. If a corresponding coordinate exists
+            in the input geometry, it is guaranteed to remain unchanged.
+
+    Returns:
+    -------
+        Simplified geometries.
+
+    """
+    keep_set = _normalize_skip_coords(skip_coords)
+
+    simplified_geoms = []
+    for polygon in geoms:
+        rings = []
+        for ring in [polygon.exterior, *polygon.interiors]:
+            coords = get_coordinates(ring, include_z=ring.has_z)
+            simplified = _simplify_coords_vw_keep(coords, tolerance, keep_set)
+
+            # If a ring collapses the less than 3 vertices, don't change it
+            rings.append(simplified if len(simplified) >= 3 else coords)  # noqa: PLR2004
+
+        repaired = make_valid_extract_polygons(
+            Polygon(rings[0], rings[1:]),
+            warn_if_unrepairable=False,
+        )
+        simplified_geoms.append(repaired if repaired.is_valid else polygon)
+
+    return GeoSeries(simplified_geoms, index=geoms.index, crs=geoms.crs)
