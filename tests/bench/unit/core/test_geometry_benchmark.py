@@ -12,7 +12,7 @@ import pytest
 from geopandas.geodataframe import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
 from shapely import get_num_coordinates
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, MultiPoint, Point
 
 from geogenalg.core.geometry import (
     assign_nearest_z,
@@ -23,6 +23,7 @@ from geogenalg.core.geometry import (
     get_line_connection_points,
     get_topological_points,
     substring,
+    visvalingam_whyatt_simplify_conditional,
 )
 from geogenalg.testing import GeoPackagePath, TestInputData
 
@@ -225,6 +226,47 @@ def test_chaikin_smooth_keep_topology(
         iterations=3,
         extra_skip_coords=None,
         distance_threshold=0.05,
+    )
+
+    assert len(result) == grid_size * grid_size
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    "grid_size",
+    [
+        5,
+        15,
+        30,
+    ],
+)
+@pytest.mark.parametrize(
+    "use_skip_coords",
+    [
+        False,
+        True,
+    ],
+    ids=[
+        "no_skip_coords",
+        "topological_points_as_skip_coords",
+    ],
+)
+def test_visvalingam_whyatt_simplify_conditional(
+    grid_size: int,
+    use_skip_coords: bool,
+    benchmark: BenchmarkFixture,
+    make_polygon_grid: Callable[..., GeoDataFrame],
+):
+    polygons = make_polygon_grid(grid_size, vertices_per_edge=50)
+    skip_coords = (
+        MultiPoint(get_topological_points(polygons)) if use_skip_coords else None
+    )
+
+    result = benchmark(
+        visvalingam_whyatt_simplify_conditional,
+        polygons.geometry,
+        1e-5,
+        skip_coords=skip_coords,
     )
 
     assert len(result) == grid_size * grid_size

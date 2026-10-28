@@ -98,6 +98,7 @@ from geogenalg.core.geometry import (
     split_line_at_distances,
     split_linear_geometry,
     substring,
+    visvalingam_whyatt_simplify_conditional,
 )
 
 
@@ -3788,6 +3789,19 @@ def test_make_valid_extract_polygons(
     assert result.equals_exact(expected, tolerance=1e-3)
 
 
+def test_make_valid_extract_polygons_silence_warning():
+    line_collapse = Polygon([(0, 0), (1, 0), (2, 0), (1, 0), (0, 0)])
+
+    # Turn warning to error and ensure it's not raised
+    with catch_warnings(category=UserWarning, action="error"):
+        result = make_valid_extract_polygons(
+            line_collapse,
+            warn_if_unrepairable=False,
+        )
+
+    assert result.equals(line_collapse)
+
+
 @pytest.mark.parametrize(
     ("input_geom", "expected"),
     [
@@ -4827,3 +4841,126 @@ def test_get_contiguous_line_components(
 
     np.testing.assert_array_equal(component_ids, expected_components)
     np.testing.assert_array_equal(node_degrees, expected_node_degrees)
+
+
+@pytest.mark.parametrize(
+    ("geoms", "tolerance", "skip_coords", "expected"),
+    [
+        (
+            GeoSeries(
+                [Polygon([(0, 0), (5, 0.1), (10, 0), (10, 10), (0, 10)])],
+            ),
+            1.0,
+            None,
+            GeoSeries(
+                [Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])],
+            ),
+        ),
+        (
+            GeoSeries(
+                [Polygon([(0, 0), (5, 0.1), (10, 0), (10, 10), (0, 10)])],
+            ),
+            1.0,
+            {(5.0, 0.1)},
+            GeoSeries(
+                [Polygon([(0, 0), (5, 0.1), (10, 0), (10, 10), (0, 10)])],
+            ),
+        ),
+        (
+            GeoSeries(
+                [Polygon([(0, 0), (5, 0.1), (10, 0), (10, 10), (0, 10)])],
+            ),
+            1.0,
+            MultiPoint([(5, 0.1)]),
+            GeoSeries(
+                [Polygon([(0, 0), (5, 0.1), (10, 0), (10, 10), (0, 10)])],
+            ),
+        ),
+        (
+            GeoSeries(
+                [Polygon([(0, 0), (5, 0.1), (10, 0), (10, 10), (0, 10)])],
+            ),
+            1.0,
+            {(7.0, 7.0)},
+            GeoSeries(
+                [Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])],
+            ),
+        ),
+        (
+            GeoSeries(
+                [
+                    Polygon(
+                        [(0, 0), (10, 0), (10, 10), (0, 10)],
+                        holes=[[(4, 4), (5, 4.1), (6, 4), (6, 6), (4, 6)]],
+                    )
+                ]
+            ),
+            1.0,
+            None,
+            GeoSeries(
+                [
+                    Polygon(
+                        [(0, 0), (10, 0), (10, 10), (0, 10)],
+                        holes=[[(4, 4), (6, 4), (6, 6), (4, 6)]],
+                    )
+                ]
+            ),
+        ),
+        (
+            GeoSeries([Polygon([(0, 0), (1, 0), (0, 1)])]),
+            100.0,
+            None,
+            GeoSeries([Polygon([(0, 0), (1, 0), (0, 1)])]),
+        ),
+        (
+            GeoSeries(
+                [
+                    Polygon([(0, 0), (5, 0.1), (10, 0), (10, 10), (0, 10)]),
+                    Polygon([(20, 0), (25, 0.1), (30, 0), (30, 10), (20, 10)]),
+                ],
+                index=["a", "b"],
+            ),
+            1.0,
+            None,
+            GeoSeries(
+                [
+                    Polygon([(0, 0), (10, 0), (10, 10), (0, 10)]),
+                    Polygon([(20, 0), (30, 0), (30, 10), (20, 10)]),
+                ],
+                index=["a", "b"],
+            ),
+        ),
+        (
+            GeoSeries([], dtype="geometry"),
+            1.0,
+            None,
+            GeoSeries([], dtype="geometry"),
+        ),
+    ],
+    ids=[
+        "removes_vertex",
+        "keeps_skip_coord_from_set",
+        "keeps_skip_coord_from_multipoint",
+        "unused_skip_coord",
+        "simplifies_interior_ring",
+        "keeps_ring_which_would_collapse",
+        "multiple_geoms_keep_index",
+        "empty",
+    ],
+)
+def test_visvalingam_whyatt_simplify_conditional(
+    geoms: GeoSeries,
+    tolerance: float,
+    skip_coords: set[tuple[float, float]] | MultiPoint | None,
+    expected: GeoSeries,
+):
+    assert_geoseries_equal(
+        visvalingam_whyatt_simplify_conditional(
+            geoms,
+            tolerance,
+            skip_coords=skip_coords,
+        ),
+        expected,
+    )
+
+
