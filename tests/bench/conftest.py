@@ -138,3 +138,17 @@ def make_polygon_grid():
         )
 
     return _factory
+
+
+@pytest.fixture
+def make_thin_and_wide_rects():
+    def _factory(rect_count: int) -> GeoDataFrame:
+        return GeoDataFrame(
+            geometry=[
+                box(i * 5, 0, i * 5 + 2, 0.1 if i % 2 == 0 else 2)
+                for i in range(rect_count)
+            ],
+            crs="EPSG:3857",
+        )
+
+    return _factory

@@ -8,16 +8,21 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from geopandas import GeoDataFrame
+import numpy as np
+from geopandas import GeoDataFrame, GeoSeries
+from pygeoops import PrimitiveType, collection_extract
 from shapely import (
     BufferCapStyle,
     BufferJoinStyle,
     Polygon,
+    buffer,
+    get_coordinates,
+    make_valid,
+    oriented_envelope,
 )
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
-from geogenalg.core.geometry import elongation, oriented_envelope_dimensions
 from geogenalg.core.parallel import in_parallel
 from geogenalg.utility.validation import check_gdf_geometry_type
 
@@ -58,6 +63,8 @@ def buffer_with_options(
 def extract_narrow_polygon_parts(
     input_gdf: GeoDataFrame,
     threshold: float,
+    *,
+    sliver_cleaning_distance: float = 0.1,
 ) -> GeoDataFrame:
     """Extract polygon parts narrower than the threshold.
 
@@ -66,6 +73,10 @@ def extract_narrow_polygon_parts(
         input_gdf: GeoDataFrame containing Polygon or MultiPolygon geometries
         threshold: Minimum width for a polygon part. Parts narrower than this are
               extracted.
+        sliver_cleaning_distance: Slivers narrower than twice this distance are
+            removed from the result with a negative and positive buffer. Set to
+            0 to skip cleaning, which is faster but the result may then contain
+            slivers produced by the difference operation.
 
     Returns:
     -------
@@ -80,23 +91,32 @@ def extract_narrow_polygon_parts(
         msg = "Extract narrow parts only supports Polygon or MultiPolygon geometries."
         raise GeometryTypeError(msg)
 
+    if sliver_cleaning_distance < 0:
+        msg = "Sliver cleaning distance must not be negative."
+        raise ValueError(msg)
+
     wide_parts = (
         in_parallel(input_gdf.geometry)
         .buffer(-(threshold / 2), cap_style="flat", join_style="mitre")
         .buffer(threshold / 2, cap_style="flat", join_style="mitre")
         .resolve_geoseries()
     )
+    wide_parts = make_valid(wide_parts)
+    wide_parts = GeoSeries(
+        collection_extract(wide_parts, PrimitiveType.POLYGON),
+        crs=input_gdf.crs,
+    )
 
     gdf = input_gdf.copy()
-    gdf.geometry = (
-        in_parallel(gdf.geometry)
-        .difference(wide_parts)
-        # Clean small slivers
+    narrow_parts = in_parallel(gdf.geometry).difference(wide_parts)
+
+    if sliver_cleaning_distance > 0:
         # TODO: consider minimum_width() for this?
-        .buffer(-0.1, cap_style="flat", join_style="mitre")
-        .buffer(0.1, cap_style="flat", join_style="mitre")
-        .resolve_geoseries()
-    )
+        narrow_parts = narrow_parts.buffer(
+            -sliver_cleaning_distance, cap_style="flat", join_style="mitre"
+        ).buffer(sliver_cleaning_distance, cap_style="flat", join_style="mitre")
+
+    gdf.geometry = narrow_parts.resolve_geoseries()
 
     return gdf
 
@@ -130,16 +150,28 @@ def exaggerate_thin_polygons(
     if buffer_options is None:
         buffer_options = BufferOptions()
 
-    modified = input_gdf.copy()
+    gdf = input_gdf.copy()
+    geoms = gdf.geometry.to_numpy()
 
-    def _process_polygon(geom: Polygon) -> Polygon:
-        width = oriented_envelope_dimensions(geom).width
+    corners = get_coordinates(oriented_envelope(geoms)).reshape(len(geoms), 5, 2)
 
-        if elongation(geom) <= elongation_threshold and width <= width_threshold:
-            return buffer_with_options(geom, exaggerate_by, buffer_options)
+    side_1 = np.hypot(*(corners[:, 1] - corners[:, 0]).T)
+    side_2 = np.hypot(*(corners[:, 2] - corners[:, 1]).T)
+    widths = np.minimum(side_1, side_2)
+    heights = np.maximum(side_1, side_2)
 
-        return geom
+    is_thin = (widths <= elongation_threshold * heights) & (widths <= width_threshold)
+    geoms[is_thin] = buffer(  # ty: ignore[no-matching-overload]
+        geoms[is_thin],
+        exaggerate_by,
+        quad_segs=buffer_options.quad_segments,  # noqa: SC200
+        # There's a bug in the shapely stub typing this as BufferJoinStyle,
+        # hence the ignore.
+        cap_style=buffer_options.cap_style,
+        join_style=buffer_options.join_style,
+        mitre_limit=buffer_options.mitre_limit,
+        single_sided=buffer_options.single_sided,
+    )
+    gdf.geometry = geoms
 
-    modified.geometry = modified.geometry.apply(_process_polygon)  # ty: ignore[no-matching-overload]
-
-    return modified
+    return gdf
