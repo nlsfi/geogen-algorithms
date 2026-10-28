@@ -7,7 +7,7 @@
 
 import numpy as np
 import pytest
-from geopandas import GeoDataFrame
+from geopandas import GeoDataFrame, GeoSeries
 from shapely import buffer, points
 from shapely.geometry import LineString, box
 
@@ -118,6 +118,23 @@ def make_adjacent_polygons_with_boundary_lines():
         return (
             GeoDataFrame(geometry=polygons, crs="EPSG:3857"),
             GeoDataFrame(geometry=lines, crs="EPSG:3857"),
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def make_polygon_grid():
+    def _factory(grid_size: int, vertices_per_edge: int) -> GeoDataFrame:
+        return GeoDataFrame(
+            geometry=GeoSeries(
+                [
+                    box(x, y, x + 1, y + 1).segmentize(1 / vertices_per_edge)
+                    for x in range(grid_size)
+                    for y in range(grid_size)
+                ],
+                crs="EPSG:3857",
+            ),
         )
 
     return _factory
