@@ -422,3 +422,16 @@ def test_thin_points(
         input_data=thin_points_input,
         algorithm=thin_points_algorithm,
     ).run(benchmark, record_property)
+
+
+@pytest.mark.benchmark
+def test_generalize_road_network(
+    benchmark: BenchmarkFixture,
+    record_property: Callable,
+    road_network_input: TestInputData,
+    road_network_algorithm: BaseAlgorithm,
+) -> None:
+    AlgorithmBenchmark(
+        input_data=road_network_input,
+        algorithm=road_network_algorithm,
+    ).run(benchmark, record_property)
