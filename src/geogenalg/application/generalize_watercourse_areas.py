@@ -17,6 +17,7 @@ from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
 from geogenalg.core.geometry import (
     assign_nearest_z,
     chaikin_smooth_keep_topology,
+    make_valid_merge_parts,
 )
 from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.split import explode_and_hash_id
@@ -87,6 +88,9 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
             extra_skip_coords=skip_coords,
             distance_threshold=self.smoothing_maximum_cut_distance,
         )
+
+        generalized_areas.geometry = make_valid_merge_parts(generalized_areas.geometry)
+        generalized_areas = self._drop_invalid_geometries(generalized_areas)
 
         generalized_lines = hash_index_from_old_ids(
             generalized_lines, "watercourseareas", old_ids_column="old_ids_temp"

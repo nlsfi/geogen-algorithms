@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 from itertools import pairwise
 from typing import ClassVar, cast, override
+from warnings import warn
 
 import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
@@ -49,6 +50,7 @@ from geogenalg.core.geometry import (
     extract_interior_rings_of_union,
     get_topological_points,
     largest_part,
+    make_valid_merge_parts,
     perforate_polygons_with_gdf_exteriors,
     split_linear_geometry,
     union_by_predicate,
@@ -284,6 +286,20 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             for parts in parts_per_feature
         ]
 
+    @staticmethod
+    def _drop_invalid_geometries(gdf: GeoDataFrame) -> GeoDataFrame:
+        invalid = ~gdf.geometry.is_valid
+        if invalid.any():
+            warn(
+                f"Dropping {int(invalid.sum())} invalid geometries that could not be"
+                " repaired.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return gdf[~invalid]
+
+        return gdf
+
     def _build_generalized_shoreline(
         self,
         gdf: GeoDataFrame,
@@ -360,6 +376,9 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             extra_skip_coords=skip_coords,
             distance_threshold=self.smoothing_maximum_cut_distance,
         )
+
+        gdf.geometry = make_valid_merge_parts(gdf.geometry)
+        gdf = self._drop_invalid_geometries(gdf)
 
         if not shoreline_gdf.empty and not gdf.empty:
             shoreline = self._build_generalized_shoreline(
