@@ -594,7 +594,7 @@ def thin_points_algorithm() -> ThinPoints:
 def road_network_input(algorithm_testdata_path: Path) -> TestInputData:
     gpkg = GeoPackagePath(algorithm_testdata_path / "road_network.gpkg")
     return TestInputData(
-        input_uri=gpkg.to_input("tieviivat"),
+        input_uri=gpkg.to_input("road_network"),
         control_uri=gpkg.to_input("control"),
         unique_id_column="mtk_id",
         reference_uris={
@@ -605,4 +605,11 @@ def road_network_input(algorithm_testdata_path: Path) -> TestInputData:
 
 @pytest.fixture
 def road_network_algorithm() -> GeneralizeRoadNetwork:
-    return GeneralizeRoadNetwork()
+    return GeneralizeRoadNetwork(
+        buffer_size=100.0,
+        length_threshold=50.0,
+        road_type_column="kohdeluokka",
+        # TODO: specify road_classes parameter once tuples are supported
+        keep_unhandled=False,
+        reference_key="roads",
+    )
