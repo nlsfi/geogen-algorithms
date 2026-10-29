@@ -63,6 +63,7 @@ from geogenalg.core.geometry import (
     extend_line_to_nearest,
     extract_interior_rings,
     extract_interior_rings_gdf,
+    extract_interior_rings_of_union,
     gaussian_smooth,
     get_connected_segments,
     get_connected_unit_vectors,
@@ -5034,3 +5035,50 @@ def test_union_by_predicate(
     assert len(result) == len(expected)
     for actual_geom, expected_geom in zip(result, expected, strict=True):
         assert actual_geom.equals(expected_geom)
+
+
+@pytest.mark.parametrize(
+    ("geoms", "expected"),
+    [
+        pytest.param([], [], id="empty"),
+        pytest.param([box(0, 0, 1, 1)], [], id="no_ring"),
+        pytest.param(
+            [Polygon(box(0, 0, 10, 10).exterior, [box(2, 2, 4, 4).exterior])],
+            [Polygon([(4, 2), (2, 2), (2, 4), (4, 4)])],
+            id="one_ring",
+        ),
+        pytest.param(
+            [
+                Polygon([(0, 0), (10, 0), (10, 4), (0, 4)]),
+                Polygon([(0, 4), (10, 4), (10, 10), (0, 10)]),
+            ],
+            [],
+            id="touching_polygons_no_gap",
+        ),
+        pytest.param(
+            [
+                box(0, 0, 10, 2),
+                box(0, 8, 10, 10),
+                box(0, 2, 2, 8),
+                box(8, 2, 10, 8),
+            ],
+            [Polygon([(8, 2), (2, 2), (2, 8), (8, 8)])],
+            id="touching_polygons_have_gap",
+        ),
+        pytest.param(
+            [box(0, 0, 1, 1), box(5, 5, 6, 6)],
+            [],
+            id="separate_polygons_no_gap",
+        ),
+    ],
+)
+def test_extract_interior_rings_of_union(
+    geoms: list[Polygon],
+    expected: list[Polygon],
+):
+    result = extract_interior_rings_of_union(GeoSeries(geoms, dtype="geometry"))
+
+    assert len(result) == len(expected)
+
+    for i in range(len(result)):
+        assert result[i] == expected[i]

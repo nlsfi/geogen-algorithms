@@ -19,6 +19,7 @@ from geogenalg.core.geometry import (
     assign_z_from_attribute,
     chaikin_smooth_keep_topology,
     concatenate_lines,
+    extract_interior_rings_of_union,
     gaussian_smooth,
     get_line_connection_points,
     get_topological_points,
@@ -270,3 +271,32 @@ def test_visvalingam_whyatt_simplify_conditional(
     )
 
     assert len(result) == grid_size * grid_size
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    (
+        "part_count",
+        "gap_count",
+        "vertices_per_gap",
+        "expected_rings",
+    ),
+    [
+        (5, 20, 200, 18),
+        (20, 100, 200, 94),
+        (50, 400, 200, 342),
+    ],
+)
+def test_extract_interior_rings_of_union(
+    part_count: int,
+    gap_count: int,
+    vertices_per_gap: int,
+    expected_rings: int,
+    benchmark: BenchmarkFixture,
+    make_touching_polygons_with_holes: Callable[..., np.ndarray],
+):
+    geoms = make_touching_polygons_with_holes(part_count, gap_count, vertices_per_gap)
+
+    result = benchmark(extract_interior_rings_of_union, geoms)
+
+    assert len(result) == expected_rings
