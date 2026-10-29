@@ -12,9 +12,8 @@ from pandas.api.types import is_string_dtype
 from pydantic import Field
 from shapely import (
     MultiPoint,
-    MultiPolygon,
-    Polygon,
     STRtree,
+    disjoint_subset_union_all,
     extract_unique_points,
     force_2d,
     get_coordinates,
@@ -47,7 +46,7 @@ from geogenalg.core.geometry import (
     assign_nearest_z,
     chaikin_smooth_keep_topology,
     create_crossing_line_at_vertex,
-    extract_interior_rings,
+    extract_interior_rings_of_union,
     get_topological_points,
     largest_part,
     perforate_polygons_with_gdf_exteriors,
@@ -55,6 +54,7 @@ from geogenalg.core.geometry import (
     union_by_predicate,
     visvalingam_whyatt_simplify_conditional,
 )
+from geogenalg.core.parallel import in_parallel
 from geogenalg.exaggeration import (
     exaggerate_thin_polygons,
     extract_narrow_polygon_parts,
@@ -288,23 +288,23 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         self,
         gdf: GeoDataFrame,
         original_shoreline: GeoDataFrame,
-        non_shoreline_segments: GeoDataFrame,
+        non_shoreline_union: BaseGeometry,
     ) -> GeoDataFrame:
         shoreline = gdf.copy()
 
         if shoreline.empty:
             return GeoDataFrame(geometry=[], crs=gdf.crs)
 
-        shoreline.geometry = shoreline.geometry.boundary
-
         # Remove segments which were originally identified to be present in
         # the unmodified water area boundaries but not in unmodified
         # shoreline. More simply, this removes segments which are not part
         # of an actual shoreline.
-        shoreline = shoreline.overlay(
-            GeoDataFrame(geometry=[non_shoreline_segments.union_all()], crs=gdf.crs),
-            how="difference",
-        ).explode()
+        shoreline.geometry = (
+            in_parallel(shoreline.geometry.boundary)
+            .difference(non_shoreline_union)
+            .resolve_geoseries()
+        )
+        shoreline = shoreline.loc[~shoreline.geometry.is_empty].explode()
 
         splitters = GeneralizeWaterAreas._get_shoreline_splitters(
             original_shoreline,
@@ -351,7 +351,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         gdf: GeoDataFrame,
         original_data: GeoDataFrame,
         shoreline_gdf: GeoDataFrame,
-        non_shoreline_segments: GeoDataFrame,
+        non_shoreline_union: BaseGeometry,
         skip_coords: MultiPoint,
     ) -> GeoDataFrame:
         gdf.geometry = chaikin_smooth_keep_topology(
@@ -365,7 +365,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             shoreline = self._build_generalized_shoreline(
                 gdf,
                 shoreline_gdf,
-                non_shoreline_segments,
+                non_shoreline_union,
             )
 
             if not is_string_dtype(shoreline.index.dtype):
@@ -418,12 +418,9 @@ class GeneralizeWaterAreas(BaseAlgorithm):
 
             gdf.geometry = union(gdf.geometry.to_numpy(), exaggerated_parts)
 
-        # Extract from unary union to catch islands which are between lake parts
-        islands_geom = extract_interior_rings(
-            cast("Polygon | MultiPolygon", gdf.union_all())
-        )
         islands = GeoDataFrame(
-            geometry=GeoSeries(islands_geom).explode(index_parts=True)
+            geometry=GeoSeries(extract_interior_rings_of_union(gdf.geometry)),
+            crs=gdf.crs,
         )
 
         gdf.geometry = np.asarray(
@@ -466,7 +463,9 @@ class GeneralizeWaterAreas(BaseAlgorithm):
         gdf = gdf.loc[gdf.geometry.area > self.min_area]
 
         # Add islands back in
-        gdf.geometry = gdf.geometry.difference(islands.geometry.union_all())
+        gdf.geometry = gdf.geometry.difference(
+            disjoint_subset_union_all(islands.geometry.to_numpy()),
+        )
 
         # The difference between the islands and areas might result in tiny
         # slivers and therefore change the geometry to a MultiPolygon. Resolve
@@ -481,6 +480,6 @@ class GeneralizeWaterAreas(BaseAlgorithm):
             gdf,
             data,
             shoreline_gdf,
-            non_shoreline_segments,
+            non_shoreline_union,
             skip_coords,
         )

@@ -10,6 +10,7 @@ from geopandas import GeoDataFrame
 from pandas.api.types import is_string_dtype
 from pydantic import Field
 from shapely.geometry import MultiPoint
+from shapely.geometry.base import BaseGeometry
 
 from geogenalg.application import supports_identity
 from geogenalg.application.generalize_water_areas import GeneralizeWaterAreas
@@ -63,7 +64,7 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
         gdf: GeoDataFrame,
         original_data: GeoDataFrame,
         shoreline_gdf: GeoDataFrame,
-        non_shoreline_segments: GeoDataFrame,
+        non_shoreline_union: BaseGeometry,
         skip_coords: MultiPoint,
     ) -> GeoDataFrame:
         generalized_lines, generalized_areas = thin_polygon_sections_to_lines(
@@ -102,7 +103,7 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
             shoreline = self._build_generalized_shoreline(
                 generalized_areas,
                 shoreline_gdf,
-                non_shoreline_segments,
+                non_shoreline_union,
             )
 
             if not is_string_dtype(shoreline.index.dtype):
