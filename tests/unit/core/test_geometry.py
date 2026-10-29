@@ -78,6 +78,7 @@ from geogenalg.core.geometry import (
     make_valid_ensure_polygon,
     make_valid_extract_linestrings,
     make_valid_extract_polygons,
+    make_valid_merge_parts,
     mean_segment_lengths,
     mean_z,
     move_to_point,
@@ -5082,3 +5083,91 @@ def test_extract_interior_rings_of_union(
 
     for i in range(len(result)):
         assert result[i] == expected[i]
+
+
+@pytest.mark.parametrize(
+    ("input_geoms", "expected"),
+    [
+        pytest.param(
+            [box(0, 0, 10, 10)],
+            [box(0, 0, 10, 10)],
+            id="valid_polygon_is_kept",
+        ),
+        pytest.param(
+            [
+                Polygon(
+                    box(0, 0, 100, 100).exterior,
+                    holes=[[(99, 45), (101, 50), (99, 55)]],
+                )
+            ],
+            [
+                Polygon(
+                    [
+                        (100.958, 50.15),
+                        (100.979, 50.051),
+                        (100.979, 49.949),
+                        (100.958, 49.85),
+                        (100, 46.8),
+                        (100, 0),
+                        (0, 0),
+                        (0, 100),
+                        (100, 100),
+                        (100, 53.2),
+                    ],
+                    holes=[[(99.957, 50), (99, 53.046), (99, 46.954)]],
+                )
+            ],
+            id="self_intersection",
+        ),
+        pytest.param(
+            [
+                box(0, 0, 10, 10),
+                Polygon(
+                    box(0, 0, 100, 100).exterior,
+                    holes=[[(99, 45), (101, 50), (99, 55)]],
+                ),
+                box(20, 20, 30, 30),
+            ],
+            [
+                box(0, 0, 10, 10),
+                Polygon(
+                    [
+                        (100.958, 50.15),
+                        (100.979, 50.051),
+                        (100.979, 49.949),
+                        (100.958, 49.85),
+                        (100, 46.8),
+                        (100, 0),
+                        (0, 0),
+                        (0, 100),
+                        (100, 100),
+                        (100, 53.2),
+                    ],
+                    holes=[[(99.957, 50), (99, 53.046), (99, 46.954)]],
+                ),
+                box(20, 20, 30, 30),
+            ],
+            id="mixed_valid_and_invalid",
+        ),
+        pytest.param(
+            [Polygon([(0, 0), (1, 1), (2, 2), (0, 0)])],
+            [Polygon([(0, 0), (1, 1), (2, 2), (0, 0)])],
+            id="no_repaired_polygons",
+        ),
+        pytest.param(
+            [],
+            [],
+            id="empty_input",
+        ),
+    ],
+)
+def test_make_valid_merge_parts(
+    input_geoms: list[Polygon],
+    expected: list[Polygon],
+):
+    result = make_valid_merge_parts(np.array(input_geoms, dtype=object))
+
+    assert len(result) == len(expected)
+
+    for i in range(len(result)):
+        assert result[i].equals_exact(expected[i], tolerance=0.001)
