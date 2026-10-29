@@ -44,7 +44,7 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
     """Size used to buffer both reference road lines and kept road lines."""
     length_threshold: float = Field(50.0, ge=0.0)
     """The minimum length a road needs to have outside all buffered roads to be kept."""
-    road_type_column: str = "kohdeluokka"
+    road_type_column: str = "road_type"
     """Column name used to select and order target road classes."""
     road_classes: ClassVar = (12141, 12316, 12314, 12313)
     """Road classes in descending processing order."""
@@ -67,18 +67,6 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
         data: GeoDataFrame,
         reference_data: dict[str, GeoDataFrame],
     ) -> GeoDataFrame:
-        """Execute algorithm.
-
-        Args:
-        ----
-            data: GeoDataFrame containing path geometries to generalize.
-            reference_data: Not used for this algorithm.
-
-        Returns:
-        -------
-            A GeoDataFrame containing the generalized paths.
-
-        """
         if data.empty:
             return data
 
