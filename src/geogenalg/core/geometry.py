@@ -36,6 +36,7 @@ from shapely import (
     Polygon,
     STRtree,
     area,
+    boundary,
     count_coordinates,
     difference,
     force_2d,
@@ -56,6 +57,7 @@ from shapely import (
     make_valid,
     multilinestrings,
     node,
+    point_on_surface,
     points,
     polygonize,
     polygons,
@@ -3265,3 +3267,48 @@ def union_by_predicate(
         unions[target_position] = union_all(others[matching])
 
     return unions
+
+
+def extract_interior_rings_of_union(geoms: np.ndarray | GeoSeries) -> np.ndarray:
+    """Return interior rings of a union of input geometries as Polygons.
+
+    This is useful in case polygons have (mostly) shared edges with gaps in
+    between for extracting the gaps.
+
+    Args:
+    ----
+        geoms: Polygons to combine and extract from.
+
+    Returns:
+    -------
+        Array of interior rings as Polygons.
+
+    """
+    geoms = np.asarray(geoms, dtype=object)
+    geoms = geoms[~is_empty(geoms)]
+
+    if len(geoms) == 0:
+        return np.empty(0, dtype=object)
+
+    # Union boundaries and polygonize, this is faster than unioning polygons
+    # directly on larger geometries.
+    faces = get_parts(polygonize([union_all(boundary(geoms))]))
+
+    # We find which faces are uncovered by the non-unioned geometries and
+    # select those
+
+    polygon_positions, _ = STRtree(geoms).query(
+        # check against point on surface as an optimization
+        point_on_surface(faces),
+        predicate="intersects",
+    )
+
+    uncovered = np.ones(len(faces), dtype=bool)
+    uncovered[polygon_positions] = False
+
+    return np.asarray(
+        polygons(
+            get_exterior_ring(faces[uncovered]),
+        ),
+        dtype=object,
+    )

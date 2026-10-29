@@ -8,8 +8,15 @@
 import numpy as np
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
-from shapely import buffer, points
-from shapely.geometry import LineString, box
+from shapely import (
+    buffer,
+    get_parts,
+    intersection,
+    points,
+    union_all,
+    voronoi_polygons,
+)
+from shapely.geometry import LineString, MultiPoint, Point, box
 
 
 def pytest_terminal_summary(
@@ -149,6 +156,34 @@ def make_thin_and_wide_rects():
                 for i in range(rect_count)
             ],
             crs="EPSG:3857",
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def make_touching_polygons_with_holes():
+    def _factory(
+        part_count: int,
+        gap_count: int,
+        vertices_per_gap: int,
+        seed: int = 0,
+    ) -> np.ndarray:
+        rng = np.random.default_rng(seed)
+        radius = 1000.0
+        quad_segs = vertices_per_gap // 4
+
+        area = Point(0, 0).buffer(radius, quad_segs=quad_segs * gap_count // 4)
+        centers = points(rng.uniform(-0.8 * radius, 0.8 * radius, (gap_count, 2)))
+        gaps = buffer(centers, radius / 100, quad_segs=quad_segs)
+        area = area.difference(union_all(gaps))
+
+        seeds = MultiPoint(rng.uniform(-radius, radius, (part_count, 2)))
+        cells = get_parts(voronoi_polygons(seeds, extend_to=area))
+
+        return np.array(
+            [part for part in get_parts(intersection(cells, area)) if part.area > 0],
+            dtype=object,
         )
 
     return _factory
