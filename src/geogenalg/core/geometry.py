@@ -50,11 +50,13 @@ from shapely import (
     is_closed,
     is_empty,
     is_missing,
+    is_valid,
     length,
     line_interpolate_point,
     line_merge,
     linestrings,
     make_valid,
+    minimum_width,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
     multilinestrings,
     node,
     point_on_surface,
@@ -3312,3 +3314,88 @@ def extract_interior_rings_of_union(geoms: np.ndarray | GeoSeries) -> np.ndarray
         ),
         dtype=object,
     )
+
+
+def _merge_invalid_part_to_largest(
+    part: Polygon,
+    largest: Polygon,
+) -> BaseGeometry:
+    adjacency_distance = oriented_envelope_dimensions(part).height
+
+    adjacent_largest_parts = part.buffer(adjacency_distance).intersection(largest)
+    combined = union_all([adjacent_largest_parts, part]).buffer(0.1).segmentize(0.1)
+
+    width = minimum_width(part).length
+    line = centerline(combined)
+
+    if not isinstance(line, MultiLineString | LineString) or line.is_empty:
+        return combined
+
+    # If we get a multilinestring, pick the longest line out of the ones which
+    # touch the original parts
+    touching = [part for part in get_parts(line) if part.intersects(part)]
+
+    if not touching:
+        return combined
+
+    longest = max(touching, key=lambda part: part.length)
+
+    clipped = longest.intersection(part.buffer(adjacency_distance))
+    return clipped.buffer(width * 0.5, quad_segs=8)
+
+
+def make_valid_merge_parts(
+    geoms: np.ndarray | GeoSeries,
+) -> np.ndarray:
+    """Repair invalid polygons by merging the small pieces back to the largest.
+
+    Valid geometries are returned as is.
+
+    If the geometry cannot be repaired by merging, it is made valid and used as is.
+
+    Args:
+    ----
+        geoms: Geometries to repair.
+
+    Returns:
+    -------
+        Repaired geometries.
+
+    """
+    result = np.array(geoms, dtype=object)
+    invalid = np.flatnonzero(~is_valid(result))
+
+    for idx in invalid:
+        parts = sorted(
+            (
+                part
+                for part in get_parts(make_valid(result[idx]))
+                if isinstance(part, Polygon) and not part.is_empty
+            ),
+            key=lambda part: part.area,
+            reverse=True,
+        )
+
+        if not parts:
+            continue
+
+        largest = parts[0]
+        merged = union_all(
+            [
+                largest,
+                *(_merge_invalid_part_to_largest(bit, largest) for bit in parts[1:]),
+            ]
+        )
+
+        if not merged.is_valid:
+            warn(
+                "Polygon could not be repaired by merging its parts,"
+                " using largest part.",
+                UserWarning,
+                stacklevel=2,
+            )
+            merged = make_valid_ensure_polygon(cast("Polygon", merged))
+
+        result[idx] = merged
+
+    return result
