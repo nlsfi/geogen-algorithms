@@ -20,6 +20,7 @@ from geogenalg.application import (
     supports_identity,
 )
 from geogenalg.continuity import gdf_to_networkx_graph
+from geogenalg.core.parallel import in_parallel
 
 if TYPE_CHECKING:
     from collections.abc import Hashable
@@ -79,13 +80,20 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
 
         """
         if data.empty:
-            return data.copy()
+            return data
+
+        gdf = data.copy()
+        gdf["_simplified"] = gdf.geometry.simplify(1)
 
         reference_roads = reference_data[self.reference_key]
-        reference_road_buffers = shapely.buffer(
-            reference_roads.geometry.to_numpy(),
-            self.buffer_size,
-            quad_segs=4,
+        reference_road_buffers = (
+            in_parallel(reference_roads.geometry.simplify(1))
+            .buffer(
+                self.buffer_size,
+                resolution=4,
+            )
+            .resolve_parallel()
+            .to_numpy()  # TODO: switch to resolve_numpy() once merged
         )
         reference_roads_tree = STRtree(reference_road_buffers)
 
@@ -93,14 +101,17 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
         kept_buffers: list[BaseGeometry] = []
         kept_tree = STRtree(kept_buffers)
 
-        data_descending_length = data.assign(geom_len=data.geometry.length).sort_values(
+        gdf_descending_length = gdf.assign(geom_len=gdf.geometry.length).sort_values(
             by="geom_len", ascending=False, kind="stable"
         )
 
         for road_class in self.road_classes:
-            class_mask = data_descending_length[self.road_type_column] == road_class
+            class_mask = gdf_descending_length[self.road_type_column] == road_class
 
-            for idx, geom in data_descending_length.loc[class_mask].geometry.items():
+            for idx, feature in gdf_descending_length.loc[class_mask].iterrows():
+                geom = feature[str(gdf.geometry.name)]
+                simplified = feature["_simplified"]
+
                 outside_reference = self._difference_with_nearby(
                     geom, reference_roads_tree
                 )
@@ -114,14 +125,14 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
                 if outside_all.length > self.length_threshold:
                     kept_indices.append(idx)
                     kept_buffers.append(
-                        shapely.buffer(geom, self.buffer_size, quad_segs=4),
+                        shapely.buffer(simplified, self.buffer_size, quad_segs=4),
                     )
                     kept_tree = STRtree(kept_buffers)
 
         # Restore connectivity to reference roads where possible
         kept_indices = list(
             self._preserve_connectivity_to_reference_lines(
-                data=data,
+                data=gdf,
                 reference_roads=reference_roads,
                 seed_indices=kept_indices,
             )
@@ -129,10 +140,11 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
 
         # NOTE: Is this needed?
         if self.keep_unhandled:
-            unhandled_mask = ~data[self.road_type_column].isin(self.road_classes)
-            kept_indices.extend(data.loc[unhandled_mask].index)
+            unhandled_mask = ~gdf[self.road_type_column].isin(self.road_classes)
+            kept_indices.extend(gdf.loc[unhandled_mask].index)
 
-        return data.loc[data.index.isin(set(kept_indices))].copy()
+        gdf = gdf.drop("_simplified", axis=1)
+        return gdf.loc[gdf.index.isin(set(kept_indices))]
 
     @staticmethod
     def _difference_with_nearby(geom: BaseGeometry, tree: STRtree) -> BaseGeometry:
