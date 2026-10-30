@@ -3325,7 +3325,6 @@ def _merge_invalid_part_to_largest(
     adjacent_largest_parts = part.buffer(adjacency_distance).intersection(largest)
     combined = union_all([adjacent_largest_parts, part]).buffer(0.1).segmentize(0.1)
 
-    width = minimum_width(part).length
     line = centerline(combined)
 
     if not isinstance(line, MultiLineString | LineString) or line.is_empty:
@@ -3341,6 +3340,8 @@ def _merge_invalid_part_to_largest(
     longest = max(touching, key=lambda part: part.length)
 
     clipped = longest.intersection(part.buffer(adjacency_distance))
+
+    width = minimum_width(part).length
     return clipped.buffer(width * 0.5, quad_segs=8)
 
 
