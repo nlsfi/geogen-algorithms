@@ -11,6 +11,7 @@ from geopandas import GeoDataFrame
 from pandas import to_numeric
 from pandas.api.types import is_numeric_dtype
 from pydantic import Field
+from shapely import node
 
 from geogenalg.application import (
     BaseAlgorithm,
@@ -120,6 +121,18 @@ class GeneralizeContours(BaseAlgorithm):
         )
 
         # TODO: Handle potentially intersecting contours after smoothing
+
+        is_non_simple = ~gdf.geometry.is_simple
+        if is_non_simple.any():
+            warn(
+                "Non-simple geometries found. These will be noded and exploded.",
+                UserWarning,
+                stacklevel=1,
+            )
+            gdf.loc[is_non_simple, gdf.geometry.name] = gdf.loc[
+                is_non_simple
+            ].geometry.apply(node)  # ty: ignore[invalid-assignment]
+            gdf = explode_and_hash_id(gdf, "contour")
 
         gdf = gdf[get_contiguous_lengths(gdf) >= self.length_threshold]
         gdf = smooth_linestring_connections(gdf, spline_subdivisions=10)
