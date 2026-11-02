@@ -4968,13 +4968,14 @@ def test_visvalingam_whyatt_simplify_conditional(
 
 
 @pytest.mark.parametrize(
-    ("geoms", "others", "predicate", "expected"),
+    ("geoms", "others", "predicate", "expected", "exclusive"),
     [
         pytest.param(
             [box(0, 0, 10, 10)],
             [box(1, 1, 2, 2), box(2, 1, 3, 2)],
             "contains",
             [box(1, 1, 3, 2)],
+            False,
             id="unions_multiple_matches",
         ),
         pytest.param(
@@ -4982,6 +4983,7 @@ def test_visvalingam_whyatt_simplify_conditional(
             [box(1, 1, 2, 2)],
             "contains",
             [box(1, 1, 2, 2), GeometryCollection()],
+            False,
             id="no_match_gives_empty",
         ),
         pytest.param(
@@ -4989,6 +4991,7 @@ def test_visvalingam_whyatt_simplify_conditional(
             [box(21, 21, 22, 22), box(1, 1, 2, 2)],
             "contains",
             [box(1, 1, 2, 2), box(21, 21, 22, 22)],
+            False,
             id="keeps_geoms_order",
         ),
         pytest.param(
@@ -4996,6 +4999,7 @@ def test_visvalingam_whyatt_simplify_conditional(
             [box(5, 5, 15, 15)],
             "contains",
             [GeometryCollection()],
+            False,
             id="predicate_is_respected",
         ),
         pytest.param(
@@ -5003,6 +5007,7 @@ def test_visvalingam_whyatt_simplify_conditional(
             [box(5, 5, 15, 15)],
             "intersects",
             [box(5, 5, 15, 15)],
+            False,
             id="intersects",
         ),
         pytest.param(
@@ -5010,6 +5015,7 @@ def test_visvalingam_whyatt_simplify_conditional(
             [],
             "contains",
             [GeometryCollection()],
+            False,
             id="empty_others",
         ),
         pytest.param(
@@ -5017,7 +5023,16 @@ def test_visvalingam_whyatt_simplify_conditional(
             [box(0, 0, 1, 1)],
             "contains",
             [],
+            False,
             id="empty_geoms",
+        ),
+        pytest.param(
+            [box(0, 0, 10, 10), box(10, 0, 20, 10)],
+            [box(9, 1, 11, 2), box(1, 4, 2, 5)],
+            "intersects",
+            [box(1, 4, 2, 5), GeometryCollection()],
+            True,
+            id="exclusive",
         ),
     ],
 )
@@ -5026,11 +5041,13 @@ def test_union_by_predicate(
     others: list[BaseGeometry],
     predicate: Literal["contains", "intersects"],
     expected: list[BaseGeometry],
+    exclusive: bool,
 ):
     result = union_by_predicate(
         GeoSeries(geoms),
         GeoSeries(others),
         predicate,
+        exclusive=exclusive,
     )
 
     assert len(result) == len(expected)
