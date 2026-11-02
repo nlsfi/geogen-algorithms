@@ -3228,6 +3228,8 @@ def union_by_predicate(
         "covered_by",
         "contains_properly",
     ],
+    *,
+    exclusive: bool = False,
 ) -> np.ndarray:
     """For each input geometry union `others` geometries which satisfy the predicate.
 
@@ -3236,6 +3238,8 @@ def union_by_predicate(
         geoms: Geometries to find related geometries for.
         others: Geometries to union.
         predicate: Spatial predicate to find related geometries by.
+        exclusive: If True, only `others` geometries which meet the predicate
+            for only one input geometry are unioned.
 
     Returns:
     -------
@@ -3251,6 +3255,13 @@ def union_by_predicate(
         geoms,
         predicate=predicate,
     )
+
+    if exclusive:
+        only_one_match = (
+            np.bincount(source_positions, minlength=len(others))[source_positions] == 1
+        )
+        target_positions = target_positions[only_one_match]
+        source_positions = source_positions[only_one_match]
 
     # Sort so that each target's sources are adjacent as required by np.split
     order = np.argsort(target_positions, kind="stable")
