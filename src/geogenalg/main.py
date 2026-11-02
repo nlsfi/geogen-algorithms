@@ -6,7 +6,7 @@
 import os
 from inspect import Parameter, signature
 from types import FunctionType
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, cast, get_origin
 
 from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
 from geogenalg.application.generalize_conservation_areas import (
@@ -251,7 +251,10 @@ def _function_generator(algorithm: type[BaseAlgorithm]) -> FunctionType:
 
         # Transform lists to frozensets
         for key, value in kwargs.items():
-            if isinstance(value, list):
+            if (
+                isinstance(value, list)
+                and get_origin(algorithm.model_fields[key].annotation) is frozenset
+            ):
                 kwargs[key] = frozenset(value)
 
         instance = algorithm(**kwargs)  # ty: ignore[invalid-argument-type]
@@ -373,6 +376,16 @@ def build_app() -> None:
             frozenset[int]: TransformedTypeInformation(
                 transformed_type=list[int],
                 extra_parse_help="Can be specified multiple times.",
+            ),
+            tuple[int | str, ...]: TransformedTypeInformation(
+                transformed_type=list[Any],
+                parser=try_parse_int,
+                custom_default=(),
+                extra_parse_help=(
+                    "Either an integer or a string. Can be specified multiple times. "
+                    "If you need to pass an integer as a string, you can add do so "
+                    "by appending str: in front of the integer, i.e. str:10."
+                ),
             ),
         }
 
