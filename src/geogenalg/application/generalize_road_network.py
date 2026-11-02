@@ -46,7 +46,7 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
     """The minimum length a road needs to have outside all buffered roads to be kept."""
     road_type_column: str = "road_type"
     """Column name used to select and order target road classes."""
-    road_classes: ClassVar = (12141, 12316, 12314, 12313)
+    road_classes: tuple[int | str, ...] = (12141, 12316, 12314, 12313)
     """Road classes in descending processing order."""
     keep_unhandled: bool = False
     """Whether to keep features outside of input `road_classes` in the output."""
@@ -80,8 +80,7 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
                 self.buffer_size,
                 resolution=4,
             )
-            .resolve_parallel()
-            .to_numpy()  # TODO: switch to resolve_numpy() once merged
+            .resolve_numpy()
         )
         reference_roads_tree = STRtree(reference_road_buffers)
 
