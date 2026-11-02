@@ -433,6 +433,7 @@ class GeneralizeWaterAreas(BaseAlgorithm):
                 gdf.geometry,
                 thin_sections,
                 "intersects",
+                exclusive=True,
             )
 
             gdf.geometry = union(gdf.geometry.to_numpy(), exaggerated_parts)
