@@ -26,7 +26,7 @@ from geogenalg.split import (
 @pytest.mark.parametrize(
     ("input_data", "hash_prefix", "control"),
     [
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": ["1", "2", "3"],
@@ -48,8 +48,9 @@ from geogenalg.split import (
                     Point(0, 0),
                 ],
             ),
+            id="no_multigeoms_no_changes",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": [
@@ -69,8 +70,8 @@ from geogenalg.split import (
             GeoDataFrame(
                 {
                     "id": [
-                        "3d5dd0c0636dd82f73752f3040efc5d4ab6d87cf420b84e5f6cd33afaae910cb",
-                        "be6862c3e5ff8f99aea8204b5f1ff11b2908b3b95635f42b62468b03c0dcf3e2",
+                        "871f7ac5f093da508f60cffd723e31e9980a37d00909c851e0a879a6b77e07df",
+                        "9e89f7bda054932a535101e15fa8d6ab53892da1752ad2229b1a6f60d9e9abfd",
                     ],
                 },
                 geometry=[
@@ -78,8 +79,9 @@ from geogenalg.split import (
                     Point(1, 1),
                 ],
             ),
+            id="one_multipoint_two_parts",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": [
@@ -100,9 +102,9 @@ from geogenalg.split import (
             GeoDataFrame(
                 {
                     "id": [
-                        "3d5dd0c0636dd82f73752f3040efc5d4ab6d87cf420b84e5f6cd33afaae910cb",
-                        "be6862c3e5ff8f99aea8204b5f1ff11b2908b3b95635f42b62468b03c0dcf3e2",
-                        "a2959cf4636524fd6b0389255d0d25b0760501dbe08239a479e1eff5fb3e0049",
+                        "871f7ac5f093da508f60cffd723e31e9980a37d00909c851e0a879a6b77e07df",
+                        "9e89f7bda054932a535101e15fa8d6ab53892da1752ad2229b1a6f60d9e9abfd",
+                        "91202388913c3f60756ea0a404421c48d2c4b5b87e86166df35b7ecfccf2f4f4",
                     ],
                 },
                 geometry=[
@@ -111,8 +113,9 @@ from geogenalg.split import (
                     Point(2, 2),
                 ],
             ),
+            id="one_multipoint_three_parts",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": [
@@ -143,13 +146,13 @@ from geogenalg.split import (
             GeoDataFrame(
                 {
                     "id": [
-                        "3d5dd0c0636dd82f73752f3040efc5d4ab6d87cf420b84e5f6cd33afaae910cb",
-                        "be6862c3e5ff8f99aea8204b5f1ff11b2908b3b95635f42b62468b03c0dcf3e2",
-                        "a2959cf4636524fd6b0389255d0d25b0760501dbe08239a479e1eff5fb3e0049",
+                        "871f7ac5f093da508f60cffd723e31e9980a37d00909c851e0a879a6b77e07df",
+                        "9e89f7bda054932a535101e15fa8d6ab53892da1752ad2229b1a6f60d9e9abfd",
+                        "91202388913c3f60756ea0a404421c48d2c4b5b87e86166df35b7ecfccf2f4f4",
                         "2",
-                        "c27bcaf812f66788ce36b1f3c94931d63b8fabc7c405e4c57a0ae455e7c79661",
-                        "13f166cb2ed7a4f5ec0de039b3ba7336281c9158ecbed796805614347b4d5453",
-                        "634d6aa6cec90560aedc16300d457324ec42612d8be4b4455a8dab9c92b5f782",
+                        "1d8bf353b75b14064144e900b50430fb0d22432f8280d5092935f0da08fdbac3",
+                        "0b8d7a9b498409a21bc60be6bc192e1a1a7a648bf7a901e2e79429d5afa202df",
+                        "e9ed104fd65b2059f9bd2708f7964b3c3f6878ae856610fef04147cbecebfa9f",
                     ],
                 },
                 geometry=[
@@ -162,8 +165,9 @@ from geogenalg.split import (
                     Point(5, 5),
                 ],
             ),
+            id="mixed_single_and_multis",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": [
@@ -183,8 +187,8 @@ from geogenalg.split import (
             GeoDataFrame(
                 {
                     "id": [
-                        "9165fcfb53562882c625d9fc41347a09ea355829e3d2456913395c7aba1008f2",
-                        "eb8956b3fd54ec54675df565c970539fa8bd61296dd129439eac8c83b46042b7",
+                        "c1a4c5a243b7a642d3bb522345e90171717fcf434cdcc9e0b0c2f3a407a1745a",
+                        "dea7666371eca0045e8eb8a78adfdc017680de48bc75bda0c626fe4d67f29195",
                     ],
                 },
                 geometry=[
@@ -192,8 +196,9 @@ from geogenalg.split import (
                     Point(1, 1),
                 ],
             ),
+            id="one_multipoint_two_parts_different_prefix",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": [
@@ -223,8 +228,8 @@ from geogenalg.split import (
             GeoDataFrame(
                 {
                     "id": [
-                        "de14a495a2995cac1ce676ec94e834b6442a344c527c1461876fafdd84c521e7",
-                        "51fd37f2d9ea7d1fb964fafd2fc79e7b096193513c0510fae159e5295f3ab747",
+                        "3f4341180a26216acc624596d91343cc1fd966fd9649e86f7a74bc67670fb9b4",
+                        "c916b6bd18f955ea8f87900ce986226fc89a04f06b54d079d9b492df3f24442d",
                     ],
                 },
                 geometry=[
@@ -232,8 +237,9 @@ from geogenalg.split import (
                     LineString([[5, 5], [6, 6]]),
                 ],
             ),
+            id="multiline",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": [
@@ -253,8 +259,8 @@ from geogenalg.split import (
             GeoDataFrame(
                 {
                     "id": [
-                        "eb5fc6895e0390bb3e011d4f86baafbaf15999f0b835aef3e8a8cb7a9c3ccec1",
-                        "7ca58054eae784dc147b1a986cf322d052c3299131bbc564d18742ebb17d57e0",
+                        "fb6570e7655a1034bb54fc7b075e9a1e5fc0809c85dcbed7f1702fdfcc4a406f",
+                        "37684460fa28c9b7a6cb5defe44ebb753f73cf3c2b05a3023747e240f6500745",
                     ],
                 },
                 geometry=[
@@ -262,8 +268,9 @@ from geogenalg.split import (
                     box(5, 5, 6, 6),
                 ],
             ),
+            id="multipolygon",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": ["1"],
@@ -281,17 +288,8 @@ from geogenalg.split import (
                     Point(0, 0),
                 ],
             ),
+            id="multipoint_with_one_part_turns_to_point",
         ),
-    ],
-    ids=[
-        "no multigeoms, no changes",
-        "one multipoint, two parts",
-        "one multipoint, three parts",
-        "mixed single and multis",
-        "one multipoint, two parts, different prefix",
-        "multiline",
-        "multipolygon",
-        "multipoint with one part turns to point",
     ],
 )
 def test_explode_and_hash_id(

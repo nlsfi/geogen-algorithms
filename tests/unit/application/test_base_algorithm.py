@@ -530,7 +530,7 @@ def test_algorithm_raises_on_missing_key():
         "expected_gdf",
     ),
     [
-        (
+        pytest.param(
             "no",
             GeoDataFrame(
                 geometry=[
@@ -544,8 +544,9 @@ def test_algorithm_raises_on_missing_key():
                     LineString([(0, 0), (2, 2), (0, 2), (2, 0)]),
                 ]
             ),
+            id="no",
         ),
-        (
+        pytest.param(
             "keep_largest",
             GeoDataFrame(
                 geometry=[
@@ -559,8 +560,9 @@ def test_algorithm_raises_on_missing_key():
                     LineString([(0.5, 0), (1, 0), (1, 1), (0.5, 1), (0.5, 0)]),
                 ]
             ),
+            id="keep_largest",
         ),
-        (
+        pytest.param(
             "explode",
             GeoDataFrame(
                 geometry=[
@@ -577,19 +579,15 @@ def test_algorithm_raises_on_missing_key():
                     LineString([(1, 1), (2, 0)]),
                 ],
                 index=[
-                    "ec9c3e680737d94401aed12fd60205cf9ed3c48f71a0fe9673efb1299c508926",
-                    "082d4a6d49ec7271a86d784507acfd0ebe60503019eb8101b0c062ee1acb9f49",
-                    "34406e3e2314db2f5e4f5296f1b1ddd4fc98693918c327e99a9139b6b97f9a09",
-                    "979fe9ee9765c966b47bae87ff510d294f2e6959c77cebb7bc0caeb3e4a39169",
-                    "9b0225e4812210250c2fafb2f29ed57cba4e110893200111f59e3dead047c801",
+                    "baa9c5438a68272e92280089f0083d7b4e848a005ab6c8a024b7c02c4a6640de",
+                    "3359884654652bab2d07915364b4a8685c9d8a8929ce309333fa93f4c3b2b068",
+                    "3056460be2e478b5ba0d2eaeb28677f542abd58ea060e896abf2337a18bc3e90",
+                    "b06e7d630b456a6de6e87aaaf88bd06c70116138069295c52d315b06d1f474b1",
+                    "7dfb606fc6d8cb19e552522634556078eb4e48447b59d35ab287b1227a35f798",
                 ],
             ),
+            id="explode",
         ),
-    ],
-    ids=[
-        "no",
-        "keep_largest",
-        "explode",
     ],
 )
 def test_repair_result_geometries(
