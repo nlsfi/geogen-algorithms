@@ -473,3 +473,17 @@ def test_thin_points(
         check_missing_reference=False,
         algorithm=thin_points_algorithm,
     ).run()
+
+
+def test_generalize_road_network(
+    road_network_input: TestInputData,
+    road_network_algorithm: BaseAlgorithm,
+) -> None:
+    IntegrationTest(
+        input_data=road_network_input,
+        check_missing_reference=True,
+        algorithm=road_network_algorithm,
+        dummy_data_mandatory_columns=frozenset(
+            ["kohdeluokka", "mtk_id"],
+        ),
+    ).run()
