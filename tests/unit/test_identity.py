@@ -9,6 +9,7 @@ from geopandas import GeoDataFrame
 from geopandas.testing import assert_geodataframe_equal
 from shapely import Point
 
+from geogenalg.core.exceptions import DuplicateIndexError
 from geogenalg.identity import (
     hash_duplicate_indexes,
     hash_index_from_geometry,
@@ -19,7 +20,7 @@ from geogenalg.identity import (
 @pytest.mark.parametrize(
     ("input_data", "hash_prefix", "control"),
     [
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": ["1", "2"],
@@ -39,8 +40,9 @@ from geogenalg.identity import (
                     Point(1, 0),
                 ],
             ),
+            id="no_duplicates",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": ["1", "1"],
@@ -54,8 +56,8 @@ from geogenalg.identity import (
             GeoDataFrame(
                 {
                     "id": [
-                        "3d5dd0c0636dd82f73752f3040efc5d4ab6d87cf420b84e5f6cd33afaae910cb",
-                        "b62cef672cfd20f774c4355ffd4c980868975d3fe2eafc6ddc52be551d745fc5",
+                        "871f7ac5f093da508f60cffd723e31e9980a37d00909c851e0a879a6b77e07df",
+                        "3b821fa1cee4c54be4c55eba06467208f3ae5e846bed3cd4f6023d82224902bc",
                     ]
                 },
                 geometry=[
@@ -63,8 +65,9 @@ from geogenalg.identity import (
                     Point(1, 0),
                 ],
             ),
+            id="duplicates",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 {
                     "id": ["1", "1", "2"],
@@ -79,8 +82,8 @@ from geogenalg.identity import (
             GeoDataFrame(
                 {
                     "id": [
-                        "3d5dd0c0636dd82f73752f3040efc5d4ab6d87cf420b84e5f6cd33afaae910cb",
-                        "b62cef672cfd20f774c4355ffd4c980868975d3fe2eafc6ddc52be551d745fc5",
+                        "871f7ac5f093da508f60cffd723e31e9980a37d00909c851e0a879a6b77e07df",
+                        "3b821fa1cee4c54be4c55eba06467208f3ae5e846bed3cd4f6023d82224902bc",
                         "2",
                     ]
                 },
@@ -90,12 +93,8 @@ from geogenalg.identity import (
                     Point(2, 0),
                 ],
             ),
+            id="mixed",
         ),
-    ],
-    ids=[
-        "no duplicates",
-        "duplicates",
-        "mixed",
     ],
 )
 def test_hash_duplicate_indexes(
@@ -112,6 +111,19 @@ def test_hash_duplicate_indexes(
         result,
         control,
     )
+
+
+def test_hash_duplicate_indexes_raises():
+    data = GeoDataFrame(
+        geometry=[
+            Point(0, 0),
+            Point(0, 0),
+        ],
+        index=["1", "1"],
+    )
+
+    with pytest.raises(DuplicateIndexError, match="Duplicate indexes found"):
+        hash_duplicate_indexes(data, "test")
 
 
 @pytest.mark.parametrize(
@@ -237,40 +249,38 @@ def test_hash_index_from_old_ids(
 @pytest.mark.parametrize(
     ("input_data", "hash_prefix", "control"),
     [
-        (
+        pytest.param(
             GeoDataFrame(geometry=[Point(0, 0)]),
             "test",
             GeoDataFrame(
                 index=[
-                    "82cd623bbcbe44b15a7c77bb80c94abc2c019eb76f62e7aa9e519fa40844c9dc"
+                    "83df0b76c9ba468466e2e3c790555534231cb9c2ceb9ab49e4d2ae28318873f3"
                 ],
                 geometry=[Point(0, 0)],
             ),
+            id="point",
         ),
-        (
+        pytest.param(
             GeoDataFrame(geometry=[]),
             "test",
             GeoDataFrame(
                 geometry=[],
             ),
+            id="empty",
         ),
-        (
+        pytest.param(
             GeoDataFrame(
                 geometry=[Point(5, 0)],
             ),
             "other",
             GeoDataFrame(
                 index=[
-                    "0499cf748f3220845eb9bd0db42aff3247db1972052224849bd707e0ee37786a"
+                    "60f63b0c98add5b885666e90e5a8a04d7623a8412ebc605b58581cd041561865"
                 ],
                 geometry=[Point(5, 0)],
             ),
+            id="hash_prefix",
         ),
-    ],
-    ids=[
-        "point",
-        "empty",
-        "hash_prefix",
     ],
 )
 def test_hash_index_from_geometry(

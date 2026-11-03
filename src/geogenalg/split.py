@@ -31,7 +31,7 @@ def explode_and_hash_id(
     will be changed to a single geometry and the original ID retained.
 
     Hashing is done with SHA256 and its input is the concatenation of the hash
-    prefix, the original index and the WKT of the part's geometry.
+    prefix, the original index and the WKB of the part's geometry.
 
     Args:
     ----
