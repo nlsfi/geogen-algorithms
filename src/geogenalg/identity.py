@@ -23,7 +23,7 @@ def hash_duplicate_indexes(
     It is required that the input has a string index.
 
     Hashing is done with SHA256 and its input is the concatenation of the hash
-    prefix, the original index and the WKT of the part's geometry.
+    prefix, the original index and the WKB of the part's geometry.
 
     Args:
     ----
@@ -53,12 +53,15 @@ def hash_duplicate_indexes(
     gdf[temp_index] = gdf.index
 
     mask = gdf.duplicated(keep=False, subset=[temp_index])
-    gdf.loc[mask, temp_index] = list(
-        hash_prefix + gdf.loc[mask].index + gdf.loc[mask].geometry.to_wkt()
-    )
-    gdf.loc[mask, temp_index] = gdf.loc[mask, temp_index].apply(
-        lambda hash_input: sha256(hash_input.encode()).hexdigest()
-    )
+
+    wkbs = gdf.geometry[mask].to_wkb()
+
+    prefix = hash_prefix.encode()
+    hashes = [
+        sha256(prefix + index.encode() + wkb).hexdigest()
+        for index, wkb in zip(gdf.index[mask], wkbs, strict=True)
+    ]
+    gdf.loc[mask, temp_index] = hashes
 
     gdf = gdf.set_index(temp_index)
     gdf.index.name = data.index.name
@@ -187,11 +190,10 @@ def hash_index_from_geometry(
 
     gdf = data.copy()
 
-    gdf["temp_index"] = gdf.geometry.to_wkt().apply(
-        lambda wkt: sha256(
-            (hash_prefix + wkt).encode(),
-        ).hexdigest()
-    )
+    wkbs = gdf.geometry.to_wkb()
+
+    prefix = hash_prefix.encode()
+    gdf["temp_index"] = [sha256(prefix + wkb).hexdigest() for wkb in wkbs]
 
     gdf = gdf.set_index("temp_index")
     gdf.index.name = data.index.name
