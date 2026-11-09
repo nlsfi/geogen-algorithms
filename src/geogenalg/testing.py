@@ -467,7 +467,7 @@ class TestInputData:
 
         Returns:
         -------
-            Algorithm input data and reference data dictionary.
+            Algorithm input data, control data and reference data dictionary.
 
         """
 
