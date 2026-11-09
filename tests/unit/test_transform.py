@@ -162,6 +162,7 @@ def test_thin_polygon_sections_to_lines(
         min_new_section_length=10,
         min_new_section_area=250,
         old_ids_column="_old_ids",
+        centerline_segmentize_by=1,
     )
     expected_lines = expected_lines.set_index("id")
     expected_polygons = expected_polygons.set_index("id")
