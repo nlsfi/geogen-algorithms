@@ -8,6 +8,7 @@ allclose
 arange
 arctan2
 argmax
+argmin
 argsort
 argspec
 asarray
