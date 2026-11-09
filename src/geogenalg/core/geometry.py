@@ -22,10 +22,9 @@ from warnings import warn
 
 import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
-from pygeoops import centerline
 from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
-from scipy.spatial import KDTree  # noqa: SC200
+from scipy.spatial import KDTree, Voronoi  # noqa: SC200
 from shapely import (
     GeometryCollection,
     LineString,
@@ -37,6 +36,7 @@ from shapely import (
     STRtree,
     area,
     boundary,
+    contains_xy,
     count_coordinates,
     difference,
     force_2d,
@@ -59,12 +59,15 @@ from shapely import (
     minimum_width,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
     multilinestrings,
     node,
+    normalize,
     point_on_surface,
     points,
     polygonize,
     polygons,
+    segmentize,
     set_coordinates,
     shortest_line,
+    simplify,
     union_all,
 )
 from shapely.affinity import rotate, scale, translate
@@ -79,6 +82,7 @@ from geogenalg.core.exceptions import (
     GeometryTypeError,
     InvalidGeometryError,
 )
+from geogenalg.core.graph import filter_short_chains, label_chains
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -1199,7 +1203,7 @@ def centerline_length(
 
     """
     line = centerline(
-        Polygon(geom.exterior) if exterior_only else geom, simplifytolerance=0.5
+        Polygon(geom.exterior) if exterior_only else geom, simplify_tolerance=0.5
     )
 
     if not isinstance(line, MultiLineString | LineString):
@@ -3411,3 +3415,99 @@ def make_valid_merge_parts(
         result[idx] = merged
 
     return result
+
+
+def centerline(
+    geom: Polygon | MultiPolygon,
+    *,
+    simplify_tolerance: float = 0.5,
+    prune_branches_shorter_than: float | Literal["auto"] = "auto",
+    segmentize_by: float | Literal["auto"] = "auto",
+) -> LineString | MultiLineString:
+    """Return centerline of a (Multi)Polygon.
+
+    Args:
+    ----
+        geom: Polygon to build centerline of.
+        simplify_tolerance: Douglas-Peucker simplification tolerance for
+            centerline post-processing.
+        prune_branches_shorter_than: Remove branches from the generated
+            centerline shorter than this. If `auto`, use estimated average width of
+            the polygon.
+        segmentize_by: Input geometry will be segmentized by this amount.
+            Generally gives a more accurate result but makes the computing more
+            expensive. If `auto`, use estimated average width of the polygon.
+
+    Returns:
+    -------
+        Generated centerline as a LineString or MultiLineString. May be
+        empty if centerline could not be formed.
+
+    """
+    if geom.is_empty:
+        return LineString()
+
+    # Estimate polygon average width
+    quarter_perimeter = geom.length / 4
+    average_width = quarter_perimeter - np.sqrt(
+        max(quarter_perimeter**2 - geom.area, 0.0)
+    )
+
+    if segmentize_by == "auto":
+        segmentize_by = average_width
+
+    if segmentize_by > 0:
+        geom = segmentize(geom, segmentize_by)
+
+    # Remove duplicate vertices including closing vertices from all polygon rings
+    coords = np.unique(get_coordinates(geom), axis=0)
+
+    if len(coords) < 2:  # noqa: PLR2004
+        return LineString()
+
+    # Center coordinates on 0, 0 to avoid precision errors with large projected
+    # coordinates
+    origin = coords.mean(axis=0)
+    voronoi = Voronoi(coords - origin)
+
+    # Remove ridges with unbounded vertices
+    ridges = np.asarray(voronoi.ridge_vertices)
+    ridges = ridges[(ridges >= 0).all(axis=1)]
+    vertices = voronoi.vertices + origin
+
+    # Remove ridges which have their start or end point outside the input polygon
+    inside = contains_xy(geom, vertices[:, 0], vertices[:, 1])
+    ridges = ridges[inside[ridges].all(axis=1)]
+
+    if len(ridges) == 0:
+        return LineString()
+
+    ridge_start_points = vertices[ridges[:, 0]]
+    ridge_end_points = vertices[ridges[:, 1]]
+    ridge_lengths = np.hypot(*(ridge_end_points - ridge_start_points).T)
+
+    if prune_branches_shorter_than == "auto":
+        prune_branches_shorter_than = average_width
+
+    # Prune dead-end branches shorter than the given or calculated minimum length.
+    # If that removes everything, keep only the longest chain.
+    keep = filter_short_chains(
+        ridges[:, 0],
+        ridges[:, 1],
+        ridge_lengths,
+        prune_branches_shorter_than,
+        disconnected_exempt=np.ones(len(ridges), dtype=bool),
+    )
+    if not keep.any():
+        chain_ids, _, _ = label_chains(ridges[:, 0], ridges[:, 1])
+        chain_lengths = np.bincount(chain_ids, ridge_lengths)
+        keep = chain_ids == chain_lengths.argmax()
+
+    lines = line_merge(
+        multilinestrings(
+            np.stack([ridge_start_points[keep], ridge_end_points[keep]], axis=1),
+        )
+    )
+    lines = simplify(lines, simplify_tolerance)
+
+    return cast("LineString | MultiLineString", normalize(lines))

@@ -17,6 +17,7 @@ from shapely.geometry import LineString, MultiPoint, Point
 from geogenalg.core.geometry import (
     assign_nearest_z,
     assign_z_from_attribute,
+    centerline,
     chaikin_smooth_keep_topology,
     concatenate_lines,
     extract_interior_rings_of_union,
@@ -300,3 +301,23 @@ def test_extract_interior_rings_of_union(
     result = benchmark(extract_interior_rings_of_union, geoms)
 
     assert len(result) == expected_rings
+
+
+@pytest.mark.parametrize("segmentize_by", [0, 1, 10])
+@pytest.mark.benchmark
+def test_centerline(
+    segmentize_by: float,
+    benchmark: BenchmarkFixture,
+    watercourse_areas_input: TestInputData,
+):
+    polygons, _, _ = watercourse_areas_input.read()
+    polygons = polygons.loc[polygons.geometry.geom_type.isin(["Polygon"])].copy()
+
+    result = benchmark(
+        polygons.geometry.apply,
+        centerline,
+        simplify_tolerance=0.5,
+        segmentize_by=segmentize_by,
+    )
+
+    assert len(result) == len(polygons)

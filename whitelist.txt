@@ -159,6 +159,7 @@ utils
 vec
 vecs
 visvalingam
+voronoi
 vstack
 vw
 whyatt
