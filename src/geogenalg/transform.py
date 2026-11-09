@@ -3,15 +3,15 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from typing import cast
+from typing import Literal, cast
 
 from geopandas import GeoDataFrame, GeoSeries
-from pygeoops import centerline
 from shapely import LineString, MultiLineString, MultiPolygon, Polygon
 
 from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import (
+    centerline,
     centerline_length,
     remove_line_segments_at_wide_sections,
     remove_small_parts,
@@ -30,6 +30,8 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
     *,
     width_check_distance: float = 10.0,
     old_ids_column: str | None = None,
+    centerline_simplify_by: float = 0.5,
+    centerline_segmentize_by: float | Literal["auto"] = "auto",
 ) -> tuple[GeoDataFrame, GeoDataFrame]:
     """Convert thin sections of polygon features to linestrings.
 
@@ -47,6 +49,8 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         width_check_distance: Controls the distance at which width is checked.
         old_ids_column: Optionally define a column name, to which all
             intersecting polygon IDs will be saved for new line features.
+        centerline_segmentize_by: Value to use for centerline segmentization.
+        centerline_simplify_by: Value to use for centerline simplification.
 
     Returns:
     -------
@@ -71,12 +75,10 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
         msg = "Expected a Polygon or MultiPolygon from union_all()."
         raise GeometryTypeError(msg)
 
-    full_centerline = cast(
-        "LineString | MultiLineString",
-        centerline(
-            input_union.segmentize(1),  # segmentize to get less jagged centerline
-            simplifytolerance=0.5,
-        ),
+    full_centerline = centerline(
+        input_union,
+        simplify_tolerance=centerline_simplify_by,
+        segmentize_by=centerline_segmentize_by,
     )
 
     if not isinstance(full_centerline, LineString | MultiLineString):

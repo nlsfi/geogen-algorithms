@@ -6,7 +6,7 @@
 import os
 from inspect import Parameter, signature
 from types import FunctionType
-from typing import Annotated, Any, cast, get_origin
+from typing import Annotated, Any, Literal, cast, get_origin
 
 from geogenalg.application.generalize_address_points import GeneralizeAddressPoints
 from geogenalg.application.generalize_conservation_areas import (
@@ -355,7 +355,7 @@ def build_app() -> None:
 
         # Transform certain types defined on the algorithm-level to a helper
         # type with a custom parser.
-        transformed_types_for_cli: dict[type, TransformedTypeInformation] = {
+        transformed_types_for_cli: dict[Any, TransformedTypeInformation] = {
             # Typer doesn't handle sets so read them as lists, all of which are
             # transformed to frozensets in _function_generator()
             frozenset[int | str]: TransformedTypeInformation(
@@ -376,6 +376,10 @@ def build_app() -> None:
             frozenset[int]: TransformedTypeInformation(
                 transformed_type=list[int],
                 extra_parse_help="Can be specified multiple times.",
+            ),
+            float | Literal["auto"]: TransformedTypeInformation(
+                transformed_type=str,
+                extra_parse_help='Either a number or "auto".',
             ),
             tuple[int | str, ...]: TransformedTypeInformation(
                 transformed_type=list[Any],

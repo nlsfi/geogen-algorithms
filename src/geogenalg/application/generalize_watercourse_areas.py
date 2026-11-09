@@ -4,7 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 from enum import IntEnum
-from typing import override
+from typing import Literal, override
 
 from geopandas import GeoDataFrame
 from pandas.api.types import is_string_dtype
@@ -49,6 +49,10 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
     """After initial conversion of thin sections to lines, this determines the
     minimum length of remaining sections. If under this, it will be converted
     to a line as well."""
+    centerline_simplify_by: float = 0.5
+    """Value used to simplify centerline."""
+    centerline_segmentize_by: float | Literal["auto"] = 2
+    """Value used to segmentize centerline."""
     width_check_distance: float = Field(10.0, gt=0)
     """Controls the distance of width checks. Smaller number means more
     precise checking."""
@@ -76,6 +80,8 @@ class GeneralizeWaterCourseAreas(GeneralizeWaterAreas):
             min_new_section_area=self.min_area,
             width_check_distance=self.width_check_distance,
             old_ids_column="old_ids_temp",
+            centerline_segmentize_by=self.centerline_segmentize_by,
+            centerline_simplify_by=self.centerline_simplify_by,
         )
 
         generalized_areas = explode_and_hash_id(
