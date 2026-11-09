@@ -33,6 +33,7 @@ from geogenalg.core.geometry import (
     get_line_connection_points,
     smooth_around_connection_point_of_two_lines,
 )
+from geogenalg.core.graph import filter_short_chains
 from geogenalg.core.parallel import in_parallel
 from geogenalg.utility.dataframe_processing import (
     add_columns_to_gdf,
@@ -1266,14 +1267,8 @@ def filter_short_contiguous_lines(
 
     """
     line_count = len(geoms)
-    keep = np.ones(line_count, dtype=bool)
     if line_count == 0:
-        return keep
-
-    if dead_end_exempt is None:
-        dead_end_exempt = np.zeros(line_count, dtype=bool)
-    if disconnected_exempt is None:
-        disconnected_exempt = np.zeros(line_count, dtype=bool)
+        return np.ones(0, dtype=bool)
 
     endpoints = np.vstack(
         [
@@ -1284,54 +1279,11 @@ def filter_short_contiguous_lines(
     _, node_ids = np.unique(endpoints, axis=0, return_inverse=True)
     node_ids = node_ids.ravel()
 
-    start_nodes, end_nodes = node_ids[:line_count], node_ids[line_count:]
-    node_count = int(node_ids.max()) + 1
-    lengths = length(geoms)
-
-    while keep.any():
-        alive = np.flatnonzero(keep)
-        alive_count = len(alive)
-
-        line_ends = np.concatenate([start_nodes[alive], end_nodes[alive]])
-        end_lines = np.tile(np.arange(alive_count), 2)
-        degree = np.bincount(line_ends, minlength=node_count)[line_ends]
-
-        pass_through = degree == 2  # noqa: PLR2004
-        graph_size = alive_count + node_count
-        adjacency = csr_matrix(
-            (
-                np.ones(np.count_nonzero(pass_through), dtype=bool),
-                (
-                    end_lines[pass_through],
-                    alive_count + line_ends[pass_through],
-                ),
-            ),
-            shape=(graph_size, graph_size),
-        )
-        _, labels = connected_components(adjacency, directed=False)
-        strand_ids = labels[:alive_count]
-        strand_count = int(strand_ids.max()) + 1
-
-        strand_lengths = np.bincount(strand_ids, lengths[alive], minlength=strand_count)
-        free_ends = np.bincount(
-            strand_ids[end_lines[degree == 1]], minlength=strand_count
-        )
-        junction_ends = np.bincount(
-            strand_ids[end_lines[degree > 2]],  # noqa: PLR2004
-            minlength=strand_count,
-        )
-
-        short = strand_lengths[strand_ids] < threshold
-        disconnected = (junction_ends == 0)[strand_ids]
-        dead_end = ((junction_ends == 1) & (free_ends == 1))[strand_ids]
-
-        remove = short & (
-            (disconnected & ~disconnected_exempt[alive])
-            | (dead_end & ~dead_end_exempt[alive])
-        )
-        if not remove.any():
-            break
-
-        keep[alive[remove]] = False
-
-    return keep
+    return filter_short_chains(
+        node_ids[:line_count],
+        node_ids[line_count:],
+        length(geoms),
+        threshold,
+        dead_end_exempt=dead_end_exempt,
+        disconnected_exempt=disconnected_exempt,
+    )
