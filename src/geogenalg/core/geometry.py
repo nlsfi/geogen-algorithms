@@ -46,6 +46,7 @@ from shapely import (
     get_num_coordinates,
     get_parts,
     get_point,
+    get_segments,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
     has_z,
     is_closed,
     is_empty,
@@ -69,8 +70,9 @@ from shapely import (
     shortest_line,
     simplify,
     union_all,
+    within,
 )
-from shapely.affinity import rotate, scale, translate
+from shapely.affinity import scale, translate
 from shapely.geometry import LinearRing
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from shapely.ops import linemerge, nearest_points, split
@@ -1235,21 +1237,33 @@ def remove_line_segments_at_wide_sections(
         Remaining segments, as merged line(s).
 
     """
-    segments = explode_line(line)
+    segments = get_segments(get_parts(line))
 
     # Check width at each segment and keep only segments which are under the
-    # width threshold
-    remaining_segments = []
-    for segment in segments.geoms:
-        perpendicular_segment = scale_line_to_length(
-            rotate(segment, angle=90),
-            threshold,
+    # width threshold.
+    ends = get_coordinates(segments).reshape(-1, 2, 2)
+    midpoints = ends.mean(axis=1)
+
+    directions = ends[:, 1] - ends[:, 0]
+
+    perpendicular_directions = np.column_stack((-directions[:, 1], directions[:, 0]))
+    perpendicular_directions *= (
+        threshold / 2 / np.hypot(*perpendicular_directions.T)[:, np.newaxis]
+    )
+
+    perpendicular_segments = linestrings(
+        np.stack(
+            (
+                midpoints - perpendicular_directions,
+                midpoints + perpendicular_directions,
+            ),
+            axis=1,
         )
+    )
 
-        if not perpendicular_segment.within(mask):
-            remaining_segments.append(segment)
+    remaining_segments = segments[~within(perpendicular_segments, mask)]
 
-    result = linemerge(remaining_segments)
+    result = linemerge(list(remaining_segments))
     # Despite its return annotation, linemerge might return an empty GeometryCollection.
     # Make sure this function always returns what is annotated.
     if isinstance(result, GeometryCollection) and result.is_empty:
