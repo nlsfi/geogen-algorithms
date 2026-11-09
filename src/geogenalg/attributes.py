@@ -6,7 +6,8 @@
 from typing import Literal
 from warnings import warn
 
-from geopandas import GeoDataFrame
+import numpy as np
+from geopandas import GeoDataFrame, GeoSeries
 from scipy.spatial import KDTree
 from shapely import get_coordinates
 
@@ -92,47 +93,40 @@ def inherit_attributes_from_largest(
         GeoDataFrame with the inherited attributes.
 
     """
-    new_features = []
-    for _, feature in target_gdf.iterrows():
-        feature_geom = feature[str(target_gdf.geometry.name)]
-        intersecting_features = source_gdf.loc[
-            source_gdf.geometry.intersects(feature_geom)
-        ].copy()
+    target_geoms = target_gdf.geometry.to_numpy()
+    target_positions, source_positions = source_gdf.sindex.query(
+        target_geoms,
+        predicate="intersects",
+    )
 
-        if intersecting_features.empty:
-            # TODO: should this give a warning/even error?
-            continue
-
-        if measure_by == "area":
-            intersecting_features["_temp_size"] = intersecting_features.geometry.area
-        else:
-            intersecting_features["_temp_size"] = intersecting_features.geometry.length
-
-        intersecting_features = intersecting_features.sort_values(
-            "_temp_size",
-            ascending=False,
-        )
-        intersecting_features = intersecting_features.drop("_temp_size", axis=1)
-
-        largest_feature = intersecting_features.iloc[0]
-
-        new_feature = largest_feature.copy()
-        new_feature[target_gdf.geometry.name] = feature_geom
-
-        if old_ids_column is not None:
-            new_feature[old_ids_column] = tuple(
-                intersecting_features.index.to_list(),
-            )
-        new_features.append(new_feature)
-
-    if not new_features:
+    if len(target_positions) == 0:
         return copy_gdf_as_empty(target_gdf)
 
-    output = GeoDataFrame(
-        new_features, geometry=target_gdf.geometry.name, crs=target_gdf.crs
+    sizes = (
+        source_gdf.geometry.area if measure_by == "area" else source_gdf.geometry.length
+    ).to_numpy()
+
+    order = np.lexsort((source_positions, -sizes[source_positions], target_positions))
+    target_positions = target_positions[order]
+    source_positions = source_positions[order]
+
+    group_starts = np.flatnonzero(np.r_[True, np.diff(target_positions) != 0])
+    matched_targets = target_positions[group_starts]
+    largest_positions = source_positions[group_starts]
+
+    output = source_gdf.iloc[largest_positions].copy()
+
+    output[source_gdf.geometry.name] = GeoSeries(
+        target_geoms[matched_targets],
+        index=output.index,
+        crs=target_gdf.crs,
     )
-    output.index.name = source_gdf.index.name
-    output.geometry.name = source_gdf.geometry.name
+
+    if old_ids_column is not None:
+        source_ids = source_gdf.index.to_numpy()[source_positions]
+        output[old_ids_column] = [
+            tuple(ids) for ids in np.split(source_ids, group_starts[1:])
+        ]
 
     return output
 
