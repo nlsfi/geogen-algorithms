@@ -49,6 +49,7 @@ from geogenalg.core.geometry import (
     assign_nearest_z,
     assign_z_from_attribute,
     build_collinear_chains,
+    centerline,
     centerline_length,
     chaikin_smooth_conditional,
     chaikin_smooth_keep_topology,
@@ -103,6 +104,8 @@ from geogenalg.core.geometry import (
     union_by_predicate,
     visvalingam_whyatt_simplify_conditional,
 )
+
+CENTERLINE_TEST_RECTANGLE = Polygon([(0, 0), (20, 0), (20, 2), (0, 2)])
 
 
 @pytest.mark.parametrize(
@@ -5120,18 +5123,29 @@ def test_extract_interior_rings_of_union(
             [
                 Polygon(
                     [
-                        (100.958, 50.15),
-                        (100.979, 50.051),
-                        (100.979, 49.949),
-                        (100.958, 49.85),
-                        (100, 46.8),
+                        (100.03, 54.936),
+                        (100.053, 54.855),
+                        (100.972, 50.095),
+                        (100.981, 50),
+                        (100.972, 49.905),
+                        (100.053, 45.145),
+                        (100.03, 45.064),
+                        (100, 45),
                         (100, 0),
                         (0, 0),
                         (0, 100),
                         (100, 100),
-                        (100, 53.2),
+                        (100, 55),
                     ],
-                    holes=[[(99.957, 50), (99, 53.046), (99, 46.954)]],
+                    holes=[
+                        [
+                            (99.096, 45.461),
+                            (99.972, 50),
+                            (99.096, 54.539),
+                            (99, 54.653),
+                            (99, 45.347),
+                        ]
+                    ],
                 )
             ],
             id="self_intersection",
@@ -5149,18 +5163,29 @@ def test_extract_interior_rings_of_union(
                 box(0, 0, 10, 10),
                 Polygon(
                     [
-                        (100.958, 50.15),
-                        (100.979, 50.051),
-                        (100.979, 49.949),
-                        (100.958, 49.85),
-                        (100, 46.8),
+                        (100.03, 54.936),
+                        (100.053, 54.855),
+                        (100.972, 50.095),
+                        (100.981, 50),
+                        (100.972, 49.905),
+                        (100.053, 45.145),
+                        (100.03, 45.064),
+                        (100, 45),
                         (100, 0),
                         (0, 0),
                         (0, 100),
                         (100, 100),
-                        (100, 53.2),
+                        (100, 55),
                     ],
-                    holes=[[(99.957, 50), (99, 53.046), (99, 46.954)]],
+                    holes=[
+                        [
+                            (99.096, 45.461),
+                            (99.972, 50),
+                            (99.096, 54.539),
+                            (99, 54.653),
+                            (99, 45.347),
+                        ]
+                    ],
                 ),
                 box(20, 20, 30, 30),
             ],
@@ -5188,3 +5213,147 @@ def test_make_valid_merge_parts(
 
     for i in range(len(result)):
         assert result[i].equals_exact(expected[i], tolerance=0.001)
+
+
+@pytest.mark.parametrize(
+    ("polygon", "kwargs", "expected"),
+    [
+        pytest.param(Polygon(), {}, LineString(), id="empty"),
+        pytest.param(
+            CENTERLINE_TEST_RECTANGLE,
+            {},
+            LineString([(1, 1), (19, 1)]),
+            id="rectangle",
+        ),
+        pytest.param(
+            CENTERLINE_TEST_RECTANGLE,
+            {"segmentize_by": 0.5},
+            LineString([(1, 1), (19, 1)]),
+            id="explicit_segmentize",
+        ),
+        pytest.param(
+            CENTERLINE_TEST_RECTANGLE,
+            {"segmentize_by": 0},
+            LineString(),
+            id="without_segmentize_is_empty",
+        ),
+        pytest.param(
+            Polygon([(7_600_000, 0), (7_600_020, 0), (7_600_020, 2), (7_600_000, 2)]),
+            {},
+            LineString([(7_600_001, 1), (7_600_019, 1)]),
+            id="large_coordinates",
+        ),
+        pytest.param(
+            CENTERLINE_TEST_RECTANGLE,
+            {"segmentize_by": 0.5, "prune_branches_shorter_than": 1000},
+            LineString([(1, 1), (19, 1)]),
+            id="prune_threshold_larger_than_everything_keeps_longest_chain",
+        ),
+        pytest.param(
+            CENTERLINE_TEST_RECTANGLE,
+            {"segmentize_by": 0.5, "prune_branches_shorter_than": 0},
+            MultiLineString(
+                [
+                    [(19, 1), (19.75, 1.75)],
+                    [(19, 1), (19.75, 0.25)],
+                    [(1, 1), (19, 1)],
+                    [(0.25, 1.75), (1, 1)],
+                    [(0.25, 0.25), (1, 1)],
+                ]
+            ),
+            id="no_prune_keeps_corner_branches",
+        ),
+        pytest.param(
+            Polygon([(0, 0), (10, 3), (20, 0), (20, 2), (10, 5), (0, 2)]),
+            {
+                "segmentize_by": 5,
+                "prune_branches_shorter_than": 0,
+                "simplify_tolerance": 0,
+            },
+            LineString(
+                [
+                    (1.5167, 1),
+                    (1.8167, 2),
+                    (4.85, 2),
+                    (5.15, 3),
+                    (8.1833, 3),
+                    (8.4833, 4),
+                    (11.5167, 4),
+                    (11.8167, 3),
+                    (14.85, 3),
+                    (15.15, 2),
+                    (18.1833, 2),
+                    (18.4833, 1),
+                ]
+            ),
+            id="no_simplification",
+        ),
+        pytest.param(
+            Polygon([(0, 0), (10, 3), (20, 0), (20, 2), (10, 5), (0, 2)]),
+            {
+                "segmentize_by": 5,
+                "prune_branches_shorter_than": 0,
+                "simplify_tolerance": 0.5,
+            },
+            LineString(
+                [
+                    (1.5167, 1),
+                    (1.8167, 2),
+                    (8.1833, 3),
+                    (8.4833, 4),
+                    (14.85, 3),
+                    (15.15, 2),
+                    (18.1833, 2),
+                    (18.4833, 1),
+                ]
+            ),
+            id="small_simplify_tolerance_removes_only_minor_vertices",
+        ),
+        pytest.param(
+            Polygon([(0, 0), (10, 3), (20, 0), (20, 2), (10, 5), (0, 2)]),
+            {
+                "segmentize_by": 5,
+                "prune_branches_shorter_than": 0,
+                "simplify_tolerance": 5,
+            },
+            LineString([(1.5167, 1), (18.4833, 1)]),
+            id="simplify_tolerance_works",
+        ),
+        pytest.param(
+            Polygon(
+                [(0, 0), (30, 0), (30, 2), (16, 2), (16, 3), (15, 3), (15, 2), (0, 2)]
+            ),
+            {"segmentize_by": 0.5, "prune_branches_shorter_than": 2},
+            LineString([(1, 1), (29, 1)]),
+            id="short_branches_pruned",
+        ),
+        pytest.param(
+            Polygon(
+                [(0, 0), (30, 0), (30, 2), (16, 2), (16, 3), (15, 3), (15, 2), (0, 2)]
+            ),
+            {"segmentize_by": 0.5, "prune_branches_shorter_than": 0},
+            MultiLineString(
+                [
+                    [(29, 1), (29.75, 1.75)],
+                    [(29, 1), (29.75, 0.25)],
+                    [(15.5, 2.5), (15.75, 2.75)],
+                    [(15.5, 1.0625), (29, 1)],
+                    [(15.5, 1.0625), (15.5, 2.5)],
+                    [(15.25, 2.75), (15.5, 2.5)],
+                    [(1, 1), (15.5, 1.0625)],
+                    [(0.25, 1.75), (1, 1)],
+                    [(0.25, 0.25), (1, 1)],
+                ]
+            ),
+            id="short_branches_not_pruned",
+        ),
+    ],
+)
+def test_centerline(
+    polygon: Polygon,
+    kwargs: dict,
+    expected: LineString | MultiLineString,
+):
+    result = centerline(polygon, **kwargs)
+
+    assert result.equals_exact(expected, tolerance=0.001)
