@@ -6,12 +6,13 @@
 
 from collections.abc import Callable
 from math import isclose
+from typing import cast
 
 import numpy as np
 import pytest
 from geopandas.geodataframe import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
-from shapely import get_num_coordinates
+from shapely import MultiPolygon, Polygon, get_num_coordinates
 from shapely.geometry import LineString, MultiPoint, Point
 
 from geogenalg.core.geometry import (
@@ -24,6 +25,7 @@ from geogenalg.core.geometry import (
     gaussian_smooth,
     get_line_connection_points,
     get_topological_points,
+    remove_line_segments_at_wide_sections,
     substring,
     visvalingam_whyatt_simplify_conditional,
 )
@@ -321,3 +323,22 @@ def test_centerline(
     )
 
     assert len(result) == len(polygons)
+
+
+@pytest.mark.parametrize("segmentize_by", [1, 10])
+@pytest.mark.benchmark
+def test_remove_line_segments_at_wide_sections(
+    segmentize_by: float,
+    benchmark: BenchmarkFixture,
+    watercourse_areas_input: TestInputData,
+):
+    polygons, _, _ = watercourse_areas_input.read()
+    polygons = polygons.loc[polygons.geometry.geom_type.isin(["Polygon"])]
+    union = cast("Polygon | MultiPolygon", polygons.geometry.union_all())
+    line = centerline(union, simplify_tolerance=0.5, segmentize_by=2).segmentize(
+        segmentize_by
+    )
+
+    result = benchmark(remove_line_segments_at_wide_sections, line, union, 30)
+
+    assert result.length < line.length
