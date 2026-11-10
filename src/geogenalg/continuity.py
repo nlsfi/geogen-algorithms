@@ -414,7 +414,7 @@ def get_lines_along_reference_lines(
     gdf = input_gdf.copy()
 
     # Single geometry for the reference lines buffer
-    buffered_union = reference_gdf.geometry.buffer(detection_distance)
+    buffered_union = reference_gdf.geometry.buffer(detection_distance, cap_style="flat")
     buffered_union = buffered_union.union_all()
 
     if length_percentage == 100.0:  # noqa: PLR2004
