@@ -8,7 +8,6 @@ from typing import ClassVar, override
 
 from geopandas import GeoDataFrame
 from pydantic import Field
-from pygeoops import centerline
 from shapely.geometry import Polygon
 
 from geogenalg.analyze import get_polygons_for_parallel_lines
@@ -27,6 +26,7 @@ from geogenalg.continuity import (
 from geogenalg.core.geometry import (
     LineExtendFrom,
     assign_nearest_z,
+    centerline,
     extend_line_to_nearest,
 )
 from geogenalg.identity import hash_index_from_old_ids
@@ -211,13 +211,13 @@ class GeneralizePowerLines(BaseAlgorithm):
         parallels = hash_index_from_old_ids(parallels, "powerlines", "old_ids")
 
         parallels["temp_polygon"] = parallels.geometry
-        parallels.geometry = parallels.geometry.segmentize(5)
         parallels.geometry = parallels.geometry.apply(
             lambda geom: centerline(
                 geom,
-                simplifytolerance=0.5,
-                min_branch_length=self.length_threshold / 2,
-            ),
+                simplify_tolerance=0.5,
+                prune_branches_shorter_than=self.length_threshold / 2,
+                segmentize_by=5,
+            )
         )  # ty: ignore[no-matching-overload]
 
         parallels = parallels.explode(column=parallels.geometry.name)
