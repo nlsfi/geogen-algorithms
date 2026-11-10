@@ -38,12 +38,12 @@ jobs:
       - name: Run tests and generate benchmark report
         run: |
           git checkout ${{ github.base_ref }}
-          .venv/bin/python -m pytest tests/bench --benchmark-only --benchmark-json=base.json
+          .venv/bin/python -m pytest tests/bench/algo --benchmark-only --benchmark-json=base.json
 
       - name: Benchmark head (PR branch)
         run: |
           git checkout ${{ github.head_ref }}
-          .venv/bin/python -m pytest tests/bench --benchmark-only --benchmark-json=head.json
+          .venv/bin/python -m pytest tests/bench/algo --benchmark-only --benchmark-json=head.json
 
       - name: Compare results and produce report
         run: |
