@@ -3447,7 +3447,8 @@ def centerline(
     if geom.is_empty:
         return LineString()
 
-    # Estimate polygon average width
+    # Estimate polygon average width by modeling the polygon as a buffered line
+    # ref: https://gis.stackexchange.com/a/20282
     quarter_perimeter = geom.length / 4
     average_width = quarter_perimeter - np.sqrt(
         max(quarter_perimeter**2 - geom.area, 0.0)
