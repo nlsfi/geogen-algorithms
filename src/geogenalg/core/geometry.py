@@ -3526,3 +3526,27 @@ def centerline(
     lines = simplify(lines, simplify_tolerance)
 
     return cast("LineString | MultiLineString", normalize(lines))
+
+
+def snap_to_grid(values: np.ndarray, grid_size: float) -> np.ndarray:
+    """Snap values to a grid.
+
+    Args:
+    ----
+        values: Values to snap
+        grid_size: Size of the grid, must be greater than zero
+
+    Returns:
+    -------
+        Rounded values.
+
+    """
+    if grid_size <= 0:
+        msg = "Grid size must be > 0."
+        raise ValueError(msg)
+
+    if grid_size < 1:
+        scale = 1 / grid_size
+        return np.round(values * scale) / scale
+
+    return np.round(values / grid_size) * grid_size
