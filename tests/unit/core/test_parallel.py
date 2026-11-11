@@ -37,6 +37,7 @@ from geogenalg.core.parallel import (
     num_workers,
     set_num_workers,
     shutdown_threadpool_executor,
+    union_all_by_row,
 )
 
 if TYPE_CHECKING:
@@ -445,3 +446,44 @@ def test_in_parallel_chaining_non_cached_pool(sample_points: GeoSeries):
         assert isinstance(result, GeoSeries)
         expected = sample_points.buffer(1.0).buffer(5.0)
         assert_geoseries_equal(result, expected)
+
+
+def test_within(sample_points: GeoSeries):
+    boxes = np.array(
+        [box(i - 1, i - 1, i + 1, i + 1) for i in range(len(sample_points))],
+        dtype=object,
+    )
+
+    # All points are within a box, except this is moved away
+    boxes[3] = box(100, 100, 101, 101)
+
+    result = in_parallel(sample_points).within(boxes).resolve_numpy()
+
+    assert result.dtype == bool
+
+    # Check that boxes[3] is not within
+    assert result.tolist() == [i != 3 for i in range(len(sample_points))]
+
+
+def test_union_all_by_row():
+    grid = np.array(
+        [[box(0, 0, 1, 1), box(1, 0, 2, 1)] for _ in range(7)],
+        dtype=object,
+    )
+    set_num_workers(3)
+
+    result = union_all_by_row(grid)
+
+    assert len(result) == 7
+    assert all(equals(geom, box(0, 0, 2, 1)) for geom in result)
+
+
+def test_in_parallel_with_numpy_array(sample_points: GeoSeries):
+    geoms = sample_points.to_numpy()
+
+    process = in_parallel(geoms)
+    result = process.buffer(1.0).resolve_geoseries()
+
+    assert result.crs is None
+    assert result.index.equals(Index(range(len(geoms))))
+    assert equals(result.to_numpy(), buffer(geoms, 1.0, quad_segs=16)).all()
