@@ -98,6 +98,7 @@ from geogenalg.core.geometry import (
     segment_direction,
     smooth_around_connection_point_of_two_lines,
     snap_to_closest_vertex_or_segment,
+    snap_to_grid,
     split_line_at_distances,
     split_linear_geometry,
     substring,
@@ -5357,3 +5358,21 @@ def test_centerline(
     result = centerline(polygon, **kwargs)
 
     assert result.equals_exact(expected, tolerance=0.001)
+
+
+@pytest.mark.parametrize(
+    ("values", "grid_size", "expected"),
+    [
+        pytest.param([7.789, -7.789, 0.0], 0.1, [7.8, -7.8, 0.0], id="decimeters"),
+        pytest.param([7.789, 1.234], 0.01, [7.79, 1.23], id="centimeters"),
+        pytest.param([7.789, 4.4, 5.5], 1, [8.0, 4.0, 6.0], id="meters"),
+        pytest.param([12.0, 18.0, 25.0], 10, [10.0, 20.0, 20.0], id="decameters"),
+        pytest.param([], 0.5, [], id="empty"),
+    ],
+)
+def test_snap_to_grid(
+    values: list[float],
+    grid_size: float,
+    expected: list[float],
+):
+    assert snap_to_grid(np.array(values), grid_size).tolist() == expected
