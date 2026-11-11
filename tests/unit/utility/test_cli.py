@@ -61,6 +61,7 @@ def test_get_basealgorithm_docstrings():
         "parent_attribute": "Parent attribute.",
         "subclass_attribute": "Subclass attribute.",
         "repair_result_geometries": "Specify if repairing invalid and non-simple geometries should be attempted.",
+        "result_coordinate_precision": "If not None, result coordinate is set to this grid size.",
     }
 
 

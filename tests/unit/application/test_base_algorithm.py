@@ -617,3 +617,73 @@ def test_repair_result_geometries(
         expected_gdf.set_index(expected_gdf.index.astype("string")),
         check_less_precise=True,
     )
+
+
+def test_result_coordinate_precision(monkeypatch: pytest.MonkeyPatch) -> None:
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ARG002, ANN001, ANN202
+            return data
+
+    gdf = GeoDataFrame(geometry=[Point(1.234, 5.678)], crs="EPSG:3067")
+
+    # No setting
+    assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.234
+    assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.678
+
+    monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", "0.1")
+    assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.2
+    assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.7
+
+    # Test explicit parameter overrides env variable
+    assert MockAlg(result_coordinate_precision=1).execute(gdf).geometry.iloc[0].x == 1.0
+    assert MockAlg(result_coordinate_precision=1).execute(gdf).geometry.iloc[0].y == 6.0
+
+    monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", "")
+    assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.234
+    assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.678
+
+
+def test_repair_result_geometries_env_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ARG002, ANN001, ANN202
+            return data
+
+    assert MockAlg().repair_result_geometries == "no"
+
+    monkeypatch.setenv("GEOGENALG_REPAIR_RESULT_GEOMETRIES", " explode ")
+    assert MockAlg().repair_result_geometries == "explode"
+
+    # Explicit parameter overrides env variable
+    assert (
+        MockAlg(repair_result_geometries="keep_largest").repair_result_geometries
+        == "keep_largest"
+    )
+
+    monkeypatch.setenv("GEOGENALG_REPAIR_RESULT_GEOMETRIES", "")
+    assert MockAlg().repair_result_geometries == "no"
+
+    monkeypatch.setenv("GEOGENALG_REPAIR_RESULT_GEOMETRIES", "invalid")
+    with pytest.raises(ValueError, match="GEOGENALG_REPAIR_RESULT_GEOMETRIES"):
+        MockAlg()
+
+
+@pytest.mark.parametrize("value", ["invalid", "0.0", "-1.0"])
+def test_result_coordinate_precision_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ARG002, ANN001, ANN202
+            return data
+
+    monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", value)
+    with pytest.raises(ValueError, match="GEOGENALG_OUTPUT_COORDINATE_PRECISION"):
+        MockAlg()
