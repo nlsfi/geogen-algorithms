@@ -633,7 +633,7 @@ def test_result_coordinate_precision(monkeypatch: pytest.MonkeyPatch) -> None:
     assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.678
     assert MockAlg().execute(gdf).geometry.iloc[0].z == 7.789
 
-    monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", "0.1")
+    monkeypatch.setenv("GEOGENALG_RESULT_COORDINATE_PRECISION", "0.1")
     assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.2
     assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.7
     assert MockAlg().execute(gdf).geometry.iloc[0].z == 7.8
@@ -643,7 +643,7 @@ def test_result_coordinate_precision(monkeypatch: pytest.MonkeyPatch) -> None:
     assert MockAlg(result_coordinate_precision=1).execute(gdf).geometry.iloc[0].y == 6.0
     assert MockAlg(result_coordinate_precision=1).execute(gdf).geometry.iloc[0].z == 8.0
 
-    monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", "")
+    monkeypatch.setenv("GEOGENALG_RESULT_COORDINATE_PRECISION", "")
     assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.234
     assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.678
     assert MockAlg().execute(gdf).geometry.iloc[0].z == 7.789
@@ -688,6 +688,6 @@ def test_result_coordinate_precision_raises(
         def _execute(self, data, reference_data):  # noqa: ARG002, ANN001, ANN202
             return data
 
-    monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", value)
-    with pytest.raises(ValueError, match="GEOGENALG_OUTPUT_COORDINATE_PRECISION"):
+    monkeypatch.setenv("GEOGENALG_RESULT_COORDINATE_PRECISION", value)
+    with pytest.raises(ValueError, match="GEOGENALG_RESULT_COORDINATE_PRECISION"):
         MockAlg()
