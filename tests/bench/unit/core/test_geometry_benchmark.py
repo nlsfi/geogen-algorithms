@@ -12,7 +12,13 @@ import numpy as np
 import pytest
 from geopandas.geodataframe import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
-from shapely import MultiPolygon, Polygon, get_num_coordinates
+from shapely import (
+    MultiPolygon,
+    Polygon,
+    buffer,
+    get_num_coordinates,
+    intersects,
+)
 from shapely.geometry import LineString, MultiPoint, Point
 
 from geogenalg.core.geometry import (
@@ -27,6 +33,7 @@ from geogenalg.core.geometry import (
     get_topological_points,
     remove_line_segments_at_wide_sections,
     substring,
+    union_by_predicate,
     visvalingam_whyatt_simplify_conditional,
 )
 from geogenalg.testing import GeoPackagePath, TestInputData
@@ -342,3 +349,28 @@ def test_remove_line_segments_at_wide_sections(
     result = benchmark(remove_line_segments_at_wide_sections, line, union, 30)
 
     assert result.length < line.length
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    ("feature_count"),
+    [
+        pytest.param(100, id="100"),
+        pytest.param(1_000, id="1000"),
+        pytest.param(10_000, id="10000"),
+    ],
+)
+def test_union_by_predicate(
+    benchmark: BenchmarkFixture,
+    make_overlapping_polygons: Callable[..., GeoDataFrame],
+    feature_count: int,
+) -> None:
+    others = make_overlapping_polygons(feature_count).geometry.to_numpy()
+    geoms = buffer(
+        make_overlapping_polygons(feature_count, seed=1).geometry.to_numpy(),
+        3.0,
+    )
+
+    result = benchmark(union_by_predicate, geoms, others, "intersects")
+
+    assert intersects(geoms, result).all()
