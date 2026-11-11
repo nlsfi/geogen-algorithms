@@ -85,6 +85,7 @@ from geogenalg.core.exceptions import (
     InvalidGeometryError,
 )
 from geogenalg.core.graph import filter_short_chains, label_chains
+from geogenalg.core.parallel import union_all_by_row
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -3281,21 +3282,26 @@ def union_by_predicate(
         target_positions = target_positions[only_one_match]
         source_positions = source_positions[only_one_match]
 
-    # Sort so that each target's sources are adjacent as required by np.split
+    # Sort so that each target's sources are adjacent
     order = np.argsort(target_positions, kind="stable")
     target_positions = target_positions[order]
     source_positions = source_positions[order]
 
-    matched_targets, group_start_positions = np.unique(
+    matched_targets, group_start_positions, group_sizes = np.unique(
         target_positions,
         return_index=True,
+        return_counts=True,
     )
-    for target_position, matching in zip(
-        matched_targets,
-        np.split(source_positions, group_start_positions[1:]),
-        strict=len(matched_targets) > 0,
-    ):
-        unions[target_position] = union_all(others[matching])
+    matched_unions = np.empty(len(matched_targets), dtype=object)
+
+    # Go over groups by sizes to allow for processing in batches utilizing
+    # vectorization and parallelization
+    for size in np.unique(group_sizes):
+        rows = np.flatnonzero(group_sizes == size)
+        batch = group_start_positions[rows][:, None] + np.arange(size)
+        matched_unions[rows] = union_all_by_row(others[source_positions[batch]])
+
+    unions[matched_targets] = matched_unions
 
     return unions
 
