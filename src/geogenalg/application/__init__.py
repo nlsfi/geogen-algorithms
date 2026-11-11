@@ -4,6 +4,7 @@
 #
 #  SPDX-License-Identifier: MIT
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +13,7 @@ from warnings import warn
 
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from geogenalg.core.exceptions import (
     GeometryTypeError,
@@ -35,6 +36,50 @@ from geogenalg.utility.validation import (
 
 _SUPPORTS_IDENTITY_ATTR = "__supports_identity"
 
+GEOGENALG_REPAIR_RESULT_GEOMETRIES_ENV_VAR = "GEOGENALG_REPAIR_RESULT_GEOMETRIES"
+GEOGENALG_RESULT_COORDINATE_PRECISION_ENV_VAR = "GEOGENALG_OUTPUT_COORDINATE_PRECISION"
+
+
+def _default_repair_result_geometries() -> Literal["no", "keep_largest", "explode"]:
+    value = os.environ.get(GEOGENALG_REPAIR_RESULT_GEOMETRIES_ENV_VAR, "").strip()
+
+    if not value:
+        return "no"
+
+    repair_options = ("no", "keep_largest", "explode")
+
+    if value not in repair_options:
+        msg = (
+            f"Invalid value {value!r} for "
+            f"{GEOGENALG_REPAIR_RESULT_GEOMETRIES_ENV_VAR}, "
+            f"expected one of {', '.join(repair_options)}."
+        )
+        raise ValueError(msg)
+
+    return value
+
+
+def _default_result_coordinate_precision() -> float | None:
+    value = os.environ.get(GEOGENALG_RESULT_COORDINATE_PRECISION_ENV_VAR, "").strip()
+
+    if not value:
+        return None
+
+    try:
+        precision = float(value)
+    except ValueError:
+        precision = 0.0
+
+    if precision <= 0:
+        msg = (
+            f"Invalid value {value!r} for "
+            f"{GEOGENALG_RESULT_COORDINATE_PRECISION_ENV_VAR}, "
+            "value must be > 0.0"
+        )
+        raise ValueError(msg)
+
+    return precision
+
 
 @dataclass(frozen=True)
 class ReferenceDataInformation:
@@ -47,8 +92,14 @@ class ReferenceDataInformation:
 class BaseAlgorithm(ABC, BaseModel):
     """Abstract base class for all algorithms."""
 
-    repair_result_geometries: Literal["no", "keep_largest", "explode"] = "no"
+    repair_result_geometries: Literal["no", "keep_largest", "explode"] = Field(
+        default_factory=_default_repair_result_geometries
+    )
     """Specify if repairing invalid and non-simple geometries should be attempted."""
+    result_coordinate_precision: float | None = Field(
+        default_factory=_default_result_coordinate_precision, gt=0
+    )
+    """If not None, result coordinate is set to this grid size."""
     valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
     """Set of accepted geometry types for input data. If there is a mismatch,
     GeometryTypeError will be raised."""
@@ -101,6 +152,11 @@ class BaseAlgorithm(ABC, BaseModel):
         # Ensure the output has the same index name as the input data
         if output.index.name != data.index.name:
             output.index.name = data.index.name
+
+        if self.result_coordinate_precision is not None:
+            output.geometry = output.geometry.set_precision(
+                self.result_coordinate_precision,
+            )
 
         if not output.geometry.is_valid.all() or not output.geometry.is_simple.all():
             warn(
