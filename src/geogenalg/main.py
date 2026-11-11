@@ -403,7 +403,7 @@ def build_app() -> None:
 
             docstring = docstrings[field_name]
 
-            default = field_info.default
+            default = field_info.get_default(call_default_factory=True)
 
             if isinstance(default, int | float) and field_info.metadata:
                 docstring += " Must be "

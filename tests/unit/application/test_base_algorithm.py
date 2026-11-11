@@ -626,23 +626,27 @@ def test_result_coordinate_precision(monkeypatch: pytest.MonkeyPatch) -> None:
         def _execute(self, data, reference_data):  # noqa: ARG002, ANN001, ANN202
             return data
 
-    gdf = GeoDataFrame(geometry=[Point(1.234, 5.678)], crs="EPSG:3067")
+    gdf = GeoDataFrame(geometry=[Point(1.234, 5.678, 7.789)], crs="EPSG:3067")
 
     # No setting
     assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.234
     assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.678
+    assert MockAlg().execute(gdf).geometry.iloc[0].z == 7.789
 
     monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", "0.1")
     assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.2
     assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.7
+    assert MockAlg().execute(gdf).geometry.iloc[0].z == 7.8
 
     # Test explicit parameter overrides env variable
     assert MockAlg(result_coordinate_precision=1).execute(gdf).geometry.iloc[0].x == 1.0
     assert MockAlg(result_coordinate_precision=1).execute(gdf).geometry.iloc[0].y == 6.0
+    assert MockAlg(result_coordinate_precision=1).execute(gdf).geometry.iloc[0].z == 8.0
 
     monkeypatch.setenv("GEOGENALG_OUTPUT_COORDINATE_PRECISION", "")
     assert MockAlg().execute(gdf).geometry.iloc[0].x == 1.234
     assert MockAlg().execute(gdf).geometry.iloc[0].y == 5.678
+    assert MockAlg().execute(gdf).geometry.iloc[0].z == 7.789
 
 
 def test_repair_result_geometries_env_variable(

@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import ClassVar, Literal, TypeVar, final
 from warnings import warn
 
+import numpy as np
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
 from pydantic import BaseModel, ConfigDict, Field
+from shapely import set_precision, transform
 
 from geogenalg.core.exceptions import (
     GeometryTypeError,
@@ -26,6 +28,7 @@ from geogenalg.core.geometry import (
     make_valid_extract_linestrings,
     make_valid_extract_polygons,
     node_non_simple,
+    snap_to_grid,
 )
 from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.hash import reset_with_random_hash_index
@@ -154,9 +157,18 @@ class BaseAlgorithm(ABC, BaseModel):
             output.index.name = data.index.name
 
         if self.result_coordinate_precision is not None:
-            output.geometry = output.geometry.set_precision(
-                self.result_coordinate_precision,
-            )
+            precision = self.result_coordinate_precision
+            output.geometry = set_precision(output.geometry, precision)
+
+            # set_precision() doesn't fix Z coordinates
+            if output.geometry.has_z.any():
+                output.geometry = transform(
+                    output.geometry.to_numpy(),
+                    lambda coords: np.column_stack(
+                        (coords[:, :2], snap_to_grid(coords[:, 2], precision))
+                    ),
+                    include_z=True,
+                )
 
         if not output.geometry.is_valid.all() or not output.geometry.is_simple.all():
             warn(
