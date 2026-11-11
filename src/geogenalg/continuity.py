@@ -32,6 +32,7 @@ from geogenalg.core.geometry import (
     get_contiguous_line_components,
     get_line_connection_points,
     smooth_around_connection_point_of_two_lines,
+    union_by_predicate,
 )
 from geogenalg.core.graph import filter_short_chains
 from geogenalg.core.parallel import in_parallel
@@ -413,24 +414,38 @@ def get_lines_along_reference_lines(
 
     gdf = input_gdf.copy()
 
-    # Single geometry for the reference lines buffer
-    buffered_union = reference_gdf.geometry.buffer(detection_distance, cap_style="flat")
-    buffered_union = buffered_union.union_all()
+    buffers = (
+        in_parallel(reference_gdf.geometry)
+        .buffer(detection_distance, cap_style="flat")
+        .resolve_numpy()
+    )
+    geoms = gdf.geometry.to_numpy()
+    along_ref = np.zeros(len(gdf), dtype=bool)
 
-    if length_percentage == 100.0:  # noqa: PLR2004
-        gdf["along_ref"] = gdf.geometry.within(buffered_union)
-    else:
-        fraction = length_percentage / 100
-        gdf["along_ref"] = (
-            gdf.geometry.intersection(buffered_union).length / gdf.geometry.length
-        ) > fraction
+    buffers_per_line = union_by_predicate(geoms, buffers, "intersects")
+    ids = np.flatnonzero(~is_empty(buffers_per_line))
 
-    lines_along_ref = gdf.loc[gdf["along_ref"]]
-    lines_independent_of_ref = gdf.loc[~gdf["along_ref"]]
+    if len(ids):
+        candidates = geoms[ids]
+        buffers_per_line = buffers_per_line[ids]
 
-    if drop_column:
-        lines_along_ref = lines_along_ref.drop("along_ref", axis=1)
-        lines_independent_of_ref = lines_independent_of_ref.drop("along_ref", axis=1)
+        if length_percentage == 100.0:  # noqa: PLR2004
+            along_ref[ids] = (
+                in_parallel(candidates).within(buffers_per_line).resolve_numpy()
+            )
+        else:
+            intersections = (
+                in_parallel(candidates).intersection(buffers_per_line).resolve_numpy()
+            )
+            along_ref[ids] = (
+                length(intersections) / length(candidates) > length_percentage / 100
+            )
+
+    if not drop_column:
+        gdf["along_ref"] = along_ref
+
+    lines_along_ref = gdf.loc[along_ref]
+    lines_independent_of_ref = gdf.loc[~along_ref]
 
     return lines_along_ref, lines_independent_of_ref
 
