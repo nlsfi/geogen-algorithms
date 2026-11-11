@@ -16,7 +16,7 @@ from warnings import warn
 import numpy as np
 from geopandas import GeoSeries
 from geopandas.array import GeometryArray
-from pandas import Index, Series
+from pandas import Index, RangeIndex, Series
 from shapely import (
     BufferCapStyle,
     BufferJoinStyle,
@@ -24,6 +24,8 @@ from shapely import (
     difference,
     intersection,
     symmetric_difference,
+    union_all,
+    within,
 )
 
 if TYPE_CHECKING:
@@ -287,6 +289,13 @@ class ParallelGeometryProcess:
         """Run shapely symmetric difference in parallel."""
         return self._run(symmetric_difference, other, grid_size=grid_size)
 
+    def within(
+        self,
+        other: BaseGeometry | np.ndarray | GeoSeries,
+    ) -> ParallelGeometryProcess:
+        """Run shapely within in parallel."""
+        return self._run(within, other)
+
     def resolve_numpy(self) -> np.ndarray:
         """Return the underlying NumPy array without copying."""
         return self._data
@@ -303,14 +312,33 @@ class ParallelGeometryProcess:
         )
 
 
+def union_all_by_row(
+    geoms: np.ndarray,
+    executor: ThreadPoolExecutor | None = None,
+) -> np.ndarray:
+    """Read a 2D geometry array and union all geometries in a row.
+
+    Processing is done in chunks, and in parallel.
+    """
+    return _process_geometry_array(geoms, union_all, axis=1, executor=executor)
+
+
 def in_parallel(
-    geoms: GeoSeries,
+    geoms: GeoSeries | np.ndarray,
     executor: ThreadPoolExecutor | None = None,
 ) -> ParallelGeometryProcess:
-    """Create geometry process object from GeoSeries."""
+    """Create geometry process object from GeoSeries or array of geometries."""
+    if isinstance(geoms, GeoSeries):
+        return ParallelGeometryProcess(
+            data=geoms.to_numpy(),
+            index=geoms.index,
+            crs=geoms.crs,
+            executor=executor,
+        )
+
     return ParallelGeometryProcess(
-        data=geoms.to_numpy(),
-        index=geoms.index,
-        crs=geoms.crs,
+        data=geoms,
+        index=RangeIndex(len(geoms)),
+        crs=None,
         executor=executor,
     )
