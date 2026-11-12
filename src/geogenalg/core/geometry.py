@@ -38,6 +38,7 @@ from shapely import (
     boundary,
     contains_xy,
     count_coordinates,
+    crosses,
     difference,
     force_2d,
     force_3d,
@@ -47,10 +48,13 @@ from shapely import (
     get_parts,
     get_point,
     get_segments,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
+    get_type_id,
+    get_z,
     has_z,
     is_closed,
     is_empty,
     is_missing,
+    is_simple,
     is_valid,
     length,
     line_interpolate_point,
@@ -812,6 +816,7 @@ def extend_line_to_nearest(
         GeometryOperationError: If merge operation fails to produce LineString.
 
     """
+    # TODO: BEFORE RELEASE: remove in favor of extend_lineS_to_nearest?
     if extend_from == LineExtendFrom.NONE:
         return line
 
@@ -3547,3 +3552,111 @@ def get_end_points(lines: np.ndarray) -> np.ndarray:
         [force_2d(get_point(lines, 0)), force_2d(get_point(lines, -1))],
         axis=1,
     )
+
+
+def extend_lines_to_nearest(  # noqa: PLR0913
+    lines: np.ndarray,
+    extend_to: BaseGeometry | np.ndarray,
+    *,
+    extend_start: np.ndarray,
+    extend_end: np.ndarray,
+    length_tolerance: float = 0.0,
+    disallow_non_simple: bool = False,
+    end_points: np.ndarray | None = None,
+) -> np.ndarray:
+    """Extend lines to their nearest points on another geometry.
+
+    If the line is 3D, the new endpoint vertexes inherit the Z coordinate of
+    the old endpoint.
+
+    Args:
+    ----
+        lines: Array of LineStrings.
+        extend_to: Geometry to extend to, or an array of geometries in which
+            each line finds the nearest geometry.
+        extend_start: Boolean array telling which lines to extend from start.
+        extend_end: Boolean array telling which lines to extend from end.
+        length_tolerance: Extensions longer than this are skipped. If 0, the
+            length is unlimited.
+        disallow_non_simple: If True, lines which would be non-simple after
+            extending are left unextended.
+        end_points: 2D array of end points for each input line. If None
+            will be computed.
+
+    Returns:
+    -------
+        Array of extended lines (if extension worked).
+
+    Warns:
+    -----
+        UserWarning: If a line could not be merged with its extensions or
+            would be non-simple when `disallow_non_simple` is True. Such
+            lines are left unextended.
+
+    """
+    end_points = get_end_points(lines) if end_points is None else end_points
+
+    # Rings can't be extended without self-intersection
+    to_extend = (
+        np.stack([extend_start, extend_end], axis=1) & ~is_closed(lines)[:, None]
+    )
+
+    rows, sides = np.nonzero(to_extend)
+    selected_end_points = end_points[rows, sides]
+
+    if isinstance(extend_to, BaseGeometry):
+        targets = np.empty(len(selected_end_points), dtype=object)
+        targets[:] = extend_to
+    elif len(extend_to) == 0 or len(selected_end_points) == 0:
+        return lines.copy()
+    else:
+        targets = extend_to[STRtree(extend_to).nearest(selected_end_points)]
+
+    extension_segments = shortest_line(selected_end_points, targets)
+
+    # Filter out segments which would create a self-intersection or are under
+    # the max length
+    keep = ~crosses(extension_segments, lines[rows])
+    if length_tolerance > 0.0:
+        keep &= ~(length(extension_segments) > length_tolerance)
+
+    rows, sides, extension_segments = rows[keep], sides[keep], extension_segments[keep]
+
+    is_3d = has_z(lines[rows])
+    end_z = get_z(get_point(lines[rows[is_3d]], np.where(sides[is_3d] == 0, 0, -1)))
+    extension_segments[is_3d] = force_3d(extension_segments[is_3d], end_z)
+
+    extended_rows, group = np.unique(rows, return_inverse=True)
+
+    # Group extension segments with the line they'll extend
+    pieces = np.concatenate([extension_segments, lines[extended_rows]])
+    owners = np.concatenate([group.ravel(), np.arange(len(extended_rows))])
+    order = np.argsort(owners, kind="stable")
+
+    merged = np.asarray(
+        line_merge(multilinestrings(pieces[order], indices=owners[order])),
+    )
+
+    failed = get_type_id(merged) != 1  # not LineString
+    if failed.any():
+        warn(
+            "Merge result(s) was not a LineString. Keeping the originals.",
+            UserWarning,
+            stacklevel=2,
+        )
+        merged[failed] = lines[extended_rows[failed]]
+
+    if disallow_non_simple:
+        non_simple = ~is_simple(merged)
+        if non_simple.any():
+            warn(
+                "Extension created non-simple lines. Keeping the originals.",
+                UserWarning,
+                stacklevel=2,
+            )
+            merged[non_simple] = lines[extended_rows[non_simple]]
+
+    extended = lines.copy()
+    extended[extended_rows] = merged
+
+    return extended
