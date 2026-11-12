@@ -62,6 +62,7 @@ from geogenalg.core.geometry import (
     explode_line,
     extend_line_by,
     extend_line_to_nearest,
+    extend_lines_to_nearest,
     extract_interior_rings,
     extract_interior_rings_gdf,
     extract_interior_rings_of_union,
@@ -5399,3 +5400,237 @@ def test_get_end_points(
         result,
         np.array(expected, dtype=object).reshape(-1, 2),
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "lines",
+        "extend_to",
+        "extend_start",
+        "extend_end",
+        "kwargs",
+        "expected",
+    ),
+    [
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            LineString([(-2, -20), (-2, 20)]),
+            [True],
+            [False],
+            {},
+            [LineString([(-2, 0), (0, 0), (1, 0)])],
+            id="start_to_single_geometry",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            np.array(
+                [LineString([(-2, -20), (-2, 20)]), LineString([(3, -20), (3, 20)])],
+                dtype=object,
+            ),
+            [False],
+            [True],
+            {},
+            [LineString([(0, 0), (1, 0), (3, 0)])],
+            id="end_to_nearest_of_targets",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            np.array(
+                [LineString([(-2, -20), (-2, 20)]), LineString([(3, -20), (3, 20)])],
+                dtype=object,
+            ),
+            [True],
+            [True],
+            {},
+            [LineString([(-2, 0), (0, 0), (1, 0), (3, 0)])],
+            id="each_end_to_its_own_nearest_target",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 5), (1, 5)]),
+                LineString([(0, 10), (1, 10)]),
+                LineString([(0, 0), (1, 0)]),
+            ],
+            np.array(
+                [LineString([(-2, -20), (-2, 20)]), LineString([(3, -20), (3, 20)])],
+                dtype=object,
+            ),
+            [False, False, True],
+            [True, False, True],
+            {},
+            [
+                LineString([(0, 5), (1, 5), (3, 5)]),
+                LineString([(0, 10), (1, 10)]),
+                LineString([(-2, 0), (0, 0), (1, 0), (3, 0)]),
+            ],
+            id="lines_extended_independently",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            LineString([(-2, -20), (-2, 20)]),
+            [False],
+            [False],
+            {},
+            [LineString([(0, 0), (1, 0)])],
+            id="no_ends_requested",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            np.array([], dtype=object),
+            [True],
+            [True],
+            {},
+            [LineString([(0, 0), (1, 0)])],
+            id="no_targets",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0), (1, 1), (0, 0)])],
+            Point(5, 0),
+            [True],
+            [True],
+            {},
+            [LineString([(0, 0), (1, 0), (1, 1), (0, 0)])],
+            id="closed_line_not_extended",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            LineString([(1, -1), (1, 1)]),
+            [False],
+            [True],
+            {},
+            [LineString([(0, 0), (1, 0)])],
+            id="end_already_on_target",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (-1, 1), (1, 1), (2, 0)])],
+            LineString([(-5, 3), (5, 3)]),
+            [True],
+            [True],
+            {},
+            [LineString([(0, 0), (-1, 1), (1, 1), (2, 0), (2, 3)])],
+            id="extension_crossing_line_skipped",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            np.array(
+                [LineString([(-2, -20), (-2, 20)]), LineString([(2, -20), (2, 20)])],
+                dtype=object,
+            ),
+            [True],
+            [True],
+            {"length_tolerance": 1.5},
+            [LineString([(0, 0), (1, 0), (2, 0)])],
+            id="extension_longer_than_tolerance_skipped",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            LineString([(-2, -20), (-2, 20)]),
+            [True],
+            [False],
+            {"disallow_non_simple": True},
+            [LineString([(-2, 0), (0, 0), (1, 0)])],
+            id="simple_extension_allowed_without_warning",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (0, -1), (1, -1), (1, 0)])],
+            Point(2, 0),
+            [True],
+            [False],
+            {},
+            [LineString([(1, 0), (1, -1), (0, -1), (0, 0), (2, 0)])],
+            id="non_simple_extension_allowed",
+        ),
+        pytest.param(
+            [LineString([(0, 0, 5), (1, 0, 6)])],
+            np.array(
+                [LineString([(-2, -20), (-2, 20)]), LineString([(3, -20), (3, 20)])],
+                dtype=object,
+            ),
+            [True],
+            [True],
+            {},
+            [LineString([(-2, 0, 5), (0, 0, 5), (1, 0, 6), (3, 0, 6)])],
+            id="3d_extension_has_z_of_its_end",
+        ),
+        pytest.param(
+            [LineString([(0, 5), (1, 5)]), LineString([(0, 0, 5), (1, 0, 6)])],
+            np.array(
+                [LineString([(-2, -20), (-2, 20)]), LineString([(3, -20), (3, 20)])],
+                dtype=object,
+            ),
+            [False, True],
+            [True, False],
+            {},
+            [
+                LineString([(0, 5), (1, 5), (3, 5)]),
+                LineString([(-2, 0, 5), (0, 0, 5), (1, 0, 6)]),
+            ],
+            id="2d_and_3d_lines_mixed",
+        ),
+    ],
+)
+def test_extend_lines_to_nearest(
+    lines: list[LineString],
+    extend_to: BaseGeometry | np.ndarray,
+    extend_start: list[bool],
+    extend_end: list[bool],
+    kwargs: dict,
+    expected: list[LineString],
+):
+    input_lines = np.array(lines, dtype=object)
+
+    # Turn warnings to errors to assert that no warnings are raised in these cases
+    with catch_warnings(category=UserWarning, action="error"):
+        result = extend_lines_to_nearest(
+            input_lines,
+            extend_to,
+            extend_start=np.array(extend_start),
+            extend_end=np.array(extend_end),
+            **kwargs,
+        )
+
+    assert result.tolist() == expected
+    assert input_lines.tolist() == lines  # Check that input array is unchanged
+
+
+def test_extend_lines_to_nearest_warns_on_non_simple():
+    lines = np.array(
+        [
+            LineString([(0, 0), (0, -1), (1, -1), (1, 0)]),
+            LineString([(0, 5), (1, 5)]),
+        ],
+        dtype=object,
+    )
+
+    with pytest.warns(
+        UserWarning,
+        match=re.escape("Extension created non-simple lines. Keeping the originals."),
+    ):
+        result = extend_lines_to_nearest(
+            lines,
+            np.array([Point(2, 0), LineString([(-2, 4), (-2, 6)])], dtype=object),
+            extend_start=np.array([True, True]),
+            extend_end=np.array([False, False]),
+            disallow_non_simple=True,
+        )
+
+    expected = [lines[0], LineString([(-2, 5), (0, 5), (1, 5)])]
+    assert result.tolist() == expected
+
+
+def test_extend_lines_to_nearest_warns_on_merge_failure():
+    lines = np.array([LineString(), LineString([(0, 0), (1, 0)])], dtype=object)
+
+    with pytest.warns(
+        UserWarning,
+        match=re.escape("Merge result(s) was not a LineString. Keeping the originals."),
+    ):
+        result = extend_lines_to_nearest(
+            lines,
+            LineString([(-2, -20), (-2, 20)]),
+            extend_start=np.array([True, True]),
+            extend_end=np.array([True, False]),
+        )
+
+    expected = [LineString(), LineString([(-2, 0), (0, 0), (1, 0)])]
+    assert result.tolist() == expected
