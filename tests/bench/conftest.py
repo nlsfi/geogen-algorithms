@@ -12,6 +12,7 @@ from shapely import (
     buffer,
     get_parts,
     intersection,
+    linestrings,
     points,
     union_all,
     voronoi_polygons,
@@ -184,6 +185,30 @@ def make_touching_polygons_with_holes():
         return np.array(
             [part for part in get_parts(intersection(cells, area)) if part.area > 0],
             dtype=object,
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def make_line_gdf():
+    def _factory(
+        line_count: int,
+        seed: int = 0,
+        vertices_per_line: int = 10,
+        spacing: float = 10.0,
+    ) -> GeoDataFrame:
+        rng = np.random.default_rng(seed=seed)
+
+        extent = spacing * np.sqrt(line_count)
+        starts = rng.uniform(0.0, extent, size=(line_count, 1, 2))
+        steps = rng.normal(scale=spacing / 4, size=(line_count, vertices_per_line, 2))
+        steps[:, 0] = 0.0
+        coords = starts + np.cumsum(steps, axis=1)
+
+        return GeoDataFrame(
+            geometry=linestrings(coords),
+            crs="EPSG:3857",
         )
 
     return _factory
