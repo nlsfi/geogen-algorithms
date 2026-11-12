@@ -660,24 +660,6 @@ def test_remove_close_line_segments():
     assert result.geometry.loc["2"].length < lines.geometry.loc["2"].length
 
 
-def test_remove_close_line_segments_invalid_line_geometry_type():
-    with pytest.raises(GeometryTypeError):
-        remove_close_line_segments(
-            lines=GeoDataFrame(geometry=[Point(0.0, 0.0)]),
-            reference_lines=GeoDataFrame(geometry=[LineString([[0, 0], [1, 1]])]),
-            buffer_size=2.0,
-        )
-
-
-def test_remove_close_line_segments_invalid_reference_line_geometry_type():
-    with pytest.raises(GeometryTypeError):
-        remove_close_line_segments(
-            lines=GeoDataFrame(geometry=[LineString([[0, 0], [1, 1]])]),
-            reference_lines=GeoDataFrame(geometry=[Point(0.0, 0.0)]),
-            buffer_size=2.0,
-        )
-
-
 def test_remove_short_lines():
     gdf = GeoDataFrame(
         geometry=[

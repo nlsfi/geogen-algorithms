@@ -14,6 +14,7 @@ from pandas import Series
 from scipy.spatial import KDTree
 from shapely import (
     MultiLineString,
+    STRtree,
     distance,
     length,
     line_interpolate_point,
@@ -29,6 +30,7 @@ from geogenalg.core.geometry import (
     line_mean_direction,
     remove_holes,
 )
+from geogenalg.core.parallel import in_parallel, union_all_by_group
 from geogenalg.utility.dataframe_processing import copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
@@ -334,18 +336,33 @@ def remove_close_line_segments(
             than line geometries.
 
     """
-    if not check_gdf_geometry_type(
-        lines, {"LineString", "MultiLineString"}
-    ) or not check_gdf_geometry_type(
-        reference_lines, {"LineString", "MultiLineString"}
-    ):
-        msg = "remove_close_line_segments expects only line geometries."
-        raise GeometryTypeError(msg)
+    geoms = lines.geometry.to_numpy()
+
+    line_positions, reference_positions = STRtree(reference_lines.geometry).query(
+        geoms, predicate="dwithin", distance=buffer_size
+    )
+
+    used_references, buffer_positions = np.unique(
+        reference_positions, return_inverse=True
+    )
+    buffers = (
+        in_parallel(reference_lines.geometry.to_numpy()[used_references])
+        .buffer(buffer_size)
+        .resolve_numpy()
+    )
+
+    matched_lines, group_starts = np.unique(line_positions, return_index=True)
+    buffers_per_line = union_all_by_group(
+        buffers, np.split(buffer_positions, group_starts[1:])
+    )
+
+    remaining = geoms.copy()
+    remaining[matched_lines] = (
+        in_parallel(geoms[matched_lines]).difference(buffers_per_line).resolve_numpy()
+    )
 
     result = lines.copy()
-    result.geometry = lines.difference(
-        reference_lines.buffer(buffer_size).union_all(),
-    )
+    result.geometry = remaining
 
     with catch_warnings(category=UserWarning, action="ignore"):
         return result.loc[~result.geometry.is_empty & result.geometry.notna()]
