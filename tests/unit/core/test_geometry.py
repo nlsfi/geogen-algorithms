@@ -69,6 +69,7 @@ from geogenalg.core.geometry import (
     get_connected_segments,
     get_connected_unit_vectors,
     get_contiguous_line_components,
+    get_end_points,
     get_line_connection_points,
     get_topological_points,
     insert_vertex,
@@ -5357,3 +5358,44 @@ def test_centerline(
     result = centerline(polygon, **kwargs)
 
     assert result.equals_exact(expected, tolerance=0.001)
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    [
+        pytest.param(
+            [
+                LineString([(0, 1), (2, 3), (4, 5)]),
+                LineString([(8, 9), (6, 7)]),
+            ],
+            [[Point(0, 1), Point(4, 5)], [Point(8, 9), Point(6, 7)]],
+            id="preserves_line_order_and_direction",
+        ),
+        pytest.param(
+            [LineString([(0, 1, 2), (3, 4, 5)])],
+            [[Point(0, 1), Point(3, 4)]],
+            id="drops_z",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0), (1, 1), (0, 0)])],
+            [[Point(0, 0), Point(0, 0)]],
+            id="closed_line",
+        ),
+        pytest.param(
+            [LineString()],
+            [[None, None]],
+            id="empty_line",
+        ),
+        pytest.param([], [], id="empty_array"),
+    ],
+)
+def test_get_end_points(
+    lines: list[LineString],
+    expected: list[list[Point | None]],
+):
+    result = get_end_points(np.array(lines, dtype=object))
+
+    np.testing.assert_array_equal(
+        result,
+        np.array(expected, dtype=object).reshape(-1, 2),
+    )

@@ -3532,3 +3532,18 @@ def centerline(
     lines = simplify(lines, simplify_tolerance)
 
     return cast("LineString | MultiLineString", normalize(lines))
+
+
+def get_end_points(lines: np.ndarray) -> np.ndarray:
+    """Get the 2D start and end point of each line.
+
+    Returns
+    -------
+        Array of shape (n, 2), start points in the first column and end points
+        in the second.
+
+    """
+    return np.stack(
+        [force_2d(get_point(lines, 0)), force_2d(get_point(lines, -1))],
+        axis=1,
+    )
