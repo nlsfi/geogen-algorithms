@@ -29,7 +29,7 @@ from shapely import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from pyproj import CRS
     from shapely.geometry.base import BaseGeometry
@@ -321,6 +321,23 @@ def union_all_by_row(
     Processing is done in chunks, and in parallel.
     """
     return _process_geometry_array(geoms, union_all, axis=1, executor=executor)
+
+
+def union_all_by_group(
+    geoms: np.ndarray,
+    groups: Sequence[np.ndarray],
+    executor: ThreadPoolExecutor | None = None,
+) -> np.ndarray:
+    """Union geometries in a group in parallel."""
+    group_array = np.empty(len(groups), dtype=object)
+    group_array[:] = list(groups)
+
+    def union_groups(chunk: np.ndarray) -> np.ndarray:
+        unions = np.empty(len(chunk), dtype=object)
+        unions[:] = [union_all(geoms[positions]) for positions in chunk]
+        return unions
+
+    return _process_geometry_array(group_array, union_groups, executor=executor)
 
 
 def in_parallel(

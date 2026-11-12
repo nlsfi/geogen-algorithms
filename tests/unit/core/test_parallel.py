@@ -37,6 +37,7 @@ from geogenalg.core.parallel import (
     num_workers,
     set_num_workers,
     shutdown_threadpool_executor,
+    union_all_by_group,
     union_all_by_row,
 )
 
@@ -487,3 +488,16 @@ def test_in_parallel_with_numpy_array(sample_points: GeoSeries):
     assert result.crs is None
     assert result.index.equals(Index(range(len(geoms))))
     assert equals(result.to_numpy(), buffer(geoms, 1.0, quad_segs=16)).all()
+
+
+def test_union_all_by_group():
+    geoms = np.array([box(i, 0, i + 1, 1) for i in range(6)], dtype=object)
+    groups = [np.array([0]), np.array([1, 2, 3]), np.array([4, 5]), np.array([2, 3])]
+    set_num_workers(3)
+
+    result = union_all_by_group(geoms, groups)
+
+    assert len(result) == 4
+    assert equals(
+        result, [box(0, 0, 1, 1), box(1, 0, 4, 1), box(4, 0, 6, 1), box(2, 0, 4, 1)]
+    ).all()
