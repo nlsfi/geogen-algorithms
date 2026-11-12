@@ -21,6 +21,7 @@ class BenchmarkDiff:
     base_mean_duration: float
     head_mean_duration: float
     delta_percentage: float
+    change_ratio: float
     status: str
     passes_threshold: bool
 
@@ -57,10 +58,15 @@ def get_diffs(
             0.0 if base_mean == 0 else ((head_mean - base_mean) / base_mean) * 100.0
         )
 
-        if delta_percentage < 0:
+        if head_mean < base_mean:
             status = "![](https://img.shields.io/badge/-Faster-238636)"
-        else:
+            change_ratio = float("inf") if head_mean == 0 else base_mean / head_mean
+        elif head_mean > base_mean:
             status = "![](https://img.shields.io/badge/-Slower-da3633)"
+            change_ratio = float("inf") if base_mean == 0 else head_mean / base_mean
+        else:
+            status = "![](https://img.shields.io/badge/-No%20change-lightgrey)"
+            change_ratio = 1.0
 
         passes_threshold = abs(delta_percentage) >= threshold_percentage
 
@@ -70,6 +76,7 @@ def get_diffs(
                 base_mean_duration=base_mean,
                 head_mean_duration=head_mean,
                 delta_percentage=delta_percentage,
+                change_ratio=change_ratio,
                 status=status,
                 passes_threshold=passes_threshold,
             )
@@ -92,12 +99,10 @@ def render_markdown(
         )
 
     def _write_row(diff: BenchmarkDiff) -> str:
-        sign = "+" if diff.delta_percentage > 0 else ""
-
         return (
             f"| `{diff.name}` | {format_duration(diff.base_mean_duration)} | "
             f"{format_duration(diff.head_mean_duration)} | "
-            f"{sign}{diff.delta_percentage:.2f}% | {diff.status} |"
+            f"{format_ratio(diff.change_ratio)} | {diff.status} |"
         )
 
     header = "## Benchmark Change Report\n\n"
@@ -167,6 +172,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(report + "\n")
 
     return 0
+
+
+def format_ratio(ratio: float) -> str:
+    if ratio == float("inf"):
+        return "∞x"
+    return f"{ratio:.2f}".rstrip("0").rstrip(".") + "x"
 
 
 if __name__ == "__main__":
