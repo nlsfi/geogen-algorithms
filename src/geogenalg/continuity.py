@@ -15,6 +15,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely import (
     STRtree,
+    dwithin,
     force_2d,
     get_coordinates,
     get_parts,
@@ -29,7 +30,9 @@ from shapely.geometry.base import BaseGeometry
 from geogenalg.core.geometry import (
     LineExtendFrom,
     extend_line_to_nearest,
+    extend_lines_to_nearest,
     get_contiguous_line_components,
+    get_end_points,
     get_line_connection_points,
     smooth_around_connection_point_of_two_lines,
     union_by_predicate,
@@ -713,13 +716,14 @@ def flag_polygon_centerline_connections(
     return gdf
 
 
-def process_lines_and_reconnect(
+def process_lines_and_reconnect(  # noqa: PLR0913
     data: GeoDataFrame,
     process_function: Callable[[GeoDataFrame], GeoDataFrame],
     reconnect_to: GeoDataFrame | BaseGeometry,
     *,
     length_tolerance: float = 0.0,
     disallow_non_simple: bool = True,
+    cut_tolerance: float = 0.1,
 ) -> GeoDataFrame:
     """Do something to lines and if connections break reconnect them to reference data.
 
@@ -727,143 +731,103 @@ def process_lines_and_reconnect(
     ----
         data: Input GeoDataFrame with LineStrings.
         process_function: Function which will be called to modify the `data`
-            GeoDataFrame.
+            GeoDataFrame. Must preserve the columns of the input, which it
+            may use to drop, reorder or split rows.
         reconnect_to: Geometry or GeoDataFrame to which lines whose connection
             was broken will be reconnected to.
         length_tolerance: If the would-be reconnected line segment is above
             this length it will not be reconnected.
         disallow_non_simple: If True and the reconnected line would be non-simple
             it will not be reconnected.
+        cut_tolerance: An end point of a processed line is considered to have
+            been cut if it is within this distance of the input line it originates
+            from without being at the end of that line. If 0, the distance is
+            not checked and any end point not at an end of the original line
+            is considered cut, which is faster and suitable if the processed
+            lines are known to stay on the input lines.
 
     Returns:
     -------
         Processed and reconnected GeoDataFrame.
 
     """
-    gdf = data.copy()
-    boundaries = gdf.boundary.union_all()
-    gdf = count_connections(
-        gdf,
-        start_connections_column="_start_connections_before",
-        end_connections_column="_end_connections_before",
+    source_column = "_source_row"
+
+    data_lines = data.geometry.to_numpy()
+    original_coords = get_coordinates(get_end_points(data_lines).ravel()).reshape(
+        -1, 2, 2
     )
+
+    gdf = count_connections(
+        data,
+        start_connections_column="_sb",
+        end_connections_column="_eb",
+    )
+    gdf[source_column] = np.arange(len(data))
 
     gdf = process_function(gdf)
 
     if gdf.empty:
-        return gdf.drop(
-            ["_start_connections_before", "_end_connections_before"],
-            axis=1,
-        )
+        return gdf.drop(["_sb", "_eb", source_column], axis=1)
 
-    gdf = count_connections(
+    counted = count_connections(
         gdf,
-        start_connections_column="_start_connections_after",
-        end_connections_column="_end_connections_after",
+        start_connections_column="_sa",
+        end_connections_column="_ea",
     )
 
-    gdf["_start_point"] = gdf.geometry.apply(
-        lambda geom: force_2d(Point(geom.coords[0]))
-    )  # ty: ignore[no-matching-overload]
-    gdf["_end_point"] = gdf.geometry.apply(
-        lambda geom: force_2d(Point(geom.coords[-1]))
-    )  # ty: ignore[no-matching-overload]
-    data_union = data.union_all().buffer(0.1)
-    gdf["_start_was_cut"] = gdf["_start_point"].intersects(data_union) & gdf[
-        "_start_point"
-    ].disjoint(boundaries)
-    gdf["_end_was_cut"] = gdf["_end_point"].intersects(data_union) & gdf[
-        "_end_point"
-    ].disjoint(boundaries)
+    lines = gdf.geometry.to_numpy()
+    end_points = get_end_points(lines)
+    end_point_coords = get_coordinates(end_points.ravel())
 
-    # Effectively this checks which connections have been broken
-    # in the process function.
-    gdf["_extend_start"] = (
-        gdf["_start_connections_before"] > gdf["_start_connections_after"]
-    ) | gdf["_start_was_cut"]
+    source = gdf[source_column].to_numpy(dtype=int)
+    source_coords = original_coords[source]
 
-    gdf["_extend_end"] = (
-        gdf["_end_connections_before"] > gdf["_end_connections_after"]
-    ) | gdf["_end_was_cut"]
+    def was_cut(end: int) -> np.ndarray:
+        at_source_end = (
+            (end_point_coords.reshape(-1, 2, 2)[:, end, None, :] == source_coords)
+            .all(axis=2)
+            .any(axis=1)
+        )
 
-    connect_to = (
+        if cut_tolerance == 0.0:
+            return ~at_source_end
+
+        return ~at_source_end & dwithin(
+            end_points[:, end],
+            data_lines[source],
+            cut_tolerance,
+        )
+
+    extend_start = (counted["_sb"] > counted["_sa"]).to_numpy() | was_cut(0)
+    extend_end = (counted["_eb"] > counted["_ea"]).to_numpy() | was_cut(1)
+    ends_to_extend = np.stack([extend_start, extend_end], axis=1)
+
+    # It's possible two lines end at same modified point leading to a potential
+    # double reconnect. Because of that select only the first such line for
+    # reconnection.
+    candidates = np.flatnonzero(ends_to_extend.ravel())
+    _, first = np.unique(end_point_coords[candidates], axis=0, return_index=True)
+    extend = np.zeros(ends_to_extend.size, dtype=bool)
+    extend[candidates[first]] = True
+    extend = extend.reshape(ends_to_extend.shape)
+
+    extended = extend_lines_to_nearest(
+        lines,
         reconnect_to
         if isinstance(reconnect_to, BaseGeometry)
-        else reconnect_to.union_all()
+        else reconnect_to.geometry.to_numpy(),
+        extend_start=extend[:, 0],
+        extend_end=extend[:, 1],
+        length_tolerance=length_tolerance,
+        disallow_non_simple=disallow_non_simple,
+        end_points=end_points,
     )
 
-    already_extended: set[Point] = set()
+    result = gdf.drop(["_sb", "_eb", source_column], axis=1)
+    result.geometry = extended
 
-    def extend_conditionally(
-        start_point: Point,
-        end_point: Point,
-        line: LineString,
-        *,
-        extend_start: bool,
-        extend_end: bool,
-    ) -> LineString:
-        extend_start = extend_start and start_point not in already_extended
-        extend_end = extend_end and end_point not in already_extended
-
-        if not extend_start and not extend_end:
-            return line
-
-        if extend_start:
-            already_extended.add(start_point)
-
-        if extend_end:
-            already_extended.add(end_point)
-
-        extended = extend_line_to_nearest(
-            line,
-            connect_to,
-            LineExtendFrom.from_bools(
-                extend_start=extend_start,
-                extend_end=extend_end,
-            ),
-            length_tolerance,
-        )
-
-        if disallow_non_simple and not extended.is_simple:
-            return line
-
-        return extended
-
-    if not gdf.empty:
-        gdf.geometry = gdf[
-            [
-                "_start_point",
-                "_end_point",
-                "_extend_start",
-                "_extend_end",
-                gdf.geometry.name,
-            ]
-        ].apply(
-            lambda columns: extend_conditionally(
-                columns["_start_point"],
-                columns["_end_point"],
-                columns[gdf.geometry.name],
-                extend_start=columns["_extend_start"],
-                extend_end=columns["_extend_end"],
-            ),
-            axis=1,
-        )  # ty: ignore[invalid-assignment]
-
-    return gdf.drop(
-        [
-            "_start_connections_before",
-            "_end_connections_before",
-            "_start_connections_after",
-            "_end_connections_after",
-            "_extend_start",
-            "_extend_end",
-            "_start_was_cut",
-            "_end_was_cut",
-            "_start_point",
-            "_end_point",
-        ],
-        axis=1,
-    )
+    return result
 
 
 def _contiguous_components(
