@@ -10,7 +10,10 @@ import pytest
 from geopandas.geodataframe import GeoDataFrame
 from pytest_benchmark.fixture import BenchmarkFixture
 
-from geogenalg.selection import reduce_nearby_points_by_selecting
+from geogenalg.selection import (
+    reduce_nearby_points_by_selecting,
+    remove_close_line_segments,
+)
 
 
 @pytest.mark.benchmark
@@ -48,3 +51,55 @@ def test_reduce_nearby_points_by_selecting(
     )
 
     assert result.shape[0] == after_reduction
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    ("line_count", "expected_feature_count"),
+    [
+        (100, 9),
+        (1000, 16),
+        (2000, 47),
+    ],
+    ids=["100", "1000", "2000"],
+)
+def test_remove_close_line_segments(
+    benchmark: BenchmarkFixture,
+    make_line_gdf: Callable[..., GeoDataFrame],
+    line_count: int,
+    expected_feature_count: int,
+):
+    lines = make_line_gdf(line_count, vertices_per_line=100, seed=1)
+    reference_lines = make_line_gdf(line_count, vertices_per_line=100, seed=2)
+
+    result = benchmark(remove_close_line_segments, lines, reference_lines, 10.0)
+
+    assert len(result) == expected_feature_count
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(
+    ("line_count", "expected_feature_count"),
+    [
+        (100, 2),
+        (1000, 68),
+    ],
+    ids=["100", "1000"],
+)
+def test_remove_close_line_segments_sparse_reference(
+    benchmark: BenchmarkFixture,
+    make_line_gdf: Callable[..., GeoDataFrame],
+    line_count: int,
+    expected_feature_count: int,
+):
+    lines = make_line_gdf(line_count, vertices_per_line=100, seed=1)
+    reference_lines = make_line_gdf(
+        line_count * 10,
+        vertices_per_line=100,
+        spacing=10.0 * 10**0.5,
+        seed=2,
+    )
+
+    result = benchmark(remove_close_line_segments, lines, reference_lines, 10.0)
+
+    assert len(result) == expected_feature_count
