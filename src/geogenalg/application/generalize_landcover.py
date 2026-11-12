@@ -12,6 +12,7 @@ from shapelysmooth import chaikin_smooth
 
 from geogenalg.application import BaseAlgorithm, supports_identity
 from geogenalg.core.geometry import assign_nearest_z
+from geogenalg.core.parallel import in_parallel
 from geogenalg.identity import hash_duplicate_indexes, hash_index_from_old_ids
 from geogenalg.merge import dissolve_and_inherit_attributes
 from geogenalg.selection import remove_small_holes, remove_small_polygons
@@ -68,9 +69,10 @@ class GeneralizeLandcover(BaseAlgorithm):
         group_by = None if not self.group_by else list(self.group_by)
 
         def _buffer(gdf: GeoDataFrame, distance: float) -> None:
-            gdf.geometry = gdf.geometry.buffer(
-                distance,
-                join_style=self.buffer_join_style,
+            gdf.geometry = (
+                in_parallel(gdf.geometry)
+                .buffer(distance, join_style=self.buffer_join_style)
+                .resolve_geoseries()
             )
 
         # Create a positive_buffer to close narrow gaps between polygons
