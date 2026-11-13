@@ -33,6 +33,7 @@ dependencies = [
     "networkx==3.4.2",
     "pydantic==2.13.3",
     "pygeoops==0.6.0",
+    "pyproj>=3.8.0",
     "scikit-learn==1.6.1",
     "shapely==2.2.0",
     "shapelysmooth==0.2.1",
@@ -120,7 +121,6 @@ lint.ignore = [
     "COM812", # missing-trailing-comma (formatter will enforce this)
     "ISC001", # single-line-implicit-string-concatenation
 ]
-force-exclude = true
 
 # List of all rules https://docs.astral.sh/ruff/rules/
 lint.select = ["ALL"]
@@ -132,6 +132,7 @@ lint.external = ["SC200"]
 lint.unfixable = [
     "F401", # Unused imports
 ]
+force-exclude = true
 extend-exclude = ["setup.py"]
 
 [tool.ruff.lint.flake8-tidy-imports]
