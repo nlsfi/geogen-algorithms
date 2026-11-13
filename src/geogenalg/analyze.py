@@ -316,38 +316,27 @@ def calculate_coverage(
             Unnecessary columns are dropped.
 
     """
-    overlay_features = overlay_features.copy()
-    base_features = base_features.copy()
-    base_features["base_area"] = base_features.geometry.area
-
-    base_features["base_feature_id"] = base_features.index
+    base_geom = cast(
+        "GeoDataFrame",
+        base_features.geometry.to_frame().reset_index(drop=True),
+    )
+    base_geom["_id"] = base_geom.index
 
     intersections = overlay(
-        overlay_features,
-        base_features,
+        cast("GeoDataFrame", overlay_features.geometry.to_frame()),
+        base_geom,
         how="intersection",
         keep_geom_type=False,
     )
-    intersections["intersect_area"] = intersections.geometry.area
 
-    combined_overlay_area = (
-        intersections.groupby("base_feature_id")["intersect_area"]
+    covered_area = (
+        intersections.geometry.area.groupby(intersections["_id"])
         .sum()
-        .reset_index()
-        .rename(columns={"intersect_area": "overlay_area"})
+        .reindex(base_geom.index, fill_value=0.0)
     )
 
-    base_features = base_features.merge(
-        combined_overlay_area, on="base_feature_id", how="left"
-    )
-    base_features["overlay_area"] = base_features["overlay_area"].fillna(0)
-    base_features[coverage_attribute] = (
-        100 * base_features["overlay_area"] / base_features["base_area"]
-    )
-    return base_features.drop(
-        columns=["base_feature_id", "overlay_area", "base_area"],
-        errors="ignore",
-    )
+    coverage = 100 * covered_area.to_numpy() / base_features.geometry.area.to_numpy()
+    return base_features.assign(**{coverage_attribute: coverage})
 
 
 def calculate_main_angle(polygon: Polygon) -> float:
