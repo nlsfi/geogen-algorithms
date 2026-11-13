@@ -56,6 +56,25 @@ def test_calculate_coverage():
     assert test_features["coverage"][0] == pytest.approx(56.25)
 
 
+def test_calculate_coverage_duplicate_indexes():
+    test_features = calculate_coverage(
+        overlay_features=GeoDataFrame(
+            geometry=[box(0, 0, 3, 3)],
+        ),
+        base_features=GeoDataFrame(
+            geometry=[
+                box(0, 0, 4, 4),
+                box(8, 8, 9, 9),
+            ],
+            index=[0, 0],
+        ),
+    )
+
+    assert list(test_features.index) == [0, 0]
+    assert test_features["coverage"].iloc[0] == pytest.approx(56.25)
+    assert test_features["coverage"].iloc[1] == pytest.approx(0.0)
+
+
 def test_calculate_coverage_using_empty_input():
     overlay = GeoDataFrame({"id": []}, geometry=[], crs="EPSG:3067")
     base = GeoDataFrame({"class": [], "id": []}, geometry=[], crs="EPSG:3067")
