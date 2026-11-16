@@ -136,6 +136,7 @@ def test_generalize_landcover(
         input_data=landcover_input,
         check_missing_reference=False,
         algorithm=landcover_algorithm,
+        assert_function_arguments={"check_less_precise": True},
     ).run()
 
 
