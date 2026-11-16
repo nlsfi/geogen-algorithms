@@ -8,6 +8,7 @@ from typing import ClassVar, Literal
 
 from geopandas import GeoDataFrame
 from pydantic import Field
+from shapely import remove_repeated_points
 from shapelysmooth import chaikin_smooth
 
 from geogenalg.application import BaseAlgorithm, supports_identity
@@ -110,6 +111,10 @@ class GeneralizeLandcover(BaseAlgorithm):
         # Smooth the polygons if smoothing is wanted
         if self.smoothing:
             result_gdf.geometry = result_gdf.geometry.apply(chaikin_smooth)
+            result_gdf.geometry = remove_repeated_points(
+                result_gdf.geometry,
+                tolerance=1e-5,
+            )
 
         # Remove polygons smaller than the area_threshold
         result_gdf = remove_small_polygons(result_gdf, self.area_threshold)
