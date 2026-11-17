@@ -7,7 +7,7 @@ from collections.abc import Hashable
 from typing import Literal, cast
 
 import numpy as np
-from geopandas import GeoDataFrame, overlay
+from geopandas import GeoDataFrame
 from pandas import Series
 from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
@@ -19,6 +19,7 @@ from shapely import (
     MultiPolygon,
     Polygon,
     STRtree,
+    area,
     buffer,
     centroid,
     concave_hull,
@@ -26,6 +27,7 @@ from shapely import (
     get_coordinates,
     intersection,
     intersects,
+    is_empty,
     length,
     prepare,
     union_all,
@@ -44,7 +46,9 @@ from geogenalg.core.geometry import (
     remove_holes,
     segment_bearing,
     segment_direction,
+    union_by_predicate,
 )
+from geogenalg.core.parallel import in_parallel
 from geogenalg.utility.dataframe_processing import add_columns_to_gdf, copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
@@ -316,26 +320,47 @@ def calculate_coverage(
             Unnecessary columns are dropped.
 
     """
-    base_geom = cast(
-        "GeoDataFrame",
-        base_features.geometry.to_frame().reset_index(drop=True),
-    )
-    base_geom["_id"] = base_geom.index
+    base_feature_count = len(base_features)
+    if base_feature_count == 0 or len(overlay_features) == 0:
+        return add_columns_to_gdf(
+            base_features,
+            {coverage_attribute: "float64"},
+        )
 
-    intersections = overlay(
-        cast("GeoDataFrame", overlay_features.geometry.to_frame()),
-        base_geom,
-        how="intersection",
-        keep_geom_type=False,
-    )
+    base_geoms = base_features.geometry.to_numpy()
+    overlay_geoms = overlay_features.geometry.to_numpy()
+    base_area = area(base_geoms)
 
-    covered_area = (
-        intersections.geometry.area.groupby(intersections["_id"])
-        .sum()
-        .reindex(base_geom.index, fill_value=0.0)
-    )
+    merged_geoms = union_by_predicate(base_geoms, overlay_geoms, predicate="intersects")
+    not_empty = ~is_empty(merged_geoms)
 
-    coverage = 100 * covered_area.to_numpy() / base_features.geometry.area.to_numpy()
+    coverage = np.zeros(base_feature_count, dtype=np.float64)
+    if np.any(not_empty):
+        base = base_geoms[not_empty]
+        merge = merged_geoms[not_empty]
+
+        # Fast path, if all overlay features intersecting a base feature are
+        # within calculate area directly
+        within = in_parallel(merge).within(base).resolve_numpy()
+        covered_area = np.empty(len(base), dtype=np.float64)
+        covered_area[within] = area(merge[within])
+
+        not_within = ~within
+        if np.any(not_within):
+            # Slow path, not everything is within so we have to do intersection
+            clipped = (
+                in_parallel(base[not_within])
+                .intersection(merge[not_within])
+                .resolve_numpy()
+            )
+            covered_area[not_within] = area(clipped)
+
+        coverage[not_empty] = np.where(
+            base_area[not_empty] > 0,
+            100.0 * covered_area / base_area[not_empty],
+            0.0,
+        )
+
     return base_features.assign(**{coverage_attribute: coverage})
 
 
