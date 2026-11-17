@@ -3,10 +3,21 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from typing import Literal, cast
+from typing import Literal, cast, overload
 
+import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
-from shapely import LineString, MultiLineString, MultiPolygon, Polygon
+from shapely import (
+    LineString,
+    MultiLineString,
+    MultiPolygon,
+    Polygon,
+    get_exterior_ring,
+    get_parts,
+    is_empty,
+    polygons,
+    union_all,
+)
 
 from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.core.exceptions import GeometryTypeError
@@ -16,6 +27,7 @@ from geogenalg.core.geometry import (
     remove_line_segments_at_wide_sections,
     remove_small_parts,
 )
+from geogenalg.core.parallel import in_parallel
 from geogenalg.utility.dataframe_processing import add_columns_to_gdf, copy_gdf_as_empty
 
 DIFFERENCE_CLEAN_UP_LINE_LENGTH = 0.01
@@ -180,3 +192,93 @@ def thin_polygon_sections_to_lines(  # noqa: PLR0913
     )
 
     return new_line_features, gdf
+
+
+@overload
+def boffet_areas(
+    buildings: GeoDataFrame,
+    buffer_distance: float,
+    erosion_distance: float,
+    simplification_distance: float = 2.0,
+) -> GeoDataFrame: ...
+
+
+@overload
+def boffet_areas(
+    buildings: GeoSeries,
+    buffer_distance: float,
+    erosion_distance: float,
+    simplification_distance: float = 2.0,
+) -> GeoSeries: ...
+
+
+@overload
+def boffet_areas(
+    buildings: np.ndarray,
+    buffer_distance: float,
+    erosion_distance: float,
+    simplification_distance: float = 2.0,
+) -> np.ndarray: ...
+
+
+def boffet_areas(
+    buildings: GeoDataFrame | GeoSeries | np.ndarray,
+    buffer_distance: float,
+    erosion_distance: float,
+    simplification_distance: float = 2.0,
+) -> GeoDataFrame | GeoSeries | np.ndarray:
+    """Transform polygonal buildings to urban areas using buffer operations.
+
+    Based on a method proposed by Boffet A. in "Généralisation cartographique
+    et description des espaces urbains."
+
+    Args:
+    ----
+        buildings: Buildings to transform.
+        buffer_distance: Distance used to merge nearby buildings together.
+        erosion_distance: Distance used to buffer inwards.
+        simplification_distance: Douglas-Peucker distance threshold used
+            for the simplification of areas.
+
+
+    Returns:
+    -------
+        Generated areas, as the same type as the input buildings.
+
+    """
+    geoms = (
+        buildings.geometry.to_numpy()
+        if isinstance(buildings, GeoDataFrame)
+        else np.asarray(buildings)
+    )
+
+    result = np.empty(0, dtype=object)
+
+    if len(geoms) > 0:
+        areas = (
+            in_parallel(geoms).buffer(buffer_distance, resolution=16).resolve_numpy()
+        )
+
+        areas = union_all(areas)
+        if not areas.is_empty:
+            closed = (
+                areas.simplify(simplification_distance)
+                .buffer(erosion_distance, quad_segs=1)
+                .simplify(1.0)
+                .buffer(-erosion_distance, quad_segs=1)
+                .simplify(simplification_distance)
+                .buffer(0.0)
+            )
+
+            if not closed.is_empty:
+                parts = get_parts(closed)
+                parts = parts[~is_empty(parts)]
+                result = np.asarray(polygons(get_exterior_ring(parts)))
+
+    if isinstance(buildings, GeoDataFrame):
+        return GeoDataFrame(geometry=result, crs=buildings.crs)
+
+    if isinstance(buildings, GeoSeries):
+        return GeoSeries(result, crs=buildings.crs)
+
+    return result
