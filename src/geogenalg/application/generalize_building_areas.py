@@ -6,9 +6,7 @@
 #  LICENSE file in the root directory of this source tree.
 from typing import ClassVar, cast, override
 
-from cartagen.enrichment.urban.urban_areas import boffet_areas
 from geopandas.geodataframe import GeoDataFrame
-from geopandas.geoseries import GeoSeries
 from pydantic import Field
 
 from geogenalg.analyze import calculate_coverage
@@ -21,6 +19,7 @@ from geogenalg.application.generalize_landcover import GeneralizeLandcover
 from geogenalg.core.geometry import assign_nearest_z
 from geogenalg.identity import hash_index_from_geometry
 from geogenalg.merge import buffer_and_merge_polygons
+from geogenalg.transform import boffet_areas
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
 
@@ -154,15 +153,10 @@ class GeneralizeBuildingAreas(BaseAlgorithm):
 
         gdf.geometry = gdf.simplify(self.buildings_simplify_tolerance)
 
-        gdf = GeoDataFrame(
-            geometry=GeoSeries(
-                boffet_areas(
-                    gdf.geometry.to_list(),
-                    self.boffet_area_buffer,
-                    self.boffet_area_erosion,
-                ),
-            ),
-            crs=buildings.crs,
+        gdf = boffet_areas(
+            gdf,
+            self.boffet_area_buffer,
+            self.boffet_area_erosion,
         )
 
         if self.reference_key_parcels in reference_data:
