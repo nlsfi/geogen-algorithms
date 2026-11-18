@@ -21,6 +21,7 @@ from shapely import (
     MultiPolygon,
     Point,
     Polygon,
+    equals_identical,
 )
 
 from geogenalg.application import (
@@ -690,4 +691,49 @@ def test_result_coordinate_precision_raises(
 
     monkeypatch.setenv("GEOGENALG_RESULT_COORDINATE_PRECISION", value)
     with pytest.raises(ValueError, match="GEOGENALG_RESULT_COORDINATE_PRECISION"):
+        MockAlg()
+
+
+def test_result_coordinate_precision_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    class MockAlg(BaseAlgorithm):
+        valid_input_geometry_types: ClassVar = {"Point"}
+
+        def _execute(self, data, reference_data):  # noqa: ARG002, ANN001, ANN202
+            return data
+
+    gdf = GeoDataFrame(
+        geometry=[Point(0.0005, 0.0025, 0.0045)],
+        crs="EPSG:3067",
+    )
+
+    # geos is default
+    assert MockAlg().result_coordinate_precision_mode == "geos"
+
+    geos_out = MockAlg(result_coordinate_precision=0.001).execute(gdf).geometry
+    assert equals_identical(geos_out.iloc[0], Point(0.001, 0.003, 0.005))
+
+    # Environment variable selects "postgis" mode
+    monkeypatch.setenv("GEOGENALG_RESULT_COORDINATE_PRECISION_MODE", " postgis ")
+    assert MockAlg().result_coordinate_precision_mode == "postgis"
+
+    postgis_out = MockAlg(result_coordinate_precision=0.001).execute(gdf).geometry
+    assert equals_identical(postgis_out.iloc[0], Point(0.0, 0.002, 0.004))
+
+    # Explicit parameter overrides env variable
+    override_out = (
+        MockAlg(
+            result_coordinate_precision=0.001,
+            result_coordinate_precision_mode="geos",
+        )
+        .execute(gdf)
+        .geometry
+    )
+    assert equals_identical(override_out.iloc[0], Point(0.001, 0.003, 0.005))
+
+    # Empty env variable defaults to geos
+    monkeypatch.setenv("GEOGENALG_RESULT_COORDINATE_PRECISION_MODE", "")
+    assert MockAlg().result_coordinate_precision_mode == "geos"
+
+    monkeypatch.setenv("GEOGENALG_RESULT_COORDINATE_PRECISION_MODE", "invalid")
+    with pytest.raises(ValueError, match="GEOGENALG_RESULT_COORDINATE_PRECISION_MODE"):
         MockAlg()

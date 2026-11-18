@@ -118,6 +118,7 @@ rdp
 rect
 respaced
 rglob
+rint
 rtol
 Rtree
 ruas

@@ -49,6 +49,7 @@ from shapely import (
     get_point,
     get_segments,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
     get_type_id,
+    get_x,
     get_z,
     has_z,
     is_closed,
@@ -69,8 +70,10 @@ from shapely import (
     points,
     polygonize,
     polygons,
+    remove_repeated_points,
     segmentize,
     set_coordinates,
+    set_precision,
     shortest_line,
     simplify,
     union_all,
@@ -3662,25 +3665,53 @@ def extend_lines_to_nearest(  # noqa: PLR0913
     return extended
 
 
-def snap_to_grid(values: np.ndarray, grid_size: float) -> np.ndarray:
-    """Snap values to a grid.
+def snap_to_grid(
+    geoms: np.ndarray,
+    grid_size: float,
+    mode: Literal["postgis", "geos"] = "geos",
+) -> np.ndarray:
+    """Snaps vertices to a grid of given precision.
+
+    Has two modes, `postgis` and `geos`. The postgis option replicates the
+    rounding behaviour of `ST_SnapToGrid` where as `geos` uses `set_precision`
+    for rounding. However as opposed to plain `set_precision` Z coordinates if
+    present are also rounded.
 
     Args:
     ----
-        values: Values to snap
-        grid_size: Size of the grid, must be greater than zero
+        geoms: Geometries to snap.
+        grid_size: Size of grid to snap to. For example if 1 coordinates will be snapped
+            to 1 meter precision, 0.1 to desimeter etc.
+        mode: Determines snapping behavior.
 
     Returns:
     -------
-        Rounded values.
+        Snapped geometries.
 
     """
     if grid_size <= 0:
-        msg = "Grid size must be > 0."
+        msg = "grid_size must be > 0."
         raise ValueError(msg)
 
-    if grid_size < 1:
-        scale = 1 / grid_size
-        return np.round(values * scale) / scale
+    if mode == "geos":
+        out = set_precision(geoms, grid_size)
 
-    return np.round(values / grid_size) * grid_size
+        # set_precision() does not modify z coordinates. modify them "manually"
+        # by "faking" them as x coordinates to replicate the same rounding
+        # behavior
+
+        coords = get_coordinates(out, include_z=True)
+        has_z = ~np.isnan(coords[:, 2])
+
+        if np.any(has_z):
+            coords[has_z, 2] = get_x(
+                set_precision(points(coords[has_z, 2], 0.0), grid_size)
+            )
+            out = set_coordinates(out, coords)
+
+        return out
+
+    # postgis
+    coords = get_coordinates(geoms, include_z=True)
+    snapped = set_coordinates(geoms, np.rint(coords / grid_size) * grid_size)
+    return remove_repeated_points(snapped, tolerance=0.0)

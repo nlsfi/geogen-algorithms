@@ -11,11 +11,9 @@ from pathlib import Path
 from typing import ClassVar, Literal, TypeVar, final
 from warnings import warn
 
-import numpy as np
 from geopandas import GeoDataFrame, read_file
 from pandas.api.types import is_string_dtype
 from pydantic import BaseModel, ConfigDict, Field
-from shapely import set_precision, transform
 
 from geogenalg.core.exceptions import (
     GeometryTypeError,
@@ -41,6 +39,9 @@ _SUPPORTS_IDENTITY_ATTR = "__supports_identity"
 
 GEOGENALG_REPAIR_RESULT_GEOMETRIES_ENV_VAR = "GEOGENALG_REPAIR_RESULT_GEOMETRIES"
 GEOGENALG_RESULT_COORDINATE_PRECISION_ENV_VAR = "GEOGENALG_RESULT_COORDINATE_PRECISION"
+GEOGENALG_RESULT_COORDINATE_PRECISION_MODE_ENV_VAR = (
+    "GEOGENALG_RESULT_COORDINATE_PRECISION_MODE"
+)
 
 
 def _default_repair_result_geometries() -> Literal["no", "keep_largest", "explode"]:
@@ -84,6 +85,25 @@ def _default_result_coordinate_precision() -> float | None:
     return precision
 
 
+def _default_result_coordinate_precision_mode() -> Literal["geos", "postgis"]:
+    value = os.environ.get(
+        GEOGENALG_RESULT_COORDINATE_PRECISION_MODE_ENV_VAR, ""
+    ).strip()
+
+    if not value or value == "geos":
+        return "geos"
+
+    if value == "postgis":
+        return "postgis"
+
+    msg = (
+        f"Invalid value {value!r} for "
+        f"{GEOGENALG_RESULT_COORDINATE_PRECISION_MODE_ENV_VAR}, "
+        "expected one of geos, postgis."
+    )
+    raise ValueError(msg)
+
+
 @dataclass(frozen=True)
 class ReferenceDataInformation:
     """Struct for defining information about reference data an algorithm accepts."""
@@ -103,6 +123,10 @@ class BaseAlgorithm(ABC, BaseModel):
         default_factory=_default_result_coordinate_precision, gt=0
     )
     """If not None, result coordinate is set to this grid size."""
+    result_coordinate_precision_mode: Literal["geos", "postgis"] = Field(
+        default_factory=_default_result_coordinate_precision_mode
+    )
+    """Rounding mode used when snapping result coordinates to grid."""
     valid_input_geometry_types: ClassVar[set[ShapelyGeometryTypeString]] = set()
     """Set of accepted geometry types for input data. If there is a mismatch,
     GeometryTypeError will be raised."""
@@ -157,18 +181,11 @@ class BaseAlgorithm(ABC, BaseModel):
             output.index.name = data.index.name
 
         if self.result_coordinate_precision is not None:
-            precision = self.result_coordinate_precision
-            output.geometry = set_precision(output.geometry, precision)
-
-            # set_precision() doesn't fix Z coordinates
-            if output.geometry.has_z.any():
-                output.geometry = transform(
-                    output.geometry.to_numpy(),
-                    lambda coords: np.column_stack(
-                        (coords[:, :2], snap_to_grid(coords[:, 2], precision))
-                    ),
-                    include_z=True,
-                )
+            output.geometry = snap_to_grid(
+                output.geometry.to_numpy(),
+                self.result_coordinate_precision,
+                mode=self.result_coordinate_precision_mode,
+            )
 
         if not output.geometry.is_valid.all() or not output.geometry.is_simple.all():
             warn(
