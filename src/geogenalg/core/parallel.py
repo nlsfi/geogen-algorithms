@@ -21,6 +21,7 @@ from shapely import (
     BufferCapStyle,
     BufferJoinStyle,
     buffer,
+    clip_by_rect,
     difference,
     intersection,
     symmetric_difference,
@@ -295,6 +296,22 @@ class ParallelGeometryProcess:
     ) -> ParallelGeometryProcess:
         """Run shapely within in parallel."""
         return self._run(within, other)
+
+    def clip_by_rect(
+        self,
+        xmin: float | np.ndarray | Series,
+        ymin: float | np.ndarray | Series,
+        xmax: float | np.ndarray | Series,
+        ymax: float | np.ndarray | Series,
+    ) -> ParallelGeometryProcess:
+        """Run shapely clip_by_rect in parallel."""
+        return self._run(
+            np.vectorize(clip_by_rect, otypes=[object]),
+            xmin,
+            ymin,
+            xmax,
+            ymax,
+        )
 
     def resolve_numpy(self) -> np.ndarray:
         """Return the underlying NumPy array without copying."""

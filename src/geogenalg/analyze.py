@@ -20,6 +20,7 @@ from shapely import (
     Polygon,
     STRtree,
     area,
+    bounds,
     buffer,
     centroid,
     concave_hull,
@@ -32,7 +33,6 @@ from shapely import (
     prepare,
     union_all,
 )
-from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import (
@@ -469,7 +469,7 @@ def calculate_edge_adjacency(
         input_gdf: Input GeoDataFrame with Polygon or MultiPolygon geometries.
         reference_gdf: Reference GeoDataFrame with Polygon or MultiPolygon geometries.
         buffer_size: Distance defining the zone in which overlap with the reference
-              geometries is analyzed.
+            geometries is analyzed.
         result_column: Name of the output column storing the computed adjacency ratio.
 
     Returns:
@@ -477,62 +477,110 @@ def calculate_edge_adjacency(
         GeoDataFrame with an added column containing the computed adjacency ratio for
             each input feature.
 
-    Raises:
-    ------
-        GeometryTypeError: If the input GeoDataFrame contains other than
-            polygon or MultiPolygon geometries.
-
     """
-    if not check_gdf_geometry_type(input_gdf, {"Polygon", "MultiPolygon"}):
-        msg = (
-            "Calculate edge adjacency only supports Polygon or MultiPolygon geometries."
+    feature_count = len(input_gdf)
+    if feature_count == 0:
+        return add_columns_to_gdf(input_gdf, {result_column: "float64"})
+
+    geoms = input_gdf.geometry.to_numpy()
+    reference_geoms = reference_gdf.geometry.to_numpy()
+    final_ratios = np.zeros(feature_count, dtype=np.float64)
+
+    if buffer_size <= 0 or len(reference_geoms) == 0:
+        return input_gdf.assign(**{result_column: final_ratios})
+
+    # As an optimization, filter out features which we know to be further away
+    # than the buffer size
+    reference_candidates, geom_candidates = STRtree(geoms).query(
+        reference_geoms,
+        predicate="dwithin",
+        distance=buffer_size,
+    )
+
+    if len(geom_candidates) == 0:
+        return input_gdf.assign(**{result_column: final_ratios})
+
+    matched_indexes, local_indexes = np.unique(geom_candidates, return_inverse=True)
+    matched_geoms = geoms[matched_indexes]
+    matched_count = len(matched_indexes)
+
+    outer_halos = (
+        in_parallel(matched_geoms)
+        .buffer(buffer_size)
+        .difference(matched_geoms)
+        .resolve_numpy()
+    )
+
+    inner_buffers = in_parallel(matched_geoms).buffer(-buffer_size).resolve_numpy()
+    inner_non_empty = ~is_empty(inner_buffers)
+    inner_halos = np.full(matched_count, Polygon(), dtype=object)
+    if np.any(inner_non_empty):
+        inner_halos[inner_non_empty] = (
+            in_parallel(matched_geoms[inner_non_empty])
+            .difference(inner_buffers[inner_non_empty])
+            .resolve_numpy()
         )
-        raise GeometryTypeError(msg)
 
-    def intersection_ratio(halo: BaseGeometry) -> float | None:
-        if halo.is_empty:
-            return None
-
-        area = halo.area
-        if area <= 0:
-            return None
-
-        possible_indices = np.asarray(
-            list(reference_gdf.sindex.intersection(halo.bounds)),
-            dtype=np.intp,
+    # As an optimization clip reference geometries to each input geometry's
+    # buffered bounds
+    outer_bounds = (
+        bounds(matched_geoms)
+        + np.array(
+            [
+                -buffer_size,
+                -buffer_size,
+                buffer_size,
+                buffer_size,
+            ]
         )
-        possible = reference_gdf.iloc[possible_indices]
+    )[local_indexes]
 
-        if possible.empty:
-            return 0.0
+    clipped_reference_geoms = (
+        in_parallel(reference_geoms[reference_candidates])
+        .clip_by_rect(
+            outer_bounds[:, 0],
+            outer_bounds[:, 1],
+            outer_bounds[:, 2],
+            outer_bounds[:, 3],
+        )
+        .resolve_numpy()
+    )
 
-        intersection_area = possible.intersection(halo).area.sum()
-        return intersection_area / area
+    # Pair halos with their corresponding reference geometries
+    halos = np.concatenate([outer_halos, inner_halos])
+    halo_areas = area(halos)
+    valid = (~is_empty(halos)) & (halo_areas > 0)
+    halo_indexes = np.concatenate([local_indexes, local_indexes + matched_count])
+    pair_reference_geoms = np.concatenate(
+        [
+            clipped_reference_geoms,
+            clipped_reference_geoms,
+        ]
+    )
+    keep = valid[halo_indexes] & (~is_empty(pair_reference_geoms))
+    halo_indexes, pair_reference_geoms = halo_indexes[keep], pair_reference_geoms[keep]
 
-    def feature_ratio(geom: BaseGeometry) -> float | None:
-        # Outer halo
-        outer_halo = geom.buffer(buffer_size).difference(geom)
-        outer_ratio = intersection_ratio(outer_halo)
+    ratios = np.zeros(len(halos), dtype=np.float64)
+    if len(halo_indexes) > 0:
+        intersection_areas = area(
+            in_parallel(halos[halo_indexes])
+            .intersection(pair_reference_geoms)
+            .resolve_numpy(),
+        )
+        ratios[valid] = (
+            np.bincount(
+                halo_indexes,
+                weights=intersection_areas,
+                minlength=len(halos),
+            )[valid]
+            / halo_areas[valid]
+        )
 
-        # Inner halo
-        inner_buffer = geom.buffer(-buffer_size)
-        if inner_buffer.is_empty:
-            inner_ratio = None
-        else:
-            inner_halo = geom.difference(inner_buffer)
-            inner_ratio = intersection_ratio(inner_halo)
-
-        # Select appropriate value for overlapping ratio
-        if inner_ratio is None:
-            return outer_ratio
-        if outer_ratio is None:
-            return inner_ratio
-        return max(inner_ratio, outer_ratio)
-
-    result_gdf = input_gdf.copy()
-    result_gdf[result_column] = [feature_ratio(geom) for geom in result_gdf.geometry]
-
-    return result_gdf
+    final_ratios[matched_indexes] = np.maximum(
+        ratios[:matched_count],
+        ratios[matched_count:],
+    )
+    return input_gdf.assign(**{result_column: final_ratios})
 
 
 def _group_geoms_bulk(geoms: np.ndarray, tree: STRtree) -> np.ndarray:

@@ -105,6 +105,7 @@ networkx
 newaxis
 nodata
 num
+otypes
 peucker
 polygonize
 polygonized
@@ -160,6 +161,7 @@ unvisited
 utils
 vec
 vecs
+vectorize
 visvalingam
 voronoi
 vstack
@@ -168,4 +170,8 @@ whyatt
 wkb
 wkbs
 wkt
+xmax
+xmin
 xy
+ymax
+ymin
