@@ -21,6 +21,7 @@ from shapely import (
     box,
     equals,
     equals_exact,
+    equals_identical,
     from_wkt,
     length,
     to_wkt,
@@ -5638,18 +5639,262 @@ def test_extend_lines_to_nearest_warns_on_merge_failure():
 
 
 @pytest.mark.parametrize(
-    ("values", "grid_size", "expected"),
+    (
+        "geoms",
+        "grid_size",
+        "expected_postgis",
+        "expected_geos",
+    ),
     [
-        pytest.param([7.789, -7.789, 0.0], 0.1, [7.8, -7.8, 0.0], id="decimeters"),
-        pytest.param([7.789, 1.234], 0.01, [7.79, 1.23], id="centimeters"),
-        pytest.param([7.789, 4.4, 5.5], 1, [8.0, 4.0, 6.0], id="meters"),
-        pytest.param([12.0, 18.0, 25.0], 10, [10.0, 20.0, 20.0], id="decameters"),
-        pytest.param([], 0.5, [], id="empty"),
+        pytest.param(
+            [Point(7.789, -7.789), Point(0.0, 0.0)],
+            0.1,
+            [Point(7.800000000000001, -7.800000000000001), Point(0.0, 0.0)],
+            [Point(7.8, -7.8), Point(0.0, 0.0)],
+            id="decimeters",
+        ),
+        pytest.param(
+            [Point(7.789, 1.234, 9.876)],
+            0.01,
+            [Point(7.79, 1.23, 9.88)],
+            [Point(7.79, 1.23, 9.88)],
+            id="centimeters_3d",
+        ),
+        pytest.param(
+            [Point(7.789, 4.4, 5.6)],
+            1,
+            [Point(8.0, 4.0, 6.0)],
+            [Point(8.0, 4.0, 6.0)],
+            id="meters_3d",
+        ),
+        pytest.param(
+            [Point(12.0, 18.0, 24.0)],
+            10,
+            [Point(10.0, 20.0, 20.0)],
+            [Point(10.0, 20.0, 20.0)],
+            id="decameters_3d",
+        ),
+        pytest.param(
+            [Point(0.13, 0.37, 0.62)],
+            0.25,
+            [Point(0.25, 0.25, 0.5)],
+            [Point(0.25, 0.25, 0.5)],
+            id="quarter_units_3d",
+        ),
+        pytest.param(
+            [Point(235557.167, 6711231.685, 2.756)],
+            0.001,
+            [Point(235557.16700000002, 6711231.6850000005, 2.7560000000000002)],
+            [Point(235557.167, 6711231.685, 2.756)],
+            id="utm_1ulp_precision",
+        ),
+        pytest.param(
+            [Point(0.0005, 0.0025, 0.0045)],
+            0.001,
+            [Point(0.0, 0.002, 0.004)],
+            [Point(0.001, 0.003, 0.005)],
+            id="midpoint_ties",
+        ),
+        pytest.param(
+            [
+                LineString(
+                    [
+                        (0.0001, 0.0001, 1.0001),
+                        (0.0002, 0.0002, 1.0002),
+                        (1.0, 1.0, 2.0),
+                    ]
+                )
+            ],
+            0.001,
+            [LineString([(0.0, 0.0, 1.0), (1.0, 1.0, 2.0)])],
+            [LineString([(0.0, 0.0, 1.0), (1.0, 1.0, 2.0)])],
+            id="repeated_vertices",
+        ),
+        pytest.param(
+            [
+                Polygon(
+                    [
+                        (0.0001, 0.0001, 1.0006),
+                        (10.0, 0.0, 2.0006),
+                        (10.0, 10.0, 3.0006),
+                        (0.0, 10.0, 4.0006),
+                        (0.0001, 0.0001, 1.0006),
+                    ],
+                    [
+                        [
+                            (2.0004, 2.0004, 5.0006),
+                            (4.0, 2.0, 6.0006),
+                            (4.0, 4.0, 7.0006),
+                            (2.0, 4.0, 8.0006),
+                            (2.0004, 2.0004, 5.0006),
+                        ]
+                    ],
+                )
+            ],
+            0.001,
+            [
+                Polygon(
+                    [
+                        (0.0, 0.0, 1.0010000000000001),
+                        (10.0, 0.0, 2.001),
+                        (10.0, 10.0, 3.001),
+                        (0.0, 10.0, 4.001),
+                        (0.0, 0.0, 1.0010000000000001),
+                    ],
+                    [
+                        [
+                            (2.0, 2.0, 5.001),
+                            (4.0, 2.0, 6.001),
+                            (4.0, 4.0, 7.001),
+                            (2.0, 4.0, 8.001),
+                            (2.0, 2.0, 5.001),
+                        ]
+                    ],
+                )
+            ],
+            [
+                Polygon(
+                    [
+                        (0.0, 10.0, 4.001),
+                        (10.0, 10.0, 3.001),
+                        (10.0, 0.0, 2.001),
+                        (0.0, 0.0, 1.001),
+                        (0.0, 10.0, 4.001),
+                    ],
+                    [
+                        [
+                            (4.0, 2.0, 6.001),
+                            (4.0, 4.0, 7.001),
+                            (2.0, 4.0, 8.001),
+                            (2.0, 2.0, 5.001),
+                            (4.0, 2.0, 6.001),
+                        ]
+                    ],
+                )
+            ],
+            id="inner_ring",
+        ),
+        pytest.param(
+            [
+                Polygon(
+                    [
+                        (0.0, 0.0, 1.1116),
+                        (1.0, 0.0, 2.2226),
+                        (1.0, 1.0, 3.3336),
+                        (0.5, 0.0004, 4.4446),
+                        (0.0, 1.0, 5.5556),
+                        (0.0, 0.0, 1.1116),
+                    ]
+                )
+            ],
+            0.001,
+            [
+                Polygon(
+                    [
+                        (0.0, 0.0, 1.112),
+                        (1.0, 0.0, 2.223),
+                        (1.0, 1.0, 3.334),
+                        (0.5, 0.0, 4.445),
+                        (0.0, 1.0, 5.556),
+                        (0.0, 0.0, 1.112),
+                    ]
+                )
+            ],
+            [
+                MultiPolygon(
+                    [
+                        Polygon(
+                            [
+                                (0.0, 0.0, 1.112),
+                                (0.0, 1.0, 5.556),
+                                (0.5, 0.0, 4.445),
+                                (0.0, 0.0, 1.112),
+                            ]
+                        ),
+                        Polygon(
+                            [
+                                (1.0, 1.0, 3.334),
+                                (1.0, 0.0, 2.223),
+                                (0.5, 0.0, 4.445),
+                                (1.0, 1.0, 3.334),
+                            ]
+                        ),
+                    ]
+                )
+            ],
+            id="pinched_polygon_3d",
+        ),
+        pytest.param(
+            [Point(1.234, 5.678), Point(1.234, 5.678, 9.101), Point(), None],
+            0.1,
+            [
+                Point(1.2000000000000002, 5.7),
+                Point(1.2000000000000002, 5.7, 9.1),
+                Point(),
+                None,
+            ],
+            [Point(1.2, 5.7), Point(1.2, 5.7, 9.1), Point(), None],
+            id="mixed",
+        ),
+        pytest.param(
+            [
+                MultiPoint([(0.12, 0.34, 0.56), (1.78, 2.91, 3.45)]),
+                MultiLineString(
+                    [[(0.12, 0.34), (1.78, 2.91)], [(3.11, 4.89), (5.01, 6.99)]]
+                ),
+                GeometryCollection(
+                    [
+                        Point(1.234, 5.678, 9.101),
+                        LineString([(0.12, 0.34), (0.56, 0.78)]),
+                    ]
+                ),
+            ],
+            0.1,
+            [
+                MultiPoint(
+                    [
+                        (0.1, 0.30000000000000004, 0.6000000000000001),
+                        (1.8, 2.9000000000000004, 3.4000000000000004),
+                    ]
+                ),
+                MultiLineString(
+                    [
+                        [(0.1, 0.30000000000000004), (1.8, 2.9000000000000004)],
+                        [(3.1, 4.9), (5.0, 7.0)],
+                    ]
+                ),
+                GeometryCollection(
+                    [
+                        Point(1.2000000000000002, 5.7, 9.1),
+                        LineString(
+                            [(0.1, 0.30000000000000004), (0.6000000000000001, 0.8)]
+                        ),
+                    ]
+                ),
+            ],
+            [
+                MultiPoint([(0.1, 0.3, 0.6), (1.8, 2.9, 3.5)]),
+                MultiLineString([[(0.1, 0.3), (1.8, 2.9)], [(3.1, 4.9), (5.0, 7.0)]]),
+                GeometryCollection(
+                    [
+                        Point(1.2, 5.7, 9.1),
+                        LineString([(0.1, 0.3), (0.6, 0.8)]),
+                    ]
+                ),
+            ],
+            id="multi_and_collection",
+        ),
+        pytest.param([], 0.5, [], [], id="empty"),
     ],
 )
 def test_snap_to_grid(
-    values: list[float],
+    geoms: list[BaseGeometry | None],
     grid_size: float,
-    expected: list[float],
+    expected_postgis: list[BaseGeometry | None],
+    expected_geos: list[BaseGeometry | None],
 ):
-    assert snap_to_grid(np.array(values), grid_size).tolist() == expected
+    for mode, expected in (("postgis", expected_postgis), ("geos", expected_geos)):
+        actual = snap_to_grid(np.array(geoms), grid_size, mode=mode)
+        assert len(actual) == len(expected)
+        for a, e in zip(actual, expected, strict=True):
+            assert (a is None and e is None) or equals_identical(a, e)
