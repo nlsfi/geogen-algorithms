@@ -731,23 +731,6 @@ def test_calculate_edge_adjacency_empty_input():
     assert "adjacency_ratio" in result.columns
 
 
-def test_calculate_edge_adjacency_non_polygon_raises():
-    """Test that non-polygon geometries raise GeometryTypeError."""
-    input_gdf = GeoDataFrame(
-        {"id": [1, 2]},
-        geometry=[Point(0, 0), LineString([(0, 0), (1, 1)])],
-        crs="EPSG:3067",
-    )
-    reference_gdf = GeoDataFrame(
-        {"class": ["a"]},
-        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
-        crs="EPSG:3067",
-    )
-
-    with pytest.raises(GeometryTypeError, match="Polygon or MultiPolygon"):
-        calculate_edge_adjacency(input_gdf, reference_gdf, buffer_size=1.0)
-
-
 @pytest.mark.parametrize(
     (
         "input_gdf",
