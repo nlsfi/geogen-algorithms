@@ -65,6 +65,7 @@ repos:
         entry: python tools/prek/check_temp_files.py
         language: system
         types: [file]
+        pass_filenames: false
 
   - repo: https://github.com/osprey-oss/deptry
     rev: 0.25.1
