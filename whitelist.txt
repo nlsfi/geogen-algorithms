@@ -45,6 +45,7 @@ dataframe
 dataset
 DBSCAN
 densify
+deque
 dest
 directionally
 divmod
@@ -79,6 +80,7 @@ hashable
 hypot
 idx
 inplace
+int8
 interp
 intersect1d
 intp
@@ -109,6 +111,7 @@ otypes
 peucker
 polygonize
 polygonized
+popleft
 pos
 postprocessing
 pydantic
