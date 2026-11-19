@@ -473,3 +473,14 @@ def test_thin_points(
         check_missing_reference=False,
         algorithm=thin_points_algorithm,
     ).run()
+
+
+def test_generalize_navigation_marks(
+    navigation_marks_input: TestInputData,
+    navigation_marks_algorithm: BaseAlgorithm,
+) -> None:
+    IntegrationTest(
+        input_data=navigation_marks_input,
+        check_missing_reference=False,
+        algorithm=navigation_marks_algorithm,
+    ).run()
