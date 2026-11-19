@@ -8,6 +8,7 @@ allclose
 arange
 arctan2
 argmax
+argmin
 argsort
 argspec
 asarray
@@ -44,6 +45,7 @@ dataframe
 dataset
 DBSCAN
 densify
+deque
 dest
 directionally
 divmod
@@ -78,6 +80,7 @@ hashable
 hypot
 idx
 inplace
+int8
 interp
 intersect1d
 intp
@@ -106,6 +109,7 @@ num
 peucker
 polygonize
 polygonized
+popleft
 pos
 postprocessing
 pydantic
