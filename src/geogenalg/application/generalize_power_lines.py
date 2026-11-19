@@ -18,9 +18,9 @@ from geogenalg.application import (
 )
 from geogenalg.attributes import inherit_attributes_from_largest
 from geogenalg.continuity import (
+    add_contiguous_lines_information,
     connect_lines_to_polygon_centroids,
     flag_polygon_centerline_connections,
-    get_contiguous_lengths,
     process_lines_and_reconnect,
 )
 from geogenalg.core.geometry import (
@@ -38,6 +38,7 @@ from geogenalg.split import explode_and_hash_id
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
 _SUBSTATION_FENCE_LENGTH_RATIO_THRESHOLD = 0.75
+_FENCE_CONNECTION_TOLERANCE = 5
 
 
 @supports_identity
@@ -114,7 +115,7 @@ class GeneralizePowerLines(BaseAlgorithm):
         # they are unlikely going to affect the result in an unwanted way.
         substations = substations.loc[
             (
-                substations.geometry.exterior.buffer(5)
+                substations.geometry.exterior.buffer(_FENCE_CONNECTION_TOLERANCE)
                 .intersection(fences.union_all())
                 .length
                 / substations.geometry.exterior.length
@@ -172,7 +173,25 @@ class GeneralizePowerLines(BaseAlgorithm):
         if self.simplification_tolerance > 0:
             gdf.geometry = gdf.geometry.simplify(self.simplification_tolerance)
 
-        gdf = gdf.loc[get_contiguous_lengths(gdf) > self.length_threshold]
+        gdf = add_contiguous_lines_information(
+            gdf,
+            GeoDataFrame(
+                geometry=fences.geometry.buffer(_FENCE_CONNECTION_TOLERANCE),
+                crs=fences.crs,
+            ),
+        )
+        gdf = gdf.loc[
+            ~(
+                (gdf["contiguous_length"] <= self.length_threshold)
+                & (gdf["contiguous_dead_end"] | gdf["contiguous_disconnected"])
+            )
+        ].drop(
+            columns=[
+                "contiguous_length",
+                "contiguous_dead_end",
+                "contiguous_disconnected",
+            ]
+        )
         gdf = connect_lines_to_polygon_centroids(gdf, substations)
 
         return assign_nearest_z(data, gdf, overwrite_z=True)
