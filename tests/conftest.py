@@ -612,6 +612,7 @@ def navigation_marks_algorithm() -> GeneralizeNavigationMarks:
         navigation_mark_width=20.0,
         boulder_radius=30.0,
         rotation_column="rotation",
+        set_default_rotations=False,
         other_navigation_marks_reference_key="other_navigation_marks",
         boulder_in_water_reference_key="boulder_in_water",
         boulder_in_water_group_reference_key="boulder_in_water_group",
