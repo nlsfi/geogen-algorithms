@@ -483,4 +483,5 @@ def test_generalize_navigation_marks(
         input_data=navigation_marks_input,
         check_missing_reference=False,
         algorithm=navigation_marks_algorithm,
+        dummy_data_mandatory_columns=frozenset({"rotation"}),
     ).run()

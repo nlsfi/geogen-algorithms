@@ -102,9 +102,15 @@ class GeneralizeNavigationMarks(BaseAlgorithm):
         gdf = data.copy()
 
         if self.set_default_rotations:
+            if self.class_column not in gdf.columns:
+                msg = f"Class column `{self.class_column}` not found in input data."
+                raise KeyError(msg)
+
             gdf[self.rotation_column] = self._default_rotations(gdf[self.class_column])
-        elif self.rotation_column not in gdf:
-            return gdf
+
+        if self.rotation_column not in gdf.columns:
+            msg = f"Rotation column `{self.rotation_column}` not found in input data."
+            raise KeyError(msg)
 
         # Skip navigation marks with missing rotations
         has_rotation = gdf[self.rotation_column].notna().to_numpy()
@@ -138,7 +144,7 @@ class GeneralizeNavigationMarks(BaseAlgorithm):
         # exhaustively for groups up to MAX_EXHAUSTIVE_GROUP_SIZE. In practice
         # the exact solve should handle most if not all cases, but depending on
         # data and mark size parameters groups could end up large and a fallback
-        # solver (the local one) + group size limit are needed. The exact path
+        # solver (the local one) + group size limit are needed.
         chosen_rotations = self._choose_rotations_locally(
             footprint_overlaps, mark_pairs, mark_pair_overlaps
         )
