@@ -422,3 +422,16 @@ def test_thin_points(
         input_data=thin_points_input,
         algorithm=thin_points_algorithm,
     ).run(benchmark, record_property)
+
+
+@pytest.mark.benchmark
+def test_generalize_navigation_marks(
+    benchmark: BenchmarkFixture,
+    record_property: Callable,
+    navigation_marks_input: TestInputData,
+    navigation_marks_algorithm: BaseAlgorithm,
+) -> None:
+    AlgorithmBenchmark(
+        input_data=navigation_marks_input,
+        algorithm=navigation_marks_algorithm,
+    ).run(benchmark, record_property)

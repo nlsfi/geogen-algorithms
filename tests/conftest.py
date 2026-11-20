@@ -19,6 +19,7 @@ from geogenalg.application.generalize_conservation_areas import (
 from geogenalg.application.generalize_contours import GeneralizeContours
 from geogenalg.application.generalize_fences import GeneralizeFences
 from geogenalg.application.generalize_landcover import GeneralizeLandcover
+from geogenalg.application.generalize_navigation_marks import GeneralizeNavigationMarks
 from geogenalg.application.generalize_polygons_to_points import (
     GeneralizePolygonsToPoints,
 )
@@ -586,4 +587,33 @@ def thin_points_input(algorithm_testdata_path: Path) -> TestInputData:
 def thin_points_algorithm() -> ThinPoints:
     return ThinPoints(
         min_distance=75.0,
+    )
+
+
+@pytest.fixture
+def navigation_marks_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "navigation_marks.gpkg")
+    return TestInputData(
+        input_uri=gpkg.to_input("navigational_mark"),
+        control_uri=gpkg.to_input("control"),
+        unique_id_column="kmtk_id",
+        reference_uris={
+            "other_navigation_marks": gpkg.to_input("all_navigation_marks_combined"),
+            "boulder_in_water": gpkg.to_input("boulder_in_water"),
+            "boulder_in_water_group": gpkg.to_input("boulder_in_water_group"),
+        },
+    )
+
+
+@pytest.fixture
+def navigation_marks_algorithm() -> GeneralizeNavigationMarks:
+    return GeneralizeNavigationMarks(
+        navigation_mark_length=60.0,
+        navigation_mark_width=20.0,
+        boulder_radius=30.0,
+        rotation_column="rotation",
+        set_default_rotations=False,
+        other_navigation_marks_reference_key="other_navigation_marks",
+        boulder_in_water_reference_key="boulder_in_water",
+        boulder_in_water_group_reference_key="boulder_in_water_group",
     )
