@@ -639,7 +639,7 @@ def road_network_algorithm() -> GeneralizeRoadNetwork:
         buffer_size=100.0,
         length_threshold=50.0,
         road_type_column="kohdeluokka",
-        # TODO: specify road_classes parameter once tuples are supported
+        road_classes=(12141, 12316, 12314, 12313),
         keep_unhandled=False,
         reference_key="roads",
     )

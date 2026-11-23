@@ -46,7 +46,7 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
     """The minimum length a road needs to have outside all buffered roads to be kept."""
     road_type_column: str = "road_type"
     """Column name used to select and order target road classes."""
-    road_classes: tuple[int | str, ...] = (12141, 12316, 12314, 12313)
+    road_classes: tuple[int | str, ...] = ()
     """Road classes in descending processing order."""
     keep_unhandled: bool = False
     """Whether to keep features outside of input `road_classes` in the output."""
