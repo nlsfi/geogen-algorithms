@@ -4,12 +4,13 @@
 #
 #  SPDX-License-Identifier: MIT
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 import numpy as np
 import shapely
 from geopandas import GeoDataFrame
 from networkx import dijkstra_predecessor_and_distance
+from pandas import Categorical
 from pydantic import Field
 from shapely import STRtree, union_all
 from shapely.geometry.base import BaseGeometry
@@ -22,9 +23,6 @@ from geogenalg.application import (
 from geogenalg.continuity import gdf_to_networkx_graph
 from geogenalg.core.parallel import in_parallel
 
-if TYPE_CHECKING:
-    from collections.abc import Hashable
-
 
 @supports_identity
 class GeneralizeRoadNetwork(BaseAlgorithm):
@@ -34,8 +32,9 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
     - Buffers each reference road and creates spatial index of them
     - Iterates each input class and it's feature in descending line length order
     (class at a time, features in order inside the class)
-    - Keeps the feature if is long enough outside of all created buffers so far
-    - Adds a buffered version of the kept feature to a growing spatial index
+    - Keeps the feature if is long enough outside of all preserved buffered road
+    geometries
+    - Marks whether to feature was kept for subsequent road length checks
     - Restores connectivity for those kept roads that were originally connected to
     the reference roads but lost it in the previous steps
     """
@@ -70,78 +69,89 @@ class GeneralizeRoadNetwork(BaseAlgorithm):
         if data.empty:
             return data
 
-        gdf = data.copy()
-        gdf["_simplified"] = gdf.geometry.simplify(1)
+        # 1. Order roads by their class and length
+        road_class = Categorical(
+            data[self.road_type_column],
+            categories=list(self.road_classes),
+            ordered=True,
+        )
+        roads = data.assign(_class=road_class, _length=data.geometry.length)
+        roads = roads.loc[roads["_class"].notna()]
+        roads = roads.sort_values(
+            by=["_class", "_length"], ascending=[True, False], kind="stable"
+        )
+        roads = roads.drop(columns=["_class", "_length"])
 
+        # 2. Discard smaller roads mostly nearby the reference roads
         reference_roads = reference_data[self.reference_key]
-        reference_road_buffers = (
-            in_parallel(reference_roads.geometry.simplify(1))
-            .buffer(
-                self.buffer_size,
-                resolution=4,
-            )
-            .resolve_numpy()
+        reference_roads_tree = self._create_tree_from_buffered(reference_roads)
+        roads_parts_outside_reference = np.array(
+            [
+                self._difference_with_nearby(geom, reference_roads_tree)
+                for geom in roads.geometry.to_numpy()
+            ],
+            dtype=object,
         )
-        reference_roads_tree = STRtree(reference_road_buffers)
-
-        kept_indices: list[Hashable] = []
-        kept_buffers: list[BaseGeometry] = []
-        kept_tree = STRtree(kept_buffers)
-
-        gdf_descending_length = gdf.assign(geom_len=gdf.geometry.length).sort_values(
-            by="geom_len", ascending=False, kind="stable"
+        pass_mask = (
+            shapely.length(roads_parts_outside_reference) > self.length_threshold
         )
+        # Keep only roads and road parts that were long enough outside buffered
+        # reference roads for the next steps
+        roads = roads.loc[pass_mask]
+        roads_parts_outside_reference = roads_parts_outside_reference[pass_mask]
 
-        for road_class in self.road_classes:
-            class_mask = gdf_descending_length[self.road_type_column] == road_class
+        # 3. Discard smaller roads in greedy fashion by deciding keep vs.
+        # discard one road at a time based on whether they are currently long enough
+        # outside all buffered geometries. Tracking keep/discard decision separately as
+        # bool list makes it possible to avoid rebuilding the tree
+        roads_tree = self._create_tree_from_buffered(roads)
+        kept = np.zeros(len(roads), dtype=bool)
+        for i, geom in enumerate(roads_parts_outside_reference):
+            # Subtract the so far kept other buffered road geometries and keep
+            # this one if it is still long enough
+            remaining_road = self._difference_with_nearby(geom, roads_tree, kept)
+            if remaining_road.length > self.length_threshold:
+                kept[i] = True
+        kept_indices = roads.index[kept].tolist()
 
-            for idx, feature in gdf_descending_length.loc[class_mask].iterrows():
-                geom = feature[str(gdf.geometry.name)]
-                simplified = feature["_simplified"]
-
-                outside_reference = self._difference_with_nearby(
-                    geom, reference_roads_tree
-                )
-                if outside_reference.length <= self.length_threshold:
-                    continue
-
-                outside_all = self._difference_with_nearby(
-                    outside_reference,
-                    kept_tree,
-                )
-                if outside_all.length > self.length_threshold:
-                    kept_indices.append(idx)
-                    kept_buffers.append(
-                        shapely.buffer(simplified, self.buffer_size, quad_segs=4),
-                    )
-                    kept_tree = STRtree(kept_buffers)
-
-        # Restore connectivity to reference roads where possible
+        # 4. Restore connectivity to reference roads where possible
         kept_indices = list(
-            self._preserve_connectivity_to_reference_lines(
-                data=gdf,
+            self._preserve_connectivity_to_reference_roads(
+                data=data,
                 reference_roads=reference_roads,
                 seed_indices=kept_indices,
             )
         )
 
-        # NOTE: Is this needed?
+        # 5. Decide whether to keep or discard unhandled road classes
         if self.keep_unhandled:
-            unhandled_mask = ~gdf[self.road_type_column].isin(self.road_classes)
-            kept_indices.extend(gdf.loc[unhandled_mask].index)
+            unhandled_mask = ~data[self.road_type_column].isin(self.road_classes)
+            kept_indices.extend(data.loc[unhandled_mask].index)
 
-        gdf = gdf.drop("_simplified", axis=1)
-        return gdf.loc[gdf.index.isin(set(kept_indices))]
+        return data.loc[data.index.isin(set(kept_indices))]
+
+    def _create_tree_from_buffered(self, gdf: GeoDataFrame) -> STRtree:
+        return STRtree(
+            in_parallel(gdf.geometry.simplify(1))
+            .buffer(self.buffer_size, resolution=4)
+            .resolve_numpy()
+        )
 
     @staticmethod
-    def _difference_with_nearby(geom: BaseGeometry, tree: STRtree) -> BaseGeometry:
+    def _difference_with_nearby(
+        geom: BaseGeometry,
+        tree: STRtree,
+        mask: np.ndarray | None = None,
+    ) -> BaseGeometry:
         nearby = tree.query(geom, predicate="intersects")
+        if mask is not None:
+            nearby = nearby[mask[nearby]]
         if len(nearby) == 0:
             return geom
 
         return geom.difference(union_all(tree.geometries.take(nearby)))
 
-    def _preserve_connectivity_to_reference_lines(
+    def _preserve_connectivity_to_reference_roads(
         self,
         data: GeoDataFrame,
         reference_roads: GeoDataFrame,
