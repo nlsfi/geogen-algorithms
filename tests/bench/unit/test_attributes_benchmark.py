@@ -10,7 +10,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from shapely import (
     boundary,
     get_parts,
-    get_segments,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
+    get_segments,
 )
 
 from geogenalg.attributes import inherit_attributes_from_largest

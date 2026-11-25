@@ -47,7 +47,7 @@ from shapely import (
     get_num_coordinates,
     get_parts,
     get_point,
-    get_segments,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
+    get_segments,
     get_type_id,
     get_x,
     get_z,
@@ -62,7 +62,7 @@ from shapely import (
     line_merge,
     linestrings,
     make_valid,
-    minimum_width,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
+    minimum_width,
     multilinestrings,
     node,
     normalize,
