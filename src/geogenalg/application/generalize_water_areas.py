@@ -20,7 +20,7 @@ from shapely import (
     get_coordinates,
     get_exterior_ring,
     get_parts,
-    get_segments,  # ty: ignore[unresolved-import] (type stubs are for shapely 2.1)
+    get_segments,
     is_empty,
     length,
     linestrings,
