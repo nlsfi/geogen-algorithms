@@ -70,10 +70,12 @@ def test_label_chains(
         "length_threshold",
         "dead_end_exempt",
         "disconnected_exempt",
-        "expected",
+        "expected_keep",
+        "expected_chains",
+        "expected_degrees",
     ),
     [
-        pytest.param([], [], [], 1.0, None, None, [], id="empty"),
+        pytest.param([], [], [], 1.0, None, None, [], [], [], id="empty"),
         pytest.param(
             [0, 0, 0],
             [1, 2, 3],
@@ -82,6 +84,8 @@ def test_label_chains(
             None,
             None,
             [False, True, True],
+            [0, 0],
+            [2, 2, 1, 1],
             id="short_dead_end_removed",
         ),
         pytest.param(
@@ -92,6 +96,8 @@ def test_label_chains(
             None,
             None,
             [False, False, False],
+            [],
+            [],
             id="all_dead_ends_short_removes_everything",
         ),
         pytest.param(
@@ -102,6 +108,8 @@ def test_label_chains(
             None,
             None,
             [False, True, True, False],
+            [0, 0],
+            [2, 2, 1, 1],
             id="chain_length_is_summed",
         ),
         pytest.param(
@@ -112,6 +120,8 @@ def test_label_chains(
             None,
             None,
             [True, True, True, True],
+            [0, 1, 2, 0],
+            [3, 3, 3, 2, 2, 1, 1, 1],
             id="chain_not_short_is_kept",
         ),
         pytest.param(
@@ -122,6 +132,8 @@ def test_label_chains(
             None,
             None,
             [False, False, False, True, True],
+            [0, 0],
+            [2, 2, 1, 1],
             id="removing_branches_exposes_new_dead_end",
         ),
         pytest.param(
@@ -132,6 +144,8 @@ def test_label_chains(
             None,
             None,
             [False],
+            [],
+            [],
             id="short_disconnected_line_removed",
         ),
         pytest.param(
@@ -142,6 +156,8 @@ def test_label_chains(
             None,
             [True],
             [True],
+            [0],
+            [1, 1],
             id="disconnected_exempt",
         ),
         pytest.param(
@@ -152,6 +168,8 @@ def test_label_chains(
             [True, False, False],
             None,
             [True, True, True],
+            [0, 1, 2],
+            [3, 3, 3, 1, 1, 1],
             id="dead_end_exempt",
         ),
         pytest.param(
@@ -162,6 +180,8 @@ def test_label_chains(
             None,
             None,
             [False, False],
+            [],
+            [],
             id="short_closed_loop_removed_as_disconnected",
         ),
     ],
@@ -173,19 +193,41 @@ def test_filter_short_chains(
     length_threshold: float,
     dead_end_exempt: list[bool] | None,
     disconnected_exempt: list[bool] | None,
-    expected: list[bool],
+    expected_keep: list[bool],
+    expected_chains: list[int],
+    expected_degrees: list[int],
 ):
-    result = filter_short_chains(
-        np.array(start_nodes, dtype=int),
-        np.array(end_nodes, dtype=int),
-        np.array(lengths, dtype=float),
-        length_threshold,
-        dead_end_exempt=(
-            None if dead_end_exempt is None else np.array(dead_end_exempt)
-        ),
-        disconnected_exempt=(
-            None if disconnected_exempt is None else np.array(disconnected_exempt)
-        ),
+    starts = np.array(start_nodes, dtype=int)
+    ends = np.array(end_nodes, dtype=int)
+    line_lengths = np.array(lengths, dtype=float)
+    dead_end_mask = None if dead_end_exempt is None else np.array(dead_end_exempt)
+    disconnected_mask = (
+        None if disconnected_exempt is None else np.array(disconnected_exempt)
     )
 
-    np.testing.assert_array_equal(result, expected)
+    keep = filter_short_chains(
+        starts,
+        ends,
+        line_lengths,
+        length_threshold,
+        dead_end_exempt=dead_end_mask,
+        disconnected_exempt=disconnected_mask,
+    )
+    keep_with_chains, (chain_ids, degree, end_lines) = filter_short_chains(
+        starts,
+        ends,
+        line_lengths,
+        length_threshold,
+        dead_end_exempt=dead_end_mask,
+        disconnected_exempt=disconnected_mask,
+        return_chains=True,
+    )
+
+    np.testing.assert_array_equal(keep, expected_keep)
+    np.testing.assert_array_equal(keep_with_chains, expected_keep)
+    np.testing.assert_array_equal(chain_ids, expected_chains)
+    np.testing.assert_array_equal(degree, expected_degrees)
+    np.testing.assert_array_equal(
+        end_lines,
+        np.tile(np.arange(len(expected_chains)), 2),
+    )

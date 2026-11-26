@@ -4,6 +4,8 @@
 #
 #  SPDX-License-Identifier: MIT
 
+from typing import Literal, overload
+
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
@@ -52,6 +54,32 @@ def label_chains(
     return labels[:line_count], degree, end_lines
 
 
+@overload
+def filter_short_chains(
+    start_nodes: np.ndarray,
+    end_nodes: np.ndarray,
+    lengths: np.ndarray,
+    length_threshold: float,
+    *,
+    dead_end_exempt: np.ndarray | None = None,
+    disconnected_exempt: np.ndarray | None = None,
+    return_chains: Literal[False] = False,
+) -> np.ndarray: ...
+
+
+@overload
+def filter_short_chains(
+    start_nodes: np.ndarray,
+    end_nodes: np.ndarray,
+    lengths: np.ndarray,
+    length_threshold: float,
+    *,
+    dead_end_exempt: np.ndarray | None = None,
+    disconnected_exempt: np.ndarray | None = None,
+    return_chains: Literal[True],
+) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]: ...
+
+
 def filter_short_chains(  # noqa: PLR0913
     start_nodes: np.ndarray,
     end_nodes: np.ndarray,
@@ -60,7 +88,8 @@ def filter_short_chains(  # noqa: PLR0913
     *,
     dead_end_exempt: np.ndarray | None = None,
     disconnected_exempt: np.ndarray | None = None,
-) -> np.ndarray:
+    return_chains: bool = False,
+) -> np.ndarray | tuple[np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Find short chains of lines which are disconnected or dead ends.
 
     Args:
@@ -73,16 +102,19 @@ def filter_short_chains(  # noqa: PLR0913
             of a dead end chain.
         disconnected_exempt: Boolean mask of lines which are never removed as
             part of a disconnected chain.
+        return_chains: If True, also return the chains of the kept lines.
 
     Returns:
     -------
-        Boolean mask of lines to keep.
+        Boolean mask of lines to keep (and chains if return_chains is set).
 
     """
     line_count = len(start_nodes)
     keep = np.ones(line_count, dtype=bool)
+    empty = np.array([], dtype=int)
+    chains = (empty, empty, empty)
     if line_count == 0:
-        return keep
+        return (keep, chains) if return_chains else keep
 
     if dead_end_exempt is None:
         dead_end_exempt = np.zeros(line_count, dtype=bool)
@@ -115,8 +147,9 @@ def filter_short_chains(  # noqa: PLR0913
             | (dead_end & ~dead_end_exempt[alive])
         )
         if not remove.any():
+            chains = (chain_ids, degree, end_lines)
             break
 
         keep[alive[remove]] = False
 
-    return keep
+    return (keep, chains) if return_chains else keep
