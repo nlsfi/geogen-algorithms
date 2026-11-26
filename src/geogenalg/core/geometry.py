@@ -3744,6 +3744,32 @@ def get_end_points(lines: np.ndarray) -> np.ndarray:
     )
 
 
+def _extension_turn_angles(
+    lines: np.ndarray,
+    sides: np.ndarray,
+    extension_segments: np.ndarray,
+) -> np.ndarray:
+    end_segment_starts = get_coordinates(
+        get_point(lines, np.where(sides == 0, 1, -2)),
+    )
+    end_segment_ends = get_coordinates(get_point(lines, np.where(sides == 0, 0, -1)))
+    extension_coords = get_coordinates(extension_segments).reshape(-1, 2, 2)
+
+    line_directions = end_segment_ends - end_segment_starts
+    extension_directions = extension_coords[:, 1] - extension_coords[:, 0]
+
+    norms = np.hypot(*line_directions.T) * np.hypot(*extension_directions.T)
+    cosines = np.ones(len(norms))
+    np.divide(
+        (line_directions * extension_directions).sum(axis=1),
+        norms,
+        out=cosines,
+        where=norms > 0,
+    )
+
+    return np.degrees(np.arccos(np.clip(cosines, -1, 1)))
+
+
 def extend_lines_to_nearest(  # noqa: PLR0913
     lines: np.ndarray,
     extend_to: BaseGeometry | np.ndarray,
@@ -3751,6 +3777,7 @@ def extend_lines_to_nearest(  # noqa: PLR0913
     extend_start: np.ndarray,
     extend_end: np.ndarray,
     length_tolerance: float = 0.0,
+    maximum_turn_angle: float | None = None,
     disallow_non_simple: bool = False,
     end_points: np.ndarray | None = None,
 ) -> np.ndarray:
@@ -3768,6 +3795,9 @@ def extend_lines_to_nearest(  # noqa: PLR0913
         extend_end: Boolean array telling which lines to extend from end.
         length_tolerance: Extensions longer than this are skipped. If 0, the
             length is unlimited.
+        maximum_turn_angle: Extensions which would turn more than this many
+            degrees from the direction of the line at the extended end are skipped.
+            If None, the angle is unlimited.
         disallow_non_simple: If True, lines which would be non-simple after
             extending are left unextended.
         end_points: 2D array of end points for each input line. If None
@@ -3797,6 +3827,8 @@ def extend_lines_to_nearest(  # noqa: PLR0913
     if isinstance(extend_to, BaseGeometry):
         targets = np.empty(len(selected_end_points), dtype=object)
         targets[:] = extend_to
+    elif extend_to.ndim == 2:  # noqa: PLR2004
+        targets = extend_to[rows, sides]
     elif len(extend_to) == 0 or len(selected_end_points) == 0:
         return lines.copy()
     else:
@@ -3809,6 +3841,11 @@ def extend_lines_to_nearest(  # noqa: PLR0913
     keep = ~crosses(extension_segments, lines[rows])
     if length_tolerance > 0.0:
         keep &= ~(length(extension_segments) > length_tolerance)
+    if maximum_turn_angle is not None:
+        keep &= ~(
+            _extension_turn_angles(lines[rows], sides, extension_segments)
+            > maximum_turn_angle
+        )
 
     rows, sides, extension_segments = rows[keep], sides[keep], extension_segments[keep]
 

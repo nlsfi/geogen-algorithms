@@ -6,6 +6,7 @@ alg
 algs
 allclose
 arange
+arccos
 arctan2
 argmax
 argmin
