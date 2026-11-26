@@ -23,8 +23,8 @@ from warnings import warn
 import numpy as np
 from geopandas import GeoDataFrame, GeoSeries
 from scipy.sparse import coo_matrix, csr_matrix
-from scipy.sparse.csgraph import connected_components
-from scipy.spatial import KDTree, Voronoi  # noqa: SC200
+from scipy.sparse.csgraph import breadth_first_order, connected_components
+from scipy.spatial import Delaunay, KDTree
 from shapely import (
     GeometryCollection,
     LineString,
@@ -3445,12 +3445,192 @@ def make_valid_merge_parts(
     return result
 
 
+def _centerline_voronoi_ridges(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    # We build the diagram ourself (over using Voronoi directly) as an
+    # optimization
+    triangles = Delaunay(points)
+
+    # Extract triangle vertices
+    a, b, c = (triangles.points[triangles.simplices[:, i]] for i in range(3))
+
+    # Use positions relative to a to simplify the math
+    ab_x, ab_y = (b - a).T
+    ac_x, ac_y = (c - a).T
+
+    # Build the Voronoi vertices (center of each triangle's circumcircle)
+    determinant = 2 * (ab_x * ac_y - ab_y * ac_x)
+
+    # If triangle vertices are on a line the determinant is zero, which leads
+    # to inf or nan values. Silence these warnings, centerline will later
+    # determine these as being outside of the polygon
+    with np.errstate(divide="ignore", invalid="ignore"):
+        x = (ac_y * (ab_x**2 + ab_y**2) - ab_y * (ac_x**2 + ac_y**2)) / determinant
+        y = (ab_x * (ac_x**2 + ac_y**2) - ac_x * (ab_x**2 + ab_y**2)) / determinant
+
+    # Undo the previous move relative to a.
+    vertices = a + np.column_stack((x, y))
+
+    # Form ridges between circumcenters. One ridge per pair of triangles
+    # which share an edge
+
+    # Per each triangle edge, triangles.neighbors gives the index of any other
+    # triangle that shares the same edge (and for unique edges -1)
+    neighbor_ids = triangles.neighbors.ravel()
+    # Repeat triangle ids three times to match neighbor indexes
+    triangle_ids = np.repeat(np.arange(len(triangles.simplices)), 3)
+    # The comparison here does two things. Each triangle pair exists twice in both
+    # "directions" (i, j), (j, i). It picks one of the ridges while also
+    # removing the non-shared edges (-1)
+    is_ridge = neighbor_ids > triangle_ids
+
+    ridges = np.column_stack((triangle_ids[is_ridge], neighbor_ids[is_ridge]))
+
+    # Find ridges with near-zero length
+    with np.errstate(invalid="ignore"):
+        ridge_lengths = np.hypot(
+            *(vertices[ridges[:, 1]] - vertices[ridges[:, 0]]).T,
+        )
+    zero_length = ridge_lengths < 1e-9  # noqa: PLR2004
+
+    if not zero_length.any():
+        return vertices, ridges
+
+    # There are some zero length ridges. These have to be removed, but we first
+    # have to merge the vertices they connect so the ridges stay connected.
+
+    # Build a graph of the vertices connected by zero length ridges
+    vertex_count = len(vertices)
+    merge_graph = csr_matrix(
+        (
+            np.ones(np.count_nonzero(zero_length), dtype=bool),
+            (ridges[zero_length, 0], ridges[zero_length, 1]),
+        ),
+        shape=(vertex_count, vertex_count),
+    )
+    # Group connected vertices, the group label becomes the new vertex id
+    _, vertex_ids = connected_components(merge_graph, directed=False)
+    # Keep one vertex per group
+    _, first_ids = np.unique(vertex_ids, return_index=True)
+    vertices = vertices[first_ids]
+
+    # Update ridges to use the new vertex ids. Sort so that (i, j) and (j, i)
+    # are the same ridge.
+    ridges = np.sort(vertex_ids[ridges], axis=1)
+    # Zero length ridges now start and end at the same vertex, drop them
+    ridges = ridges[ridges[:, 0] != ridges[:, 1]]
+    # Drop duplicate ridges created by the merge. Encode each (i, j) pair as a
+    # single number to find them.
+    _, unique_ids = np.unique(
+        ridges[:, 0] * len(vertices) + ridges[:, 1],
+        return_index=True,
+    )
+
+    return vertices, ridges[unique_ids]
+
+
+def _chains_to_lines(
+    start_nodes: np.ndarray,
+    end_nodes: np.ndarray,
+    node_coords: np.ndarray,
+    chain_ids: np.ndarray,
+    degree: np.ndarray,
+) -> LineString | MultiLineString:
+    edge_count = len(start_nodes)
+    if edge_count == 0:
+        return LineString()
+
+    # Create range based index for chains, to enable using them as
+    # indices
+    _, chains = np.unique(chain_ids, return_inverse=True)
+    chain_count = int(chains.max()) + 1
+
+    # First we decide an edge to start walking each chain from
+
+    # For each edge find if its first or last node is a junction or a deadend
+    # (i.e. a point where a chain ends)
+    starts_at_end = degree[:edge_count] != 2  # noqa: PLR2004
+    ends_at_end = degree[edge_count:] != 2  # noqa: PLR2004
+    touches_end = starts_at_end | ends_at_end
+
+    # Sort edges by chain, with edges touching a chain end first, and take
+    # the first edge of each chain
+    edge_order = np.lexsort((~touches_end, chains))
+    _, first_ids = np.unique(chains[edge_order], return_index=True)
+    first_edges = edge_order[first_ids]
+
+    # Start from the end of the first edge which is the chain end
+    flip = ends_at_end[first_edges] & ~starts_at_end[first_edges]
+
+    # Extract chains from the entire graph so the BFS later on stops at junctions.
+    # This is done by copying the nodes of each chain.
+    node_count = len(node_coords)
+    copies, copy_ids = np.unique(
+        np.tile(chains, 2) * node_count + np.concatenate([start_nodes, end_nodes]),
+        return_inverse=True,
+    )
+    copy_count = len(copies)
+    copy_nodes = copies % node_count
+    copy_chains = copies // node_count
+    copy_starts, copy_ends = copy_ids[:edge_count], copy_ids[edge_count:]
+
+    # Each line starts from the chain end of its first edge. The BFS walk
+    # starts from the other end of that edge.
+    line_starts = np.where(flip, end_nodes[first_edges], start_nodes[first_edges])
+    walk_starts = np.where(flip, copy_starts[first_edges], copy_ends[first_edges])
+
+    # Leave the first edges out of the graph. A BFS goes in both directions
+    # at once, so a closed loop has to be cut open to walk it in order.
+    walked = np.ones(edge_count, dtype=bool)
+    walked[first_edges] = False
+
+    # BFS only takes one starting node, so add an extra root node connected to
+    # the walk start of every chain. One BFS from it then walks all chains.
+    root = copy_count
+    graph = csr_matrix(
+        (
+            np.ones(np.count_nonzero(walked) + chain_count, dtype=bool),
+            (
+                np.concatenate([copy_starts[walked], np.full(chain_count, root)]),
+                np.concatenate([copy_ends[walked], walk_starts]),
+            ),
+        ),
+        shape=(copy_count + 1, copy_count + 1),
+    )
+    # The root itself is the first visited node, drop it
+    visit_order = breadth_first_order(
+        graph,
+        root,
+        directed=False,
+        return_predecessors=False,
+    )[1:]
+
+    # Each line is its start node followed by the nodes in walking order
+    vertex_nodes = np.concatenate([line_starts, copy_nodes[visit_order]])
+    vertex_chains = np.concatenate(
+        [np.arange(chain_count), copy_chains[visit_order]],
+    )
+    # The BFS visits the chains in parallel, so their nodes are mixed in
+    # visit_order. Sort by chain to separate them. A stable sort keeps the
+    # nodes of each chain in their current order, with the line start first.
+    order = np.argsort(vertex_chains, kind="stable")
+    lines = linestrings(
+        node_coords[vertex_nodes[order]],
+        indices=vertex_chains[order],
+    )
+
+    if len(lines) == 1:
+        return lines[0]
+
+    return MultiLineString(lines.tolist())
+
+
 def centerline(
     geom: Polygon | MultiPolygon,
     *,
     simplify_tolerance: float = 0.5,
     prune_branches_shorter_than: float | Literal["auto"] = "auto",
     segmentize_by: float | Literal["auto"] = "auto",
+    merge_vertices_closer_than: float = 0.0,
 ) -> LineString | MultiLineString:
     """Return centerline of a (Multi)Polygon.
 
@@ -3465,6 +3645,8 @@ def centerline(
         segmentize_by: Input geometry will be segmentized by this amount.
             Generally gives a more accurate result but makes the computing more
             expensive. If `auto`, use estimated average width of the polygon.
+        merge_vertices_closer_than: If above zero, repeated vertexes within
+            this tolerance will be removed.
 
     Returns:
     -------
@@ -3474,6 +3656,9 @@ def centerline(
     """
     if geom.is_empty:
         return LineString()
+
+    if merge_vertices_closer_than > 0:
+        geom = remove_repeated_points(geom, merge_vertices_closer_than)
 
     # Estimate polygon average width by modeling the polygon as a buffered line
     # ref: https://gis.stackexchange.com/a/20282
@@ -3497,12 +3682,8 @@ def centerline(
     # Center coordinates on 0, 0 to avoid precision errors with large projected
     # coordinates
     origin = coords.mean(axis=0)
-    voronoi = Voronoi(coords - origin)
-
-    # Remove ridges with unbounded vertices
-    ridges = np.asarray(voronoi.ridge_vertices)
-    ridges = ridges[(ridges >= 0).all(axis=1)]
-    vertices = voronoi.vertices + origin
+    vertices, ridges = _centerline_voronoi_ridges(coords - origin)
+    vertices += origin
 
     # Remove ridges which have their start or end point outside the input polygon
     inside = contains_xy(geom, vertices[:, 0], vertices[:, 1])
@@ -3520,26 +3701,32 @@ def centerline(
 
     # Prune dead-end branches shorter than the given or calculated minimum length.
     # If that removes everything, keep only the longest chain.
-    keep = filter_short_chains(
+    keep, chains = filter_short_chains(
         ridges[:, 0],
         ridges[:, 1],
         ridge_lengths,
         prune_branches_shorter_than,
         disconnected_exempt=np.ones(len(ridges), dtype=bool),
+        return_chains=True,
     )
     if not keep.any():
         chain_ids, _, _ = label_chains(ridges[:, 0], ridges[:, 1])
         chain_lengths = np.bincount(chain_ids, ridge_lengths)
         keep = chain_ids == chain_lengths.argmax()
+        chains = label_chains(ridges[keep, 0], ridges[keep, 1])
 
-    lines = line_merge(
-        multilinestrings(
-            np.stack([ridge_start_points[keep], ridge_end_points[keep]], axis=1),
-        )
+    chain_ids, degree, _ = chains
+    lines = _chains_to_lines(
+        ridges[keep, 0],
+        ridges[keep, 1],
+        vertices,
+        chain_ids,
+        degree,
     )
-    lines = simplify(lines, simplify_tolerance)
+    if simplify_tolerance > 0:
+        lines = simplify(lines, simplify_tolerance)
 
-    return cast("LineString | MultiLineString", normalize(lines))
+    return normalize(lines)
 
 
 def get_end_points(lines: np.ndarray) -> np.ndarray:
