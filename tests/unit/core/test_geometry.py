@@ -15,6 +15,7 @@ from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
+from scipy.spatial import Voronoi
 from shapely import (
     GeometryCollection,
     MultiPolygon,
@@ -24,6 +25,7 @@ from shapely import (
     equals_identical,
     from_wkt,
     length,
+    normalize,
     to_wkt,
     unary_union,
 )
@@ -44,6 +46,8 @@ from geogenalg.core.exceptions import (
 from geogenalg.core.geometry import (
     Dimensions,
     LineExtendFrom,
+    _centerline_voronoi_ridges,
+    _chains_to_lines,
     add_topological_point,
     add_topological_points,
     angle_difference,
@@ -108,6 +112,7 @@ from geogenalg.core.geometry import (
     union_by_predicate,
     visvalingam_whyatt_simplify_conditional,
 )
+from geogenalg.core.graph import label_chains
 
 CENTERLINE_TEST_RECTANGLE = Polygon([(0, 0), (20, 0), (20, 2), (0, 2)])
 
@@ -5363,6 +5368,39 @@ def test_centerline(
     assert result.equals_exact(expected, tolerance=0.001)
 
 
+def test_centerline_merge_vertices_closer_than_removes_fragment_at_spike_tip():
+    # Narrow spike whose tip is a cluster of three vertices a few centimetres
+    # apart. The Voronoi edge between the clustered vertices stays inside the
+    # spike, producing a short fragment disconnected from the main centerline.
+    polygon = Polygon(
+        [
+            (-26.712, -93.8412),
+            (-20.8276, -73.1509),
+            (-10.4069, -36.5108),
+            (-0.0193, 0.0128),
+            (-0.0077, 0.0471),
+            (-0.0145, 0.0115),
+            (-9.6745, -40.2005),
+            (-17.7667, -73.8862),
+            (-20.3031, -84.4444),
+            (-29.0683, -120.9317),
+            (-33.2324, -116.7676),
+            (-26.712, -93.8412),
+        ]
+    )
+    kwargs = {"segmentize_by": 5, "prune_branches_shorter_than": 50}
+
+    without_merge = centerline(polygon, **kwargs)
+    assert isinstance(without_merge, MultiLineString)
+    assert min(part.length for part in without_merge.geoms) < 3
+
+    with_merge = centerline(polygon, merge_vertices_closer_than=0.1, **kwargs)
+    assert isinstance(with_merge, LineString)
+    assert with_merge.length == pytest.approx(
+        max(part.length for part in without_merge.geoms), abs=0.01
+    )
+
+
 @pytest.mark.parametrize(
     ("lines", "expected"),
     [
@@ -5898,3 +5936,151 @@ def test_snap_to_grid(
         assert len(actual) == len(expected)
         for a, e in zip(actual, expected, strict=True):
             assert (a is None and e is None) or equals_identical(a, e)
+
+
+def _ridge_set(vertices: np.ndarray, ridges: np.ndarray) -> set[frozenset]:
+    return {
+        frozenset(tuple(np.round(vertices[i], 6)) for i in ridge) for ridge in ridges
+    }
+
+
+@pytest.mark.parametrize(
+    "points",
+    [
+        pytest.param(
+            np.random.default_rng(0).random((200, 2)) * 100,
+            id="random_points",
+        ),
+        pytest.param(
+            np.array([(x, y) for x in range(6) for y in range(4)], dtype=float),
+            id="grid_with_cocircular_points",
+        ),
+        pytest.param(
+            np.array([(0, 0), (20, 0), (20, 10), (0, 10)], dtype=float),
+            id="rectangle_has_no_finite_ridges",
+        ),
+    ],
+)
+def test_centerline_voronoi_ridges_matches_scipy_voronoi(points: np.ndarray):
+    voronoi = Voronoi(points)
+    expected_ridges = np.array(
+        [ridge for ridge in voronoi.ridge_vertices if -1 not in ridge],
+        dtype=int,
+    ).reshape(-1, 2)
+
+    vertices, ridges = _centerline_voronoi_ridges(points)
+
+    assert _ridge_set(vertices, ridges) == _ridge_set(voronoi.vertices, expected_ridges)
+
+
+@pytest.mark.parametrize(
+    ("node_coords", "edges", "expected"),
+    [
+        pytest.param(
+            [(0, 0), (10, 0)],
+            [(0, 1)],
+            LineString([(0, 0), (10, 0)]),
+            id="single_edge",
+        ),
+        pytest.param(
+            [(0, 0), (10, 0), (20, 5), (30, 5), (40, 0)],
+            [(0, 1), (1, 2), (2, 3), (3, 4)],
+            LineString([(0, 0), (10, 0), (20, 5), (30, 5), (40, 0)]),
+            id="path",
+        ),
+        pytest.param(
+            [(0, 0), (10, 0), (20, 5), (30, 5), (40, 0)],
+            [(3, 2), (0, 1), (4, 3), (2, 1)],
+            LineString([(0, 0), (10, 0), (20, 5), (30, 5), (40, 0)]),
+            id="path_shuffled_and_reversed",
+        ),
+        pytest.param(
+            [(0, 0), (10, 0), (20, 0), (30, 0), (25, 10), (30, 20), (25, -10)],
+            [(0, 1), (1, 2), (2, 3), (2, 4), (4, 5), (2, 6)],
+            MultiLineString(
+                [
+                    LineString([(0, 0), (10, 0), (20, 0)]),
+                    LineString([(20, 0), (30, 0)]),
+                    LineString([(20, 0), (25, 10), (30, 20)]),
+                    LineString([(20, 0), (25, -10)]),
+                ],
+            ),
+            id="junction",
+        ),
+        pytest.param(
+            [(0, 0), (10, 0), (10, 10), (0, 10)],
+            [(0, 1), (1, 2), (2, 3), (3, 0)],
+            LineString([(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)]),
+            id="closed_loop",
+        ),
+        pytest.param(
+            [(0, 0), (10, 0), (10, 10), (0, 10), (20, 10), (30, 10)],
+            [(0, 1), (1, 2), (2, 3), (3, 0), (2, 4), (4, 5)],
+            MultiLineString(
+                [
+                    LineString([(10, 10), (0, 10), (0, 0), (10, 0), (10, 10)]),
+                    LineString([(10, 10), (20, 10), (30, 10)]),
+                ],
+            ),
+            id="closed_loop_with_tail",
+        ),
+        pytest.param(
+            # Like a river splitting around an island and joining again
+            [(0, 0), (10, 0), (20, 5), (30, 0), (20, -5), (40, 0)],
+            [(0, 1), (1, 2), (2, 3), (1, 4), (4, 3), (3, 5)],
+            MultiLineString(
+                [
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(10, 0), (20, 5), (30, 0)]),
+                    LineString([(10, 0), (20, -5), (30, 0)]),
+                    LineString([(30, 0), (40, 0)]),
+                ],
+            ),
+            id="split_around_island",
+        ),
+        pytest.param(
+            [(10, 0), (0, 5), (0, -5), (20, 5), (20, -5)],
+            [(0, 1), (1, 2), (2, 0), (0, 3), (3, 4), (4, 0)],
+            MultiLineString(
+                [
+                    LineString([(10, 0), (0, 5), (0, -5), (10, 0)]),
+                    LineString([(10, 0), (20, 5), (20, -5), (10, 0)]),
+                ],
+            ),
+            id="two_loops_sharing_a_node",
+        ),
+        pytest.param(
+            [(0, 0), (10, 0), (20, 0), (0, 20), (10, 20), (5, 30), (30, 0), (40, 0)],
+            [(0, 1), (1, 2), (3, 4), (4, 5), (5, 3), (6, 7)],
+            MultiLineString(
+                [
+                    LineString([(0, 0), (10, 0), (20, 0)]),
+                    LineString([(0, 20), (10, 20), (5, 30), (0, 20)]),
+                    LineString([(30, 0), (40, 0)]),
+                ],
+            ),
+            id="separate_components",
+        ),
+    ],
+)
+def test_chains_to_lines(
+    node_coords: list[tuple[float, float]],
+    edges: list[tuple[int, int]],
+    expected: LineString | MultiLineString,
+):
+    start_nodes, end_nodes = np.array(edges).T
+    chain_ids, degree, _ = label_chains(start_nodes, end_nodes)
+
+    result = _chains_to_lines(
+        start_nodes,
+        end_nodes,
+        np.array(node_coords, dtype=float),
+        chain_ids,
+        degree,
+    )
+
+    assert equals_exact(
+        normalize(result),
+        normalize(expected),
+        tolerance=0,
+    )
