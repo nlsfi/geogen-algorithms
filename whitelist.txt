@@ -103,6 +103,7 @@ minlength
 multigeometries
 multilinestring
 multilinestrings
+multipoints
 multipolygon
 mutex
 ndarray

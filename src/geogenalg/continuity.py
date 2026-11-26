@@ -5,7 +5,6 @@
 #  SPDX-License-Identifier: MIT
 from collections import defaultdict
 from collections.abc import Callable
-from typing import Literal
 from warnings import warn
 
 import numpy as np
@@ -15,21 +14,24 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely import (
     STRtree,
+    buffer,
+    centroid,
     dwithin,
     force_2d,
     get_coordinates,
     get_parts,
     get_point,
+    intersection,
     is_empty,
+    is_missing,
     length,
+    multipoints,
     union_all,
 )
-from shapely.geometry import LineString, MultiLineString, Point, Polygon
+from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
 
 from geogenalg.core.geometry import (
-    LineExtendFrom,
-    extend_line_to_nearest,
     extend_lines_to_nearest,
     get_contiguous_line_components,
     get_end_points,
@@ -574,6 +576,8 @@ def flag_connections_to_reference(
 def connect_lines_to_polygon_centroids(
     source_lines: GeoDataFrame,
     reference_polygons: GeoDataFrame,
+    *,
+    connection_tolerance: float = 0.1,
 ) -> GeoDataFrame:
     """Extend LineStrings in a GeoDataFrame to touching polygons centroid.
 
@@ -586,6 +590,8 @@ def connect_lines_to_polygon_centroids(
     ----
         source_lines: Input data containing LineStrings.
         reference_polygons: Input data containing Polygons.
+        connection_tolerance: A line end is considered to touch a polygon if
+            it is within this distance of it.
 
     Returns:
     -------
@@ -594,62 +600,56 @@ def connect_lines_to_polygon_centroids(
     """
     gdf = source_lines.copy()
 
-    def _extend_line(line: LineString) -> LineString:
-        start = Point(line.coords[0])
-        end = Point(line.coords[-1])
+    if gdf.empty or reference_polygons.empty:
+        return gdf
 
-        start_polys = reference_polygons.loc[
-            reference_polygons.geometry.intersects(start.buffer(0.1))
-        ]
-        end_polys = reference_polygons.loc[
-            reference_polygons.geometry.intersects(end.buffer(0.1))
-        ]
+    lines = gdf.geometry.to_numpy()
+    end_points = get_end_points(lines)
+    polygons = reference_polygons.geometry.to_numpy()
 
-        # Handle special case of line beginning and ending at the same polygon.
-        if (start_polys.shape[0] == 1 and end_polys.shape[0] == 1) and (
-            start_polys.geometry.to_numpy()[0] is end_polys.geometry.to_numpy()[0]
-        ):
-            # Extend from both ends, this has to be done instead of doing it in
-            # steps (as below), because shapely.linemerge might change the
-            # direction of the line, preventing the other end from being
-            # extended.
-            return extend_line_to_nearest(
-                line,
-                start_polys.centroid.union_all(),
-                LineExtendFrom.BOTH,
-            )
+    point_ids, polygon_ids = STRtree(polygons).query(
+        end_points.ravel(),
+        predicate="dwithin",
+        distance=connection_tolerance,
+    )
+    order = np.argsort(point_ids, kind="stable")
+    point_ids, polygon_ids = point_ids[order], polygon_ids[order]
 
-        if not start_polys.empty:
-            # Because in theory the start/end point might touch two different
-            # polygons, extend to the nearest point in the MultiPoint union of
-            # all their centroids.
-            line = extend_line_to_nearest(
-                line,
-                start_polys.centroid.union_all(),
-                LineExtendFrom.START,
-            )
+    # Because in theory a start/end point might touch several different
+    # polygons, extend to the nearest point in a MultiPoint of all their
+    # centroids.
+    touched_points, groups = np.unique(point_ids, return_inverse=True)
+    targets = np.full(end_points.size, None, dtype=object)
+    targets[touched_points] = multipoints(
+        centroid(polygons[polygon_ids]),
+        indices=groups,
+    )
+    targets = targets.reshape(-1, 2)
+    has_target = ~is_missing(targets)
 
-        if not end_polys.empty:
-            line = extend_line_to_nearest(
-                line,
-                end_polys.centroid.union_all(),
-                LineExtendFrom.END,
-            )
-
-        return line
-
-    gdf.geometry = gdf.geometry.apply(_extend_line)  # ty: ignore[no-matching-overload]
+    gdf.geometry = GeoSeries(
+        extend_lines_to_nearest(
+            lines,
+            targets,
+            extend_start=has_target[:, 0],
+            extend_end=has_target[:, 1],
+            end_points=end_points,
+        ),
+        index=gdf.index,
+        crs=gdf.crs,
+    )
 
     return gdf
 
 
-def flag_polygon_centerline_connections(
+def flag_polygon_centerline_connections(  # noqa: PLR0913
     data: GeoDataFrame,
     reference_gdf: GeoDataFrame,
     polygon_geometry_column: str,
     *,
     start_connected_column: str = "_start_connected",
     end_connected_column: str = "_end_connected",
+    connection_tolerance: float = 0.0,
 ) -> GeoDataFrame:
     """Flag which "end" of a polygon is connected to reference data.
 
@@ -671,6 +671,10 @@ def flag_polygon_centerline_connections(
         end_connected_column: Name of boolean Series which will be added to
             output, tells whether the polygon edge close to the last vertex of the
             linestring is connected to reference data.
+        connection_tolerance: Polygon edge is considered connected if it is
+            within this distance of reference data. Useful when the polygon
+            was derived from lines ending exactly on the reference data, but
+            processing left it a hair's breadth away.
 
     Returns:
     -------
@@ -680,38 +684,29 @@ def flag_polygon_centerline_connections(
     """
     gdf = data.copy()
 
-    reference_union = reference_gdf.union_all()
+    centerlines = gdf.geometry.to_numpy()
+    polygons = gdf[polygon_geometry_column].to_numpy()
+    reference_tree = STRtree(reference_gdf.geometry.to_numpy())
 
-    def _process(
-        centerline: LineString,
-        original_polygon: Polygon,
-        end: Literal[0, -1],
-    ) -> bool:
-        point = Point(centerline.coords[end])
-        buffered = point.buffer(50)
+    for column, end in (
+        (start_connected_column, 0),
+        (end_connected_column, -1),
+    ):
+        # Part of the polygon near the end of the centerline
+        end_areas = intersection(polygons, buffer(get_point(centerlines, end), 50))
 
-        polygon = original_polygon.intersection(buffered)
+        if connection_tolerance > 0:
+            connected_ids, _ = reference_tree.query(
+                end_areas,
+                predicate="dwithin",
+                distance=connection_tolerance,
+            )
+        else:
+            connected_ids, _ = reference_tree.query(end_areas, predicate="intersects")
 
-        return polygon.intersects(reference_union)
-
-    gdf[start_connected_column] = gdf[
-        [gdf.geometry.name, polygon_geometry_column]
-    ].apply(
-        lambda columns: _process(
-            columns[gdf.geometry.name],
-            columns[polygon_geometry_column],
-            end=0,
-        ),
-        axis=1,
-    )
-    gdf[end_connected_column] = gdf[[gdf.geometry.name, polygon_geometry_column]].apply(
-        lambda columns: _process(
-            columns[gdf.geometry.name],
-            columns[polygon_geometry_column],
-            end=-1,
-        ),
-        axis=1,
-    )
+        connected = np.zeros(len(gdf), dtype=bool)
+        connected[connected_ids] = True
+        gdf[column] = connected
 
     return gdf
 

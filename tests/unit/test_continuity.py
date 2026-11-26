@@ -749,17 +749,20 @@ def test_flag_connections_to_reference(
         "source_lines",
         "reference_polygons",
         "expected",
+        "kwargs",
     ),
     [
         (
             GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
             GeoDataFrame(geometry=[box(1, 0, 2, 1)]),
             GeoDataFrame(geometry=[LineString([[0, 0], [1, 0], [1.5, 0.5]])]),
+            {},
         ),
         (
             GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
             GeoDataFrame(geometry=[box(-1, 0, 0, 1)]),
             GeoDataFrame(geometry=[LineString([[-0.5, 0.5], [0, 0], [1, 0]])]),
+            {},
         ),
         (
             GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
@@ -772,6 +775,7 @@ def test_flag_connections_to_reference(
             GeoDataFrame(
                 geometry=[LineString([[-0.5, 0.5], [0, 0], [1, 0], [1.5, 0.5]])]
             ),
+            {},
         ),
         (
             GeoDataFrame(geometry=[LineString([[0.25, 0], [0.75, 0]])]),
@@ -782,6 +786,7 @@ def test_flag_connections_to_reference(
                 ]
             ),
             GeoDataFrame(geometry=[LineString([[0.25, 0], [0.75, 0]])]),
+            {},
         ),
         (
             GeoDataFrame(geometry=[LineString([[0, 0], [1, 0]])]),
@@ -792,6 +797,7 @@ def test_flag_connections_to_reference(
                 ]
             ),
             GeoDataFrame(geometry=[LineString([[0, 0], [1, 0], [1.5, 0.5]])]),
+            {},
         ),
         (
             GeoDataFrame(
@@ -807,6 +813,7 @@ def test_flag_connections_to_reference(
                     LineString([[0, 1], [1, 1], [1.5, 0.5]]),
                 ]
             ),
+            {},
         ),
         (
             GeoDataFrame(
@@ -822,6 +829,19 @@ def test_flag_connections_to_reference(
                     ),
                 ]
             ),
+            {},
+        ),
+        (
+            GeoDataFrame(geometry=[LineString([[-1, 0.5], [-0.5, 0.5]])]),
+            GeoDataFrame(geometry=[box(0, 0, 1, 1)]),
+            GeoDataFrame(geometry=[LineString([[-1, 0.5], [-0.5, 0.5]])]),
+            {},
+        ),
+        (
+            GeoDataFrame(geometry=[LineString([[-1, 0.5], [-0.5, 0.5]])]),
+            GeoDataFrame(geometry=[box(0, 0, 1, 1)]),
+            GeoDataFrame(geometry=[LineString([[-1, 0.5], [-0.5, 0.5], [0.5, 0.5]])]),
+            {"connection_tolerance": 0.6},
         ),
     ],
     ids=[
@@ -832,15 +852,18 @@ def test_flag_connections_to_reference(
         "line_touches_two_polygons",
         "connect_multiple",
         "both_ends_touch_same_polygon",
+        "end_near_polygon_not_connected_by_default",
+        "end_within_connection_tolerance_connected",
     ],
 )
 def test_connect_lines_to_polygon_centroids(
     source_lines: GeoDataFrame,
     reference_polygons: GeoDataFrame,
     expected: GeoDataFrame,
+    kwargs: dict,
 ):
     assert_geodataframe_equal(
-        connect_lines_to_polygon_centroids(source_lines, reference_polygons),
+        connect_lines_to_polygon_centroids(source_lines, reference_polygons, **kwargs),
         expected,
     )
 
@@ -850,6 +873,7 @@ def test_connect_lines_to_polygon_centroids(
         "input_gdf",
         "reference_gdf",
         "expected_gdf",
+        "kwargs",
     ),
     [
         (
@@ -894,6 +918,7 @@ def test_connect_lines_to_polygon_centroids(
                     ),
                 ],
             ),
+            {},
         ),
         (
             GeoDataFrame(
@@ -937,6 +962,7 @@ def test_connect_lines_to_polygon_centroids(
                     ),
                 ],
             ),
+            {},
         ),
         (
             GeoDataFrame(
@@ -981,6 +1007,7 @@ def test_connect_lines_to_polygon_centroids(
                     ),
                 ],
             ),
+            {},
         ),
         (
             GeoDataFrame(
@@ -1025,6 +1052,7 @@ def test_connect_lines_to_polygon_centroids(
                     ),
                 ],
             ),
+            {},
         ),
         (
             GeoDataFrame(
@@ -1068,6 +1096,41 @@ def test_connect_lines_to_polygon_centroids(
                     ),
                 ],
             ),
+            {},
+        ),
+        (
+            GeoDataFrame(
+                {"polygon": GeoSeries([box(0, 0, 2, 1000)])},
+                geometry=[LineString([[1, 1], [1, 999]])],
+            ),
+            # Ends 0.01 units short of the polygon
+            GeoDataFrame(geometry=[box(0, -10, 2, -0.01)]),
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries([box(0, 0, 2, 1000)]),
+                    "_start_connected": [False],
+                    "_end_connected": [False],
+                },
+                geometry=[LineString([[1, 1], [1, 999]])],
+            ),
+            {},
+        ),
+        (
+            GeoDataFrame(
+                {"polygon": GeoSeries([box(0, 0, 2, 1000)])},
+                geometry=[LineString([[1, 1], [1, 999]])],
+            ),
+            # Ends 0.01 units short of the polygon
+            GeoDataFrame(geometry=[box(0, -10, 2, -0.01)]),
+            GeoDataFrame(
+                {
+                    "polygon": GeoSeries([box(0, 0, 2, 1000)]),
+                    "_start_connected": [True],
+                    "_end_connected": [False],
+                },
+                geometry=[LineString([[1, 1], [1, 999]])],
+            ),
+            {"connection_tolerance": 0.1},
         ),
     ],
     ids=[
@@ -1076,18 +1139,22 @@ def test_connect_lines_to_polygon_centroids(
         "both_connected",
         "none_connected",
         "polygon_on_side_no_connection",
+        "gap_not_connected_without_tolerance",
+        "gap_connected_with_tolerance",
     ],
 )
 def test_flag_polygon_centerline_connections(
     input_gdf: GeoDataFrame,
     reference_gdf: GeoDataFrame,
     expected_gdf: GeoDataFrame,
+    kwargs: dict,
 ):
     assert_geodataframe_equal(
         flag_polygon_centerline_connections(
             input_gdf,
             reference_gdf,
             "polygon",
+            **kwargs,
         ),
         expected_gdf,
         check_like=True,
