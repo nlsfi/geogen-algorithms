@@ -39,12 +39,22 @@ def pytest_terminal_summary(
 
     for reports, kwargs in (passed, failed):
         for report in reports:
-            for key, value in getattr(report, "user_properties", []):
-                if key == "features_per_sec":
-                    test_name = report.nodeid.split("::")[-1]
-                    terminalreporter.write_line(
-                        f"{test_name:<40} {value:>12} features/sec", **kwargs
-                    )
+            properties = dict(getattr(report, "user_properties", []))
+            if "features_per_sec" in properties:
+                test_name = report.nodeid.split("::")[-1]
+                tiles = properties.get("tiles")
+                tiles = (
+                    ""
+                    if tiles is None
+                    else f"  ({tiles} tile{'' if tiles == '1' else 's'})"
+                )
+                terminalreporter.write_line(
+                    f"{test_name:<40} "
+                    f"{properties.get('feature_count', '?'):>9} features "
+                    f"{properties.get('mean_duration_s', '?'):>9} s "
+                    f"{properties['features_per_sec']:>12} features/sec{tiles}",
+                    **kwargs,
+                )
 
     terminalreporter.write_sep("-", cyan=True)
 
