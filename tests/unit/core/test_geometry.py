@@ -5630,6 +5630,63 @@ def test_get_end_points(
             ],
             id="2d_and_3d_lines_mixed",
         ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            Point(3, 1),
+            [False],
+            [True],
+            {"maximum_turn_angle": 90},
+            [LineString([(0, 0), (1, 0), (3, 1)])],
+            id="turn_angle_under_maximum_extends",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            Point(0, 3),
+            [False],
+            [True],
+            {"maximum_turn_angle": 90},
+            [LineString([(0, 0), (1, 0)])],
+            id="turn_angle_over_maximum_skipped",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)])],
+            Point(-3, 1),
+            [True],
+            [False],
+            {"maximum_turn_angle": 45},
+            [LineString([(-3, 1), (0, 0), (1, 0)])],
+            id="turn_angle_measured_from_start",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)]), LineString([(0, 5), (1, 5)])],
+            LineString([(-1, -10), (-1, 10)]),
+            [True, False],
+            [True, True],
+            {"maximum_turn_angle": 90},
+            [
+                LineString([(-1, 0), (0, 0), (1, 0)]),
+                LineString([(0, 5), (1, 5)]),
+            ],
+            id="only_sharp_ends_skipped",
+        ),
+        pytest.param(
+            [LineString([(0, 0), (1, 0)]), LineString([(0, 5), (1, 5)])],
+            np.array(
+                [
+                    [Point(-1, 0), Point(3, 0)],
+                    [Point(-2, 9), None],
+                ],
+                dtype=object,
+            ),
+            [True, True],
+            [True, False],
+            {},
+            [
+                LineString([(-1, 0), (0, 0), (1, 0), (3, 0)]),
+                LineString([(-2, 9), (0, 5), (1, 5)]),
+            ],
+            id="separate_target_for_each_end",
+        ),
     ],
 )
 def test_extend_lines_to_nearest(
