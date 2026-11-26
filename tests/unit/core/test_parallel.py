@@ -18,14 +18,16 @@ from geopandas import GeoSeries
 from geopandas.testing import assert_geoseries_equal
 from pandas import Index, Series
 from shapely import (
+    STRtree,
     box,
     buffer,
     convex_hull,
     equals,
     length,
 )
-from shapely.geometry import MultiPoint, Point
+from shapely.geometry import LineString, MultiPoint, Point
 
+from geogenalg.core import parallel
 from geogenalg.core.geometry import centerline
 from geogenalg.core.parallel import (
     _THREAD_MANAGER,
@@ -37,6 +39,7 @@ from geogenalg.core.parallel import (
     get_threadpool_executor,
     in_parallel,
     num_workers,
+    query_tree,
     set_num_workers,
     shutdown_threadpool_executor,
     union_all_by_group,
@@ -553,3 +556,81 @@ def test_centerline(workers: int, kwargs: dict):
     assert result.index.equals(polygons.index)
     expected = [centerline(polygon, **kwargs) for polygon in polygons]
     assert equals(result.to_numpy(), expected).all()
+
+
+@pytest.mark.parametrize(
+    "workers",
+    [1, 3, 8],
+    ids=["single_worker", "fewer_workers_than_geoms", "more_workers_than_geoms"],
+)
+@pytest.mark.parametrize(
+    ("tree", "query_geoms", "kwargs", "expected"),
+    [
+        pytest.param(
+            STRtree([box(i, 0, i + 1, 1) for i in range(5)]),
+            [LineString([(0.5, 3), (3.5, 0.5)]), LineString([(4.2, 0.5), (4.8, 0.5)])],
+            {},
+            [[0, 0, 0, 0, 1], [0, 1, 2, 3, 4]],
+            id="bounding_boxes",
+        ),
+        pytest.param(
+            STRtree([box(i, 0, i + 1, 1) for i in range(5)]),
+            [LineString([(0.5, 3), (3.5, 0.5)]), LineString([(4.2, 0.5), (4.8, 0.5)])],
+            {"predicate": "intersects"},
+            [[0, 0, 1], [2, 3, 4]],
+            id="predicate",
+        ),
+        pytest.param(
+            np.array([box(i, 0, i + 1, 1) for i in range(5)], dtype=object),
+            [LineString([(0.5, 3), (3.5, 0.5)]), LineString([(4.2, 0.5), (4.8, 0.5)])],
+            {"predicate": "intersects"},
+            [[0, 0, 1], [2, 3, 4]],
+            id="tree_built_from_geometries",
+        ),
+        pytest.param(
+            STRtree([box(i, 0, i + 1, 1) for i in range(5)]),
+            [Point(i, 3) for i in range(5)],
+            {"predicate": "dwithin", "distance": 2.5},
+            [
+                [0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4],
+                [0, 1, 0, 1, 2, 0, 1, 2, 3, 1, 2, 3, 4, 2, 3, 4],
+            ],
+            id="dwithin_scalar_distance",
+        ),
+        pytest.param(
+            STRtree([box(i, 0, i + 1, 1) for i in range(5)]),
+            [Point(i, 3) for i in range(5)],
+            {"predicate": "dwithin", "distance": np.array([0.5, 2.5, 0.5, 2.5, 3])},
+            [[1, 1, 1, 3, 3, 3, 3, 4, 4, 4, 4], [0, 1, 2, 1, 2, 3, 4, 1, 2, 3, 4]],
+            id="dwithin_distance_per_geometry",
+        ),
+        pytest.param(
+            STRtree([box(i, 0, i + 1, 1) for i in range(5)]),
+            [Point(100, 100), Point(200, 200)],
+            {"predicate": "intersects"},
+            [[], []],
+            id="no_matches",
+        ),
+        pytest.param(
+            STRtree([box(i, 0, i + 1, 1) for i in range(5)]),
+            [],
+            {"predicate": "intersects"},
+            [[], []],
+            id="empty",
+        ),
+    ],
+)
+def test_query_tree(
+    monkeypatch: pytest.MonkeyPatch,
+    workers: int,
+    tree: STRtree | np.ndarray,
+    query_geoms: list,
+    kwargs: dict,
+    expected: list[list[int]],
+):
+    set_num_workers(workers)
+    monkeypatch.setattr(parallel, "_MIN_GEOMS_PER_QUERY_WORKER", 1)
+
+    result = query_tree(tree, np.array(query_geoms, dtype=object), **kwargs)
+
+    np.testing.assert_array_equal(result, expected)

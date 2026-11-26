@@ -4691,6 +4691,36 @@ def test_circular_direction_difference(
             ],
             id="non_adjacent_input_order",
         ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(0, -2), (100, 2)]),
+            ],
+            10.0,
+            [0, 0],
+            [
+                MultiLineString(
+                    [
+                        [(0, 0), (100, 0)],
+                        [(0, -2), (100, 2)],
+                    ]
+                )
+            ],
+            id="shallow_crossing_chained",
+        ),
+        pytest.param(
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(50, -50), (50, 50)]),
+            ],
+            10.0,
+            [0, 1],
+            [
+                LineString([(0, 0), (100, 0)]),
+                LineString([(50, -50), (50, 50)]),
+            ],
+            id="steep_crossing_not_chained",
+        ),
     ],
 )
 def test_build_collinear_chains(

@@ -3,20 +3,20 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
 from pandas import Series
 from pandas.testing import assert_series_equal
-from shapely import area, box, buffer, equals, intersection, intersects, simplify
+from shapely import STRtree, area, box, buffer, equals, intersection, intersects, simplify
 
 from geogenalg.core.geometry import centerline
-from geogenalg.core.parallel import in_parallel, num_workers
+from geogenalg.core.parallel import in_parallel, num_workers, query_tree
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    import numpy as np
     from pytest_benchmark.fixture import BenchmarkFixture
 
     from geogenalg.testing import TestInputData
@@ -271,3 +271,42 @@ def test_benchmark_centerline_watercourse_areas(
         centerline(polygon, segmentize_by=segmentize_by) for polygon in polygons
     ]
     assert equals(result.to_numpy(), expected).all()
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize("feature_count", [10, 100, 1_000, 10_000, 100_000])
+@pytest.mark.parametrize(
+    "mode", ["no_pool", "threadmanager_pool", "non_cached_threadpool"]
+)
+def test_benchmark_query_tree(
+    benchmark: BenchmarkFixture,
+    make_overlapping_polygons: Callable[..., GeoDataFrame],
+    feature_count: int,
+    mode: str,
+) -> None:
+    geoms = make_overlapping_polygons(feature_count).geometry.to_numpy()
+    tree = STRtree(geoms)
+
+    if mode == "no_pool":
+
+        def run_process() -> np.ndarray:
+            return tree.query(geoms, predicate="intersects")
+
+    elif mode == "threadmanager_pool":
+
+        def run_process() -> np.ndarray:
+            return query_tree(tree, geoms, predicate="intersects")
+
+    else:  # non_cached_threadpool
+
+        def run_process() -> np.ndarray:
+            with ThreadPoolExecutor(max_workers=num_workers()) as fresh_pool:
+                return query_tree(
+                    tree,
+                    geoms,
+                    predicate="intersects",
+                    executor=fresh_pool,
+                )
+
+    result = benchmark(run_process)
+    np.testing.assert_array_equal(result, tree.query(geoms, predicate="intersects"))

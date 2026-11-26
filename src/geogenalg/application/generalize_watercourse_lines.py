@@ -33,6 +33,7 @@ from geogenalg.core.geometry import (
     line_length_weighted_directions,
     mean_segment_lengths,
 )
+from geogenalg.core.parallel import query_tree
 from geogenalg.selection import prune_parallel_groups
 from geogenalg.utility.dataframe_processing import combine_gdfs, copy_gdf_as_empty
 
@@ -186,12 +187,15 @@ class GeneralizeWaterCourseLines(BaseAlgorithm):
         gdf = data.copy()
         gdf["_index"] = data.index
 
-        gdf["touches_water_area"] = False
+        touches_water_area = np.zeros(len(gdf), dtype=bool)
         if self.reference_key in reference_data:
-            intersecting = gdf.sjoin(
-                reference_data[self.reference_key],
-            ).index.unique()
-            gdf.loc[intersecting, "touches_water_area"] = True
+            line_ids, _ = query_tree(
+                reference_data[self.reference_key].geometry.to_numpy(),
+                gdf.geometry.to_numpy(),
+                predicate="intersects",
+            )
+            touches_water_area[line_ids] = True
+        gdf["touches_water_area"] = touches_water_area
 
         if self.always_keep_column is not None and self.always_keep_values:
             keep_mask = gdf[self.always_keep_column].isin(self.always_keep_values)
