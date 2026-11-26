@@ -317,7 +317,7 @@ def power_lines_input(algorithm_testdata_path: Path) -> TestInputData:
     return TestInputData(
         input_uri=gpkg.to_input("power_lines"),
         control_uri=gpkg.to_input("control"),
-        unique_id_column="mtk_id",
+        unique_id_column="kmtk_id",
         reference_uris={
             "substations": gpkg.to_input("substations"),
             "fences": gpkg.to_input("fences"),
@@ -329,11 +329,19 @@ def power_lines_input(algorithm_testdata_path: Path) -> TestInputData:
 def power_lines_algorithm() -> GeneralizePowerLines:
     return GeneralizePowerLines(
         distance_threshold_for_parallel_lines=50.0,
-        classes_for_merge_parallel_lines=frozenset([22311]),
-        classes_for_higher_priority_lines=frozenset([22311]),
-        class_column="kohdeluokka",
+        parallel_line_allowed_direction_difference=10.0,
+        classes_for_merge_parallel_lines=frozenset([1]),
+        classes_for_higher_priority_lines=frozenset([1]),
+        lower_priority_minimum_percentage=90.0,
+        class_column="power_line_class_id",
         length_threshold=100.0,
         simplification_tolerance=0.0,
+        centerline_segmentize_distance=10.0,
+        centerline_smoothing_steps=5,
+        centerline_merge_vertices_distance=0.1,
+        substation_connection_tolerance=0.1,
+        maximum_extension_length=25.0,
+        maximum_extension_angle=90.0,
         reference_key_fences="fences",
         reference_key_substations="substations",
     )

@@ -158,7 +158,7 @@ def test_generalize_power_lines(
     IntegrationTest(
         input_data=power_lines_input,
         check_missing_reference=True,
-        dummy_data_mandatory_columns=frozenset(["kohdeluokka"]),
+        dummy_data_mandatory_columns=frozenset(["power_line_class_id"]),
         algorithm=power_lines_algorithm,
     ).run()
 
