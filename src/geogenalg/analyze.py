@@ -3,301 +3,45 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
-from collections.abc import Hashable
 from typing import Literal, cast
 
 import numpy as np
 from geopandas import GeoDataFrame
-from pandas import Series
 from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely import (
     BufferJoinStyle,
-    GeometryCollection,
+    GeometryType,
     LineString,
-    MultiLineString,
     MultiPolygon,
     Polygon,
     STRtree,
     area,
     bounds,
-    buffer,
     centroid,
-    concave_hull,
-    convex_hull,
     get_coordinates,
-    intersection,
+    get_parts,
+    get_segments,
+    get_type_id,
     intersects,
     is_empty,
     length,
+    multilinestrings,
     prepare,
     union_all,
 )
 
 from geogenalg.core.exceptions import GeometryTypeError
 from geogenalg.core.geometry import (
-    angle_difference,
     build_collinear_chains,
     circular_direction_difference,
-    ensure_geoms,
-    explode_line,
     line_length_weighted_directions,
-    line_mean_direction,
     remove_holes,
-    segment_bearing,
-    segment_direction,
     union_by_predicate,
 )
-from geogenalg.core.parallel import in_parallel
+from geogenalg.core.parallel import in_parallel, union_all_by_group
 from geogenalg.utility.dataframe_processing import add_columns_to_gdf, copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
-
-
-def _group_parallel_lines(
-    gdf: GeoDataFrame,
-    id_column: str,
-    parallel_with_column: str,
-    parallel_group_column: str,
-) -> None:
-    """Recursively determine which lines are parallel.
-
-    In practice this means that if we consider the lines:
-
-    A - parallel with just B
-    B - parallel with A and C
-    C - parallel just with B
-
-    All of these will be considered to be parallel with each other.
-
-    Input GeoDataFrame is edited in place.
-
-    """
-    groups = []
-    processed = set()
-
-    def _process_row(index: Hashable, row: Series, group: set[Hashable]) -> None:
-        if index in processed:
-            return
-
-        parallels = row[parallel_with_column]
-
-        processed.add(index)
-
-        group.add(index)
-        group.update(parallels)
-
-        for parallel in parallels:
-            if parallel in gdf.index:
-                _process_row(
-                    parallel, gdf.loc[gdf[id_column] == parallel].iloc[0], group
-                )
-
-    for index, row in gdf.iterrows():
-        if index in processed:
-            continue
-
-        group: set[Hashable] = set()
-        _process_row(index, row, group)
-        groups.append(group)
-
-    gdf[parallel_group_column] = -1
-
-    for i, group in enumerate(groups, start=1):
-        for idx in group:
-            if idx in gdf.index:
-                gdf.at[idx, parallel_group_column] = i  # noqa: PD008
-
-
-def flag_parallel_lines(
-    input_gdf: GeoDataFrame,
-    parallel_distance: float,
-    allowed_direction_difference: float,
-    *,
-    segmentize_distance: float = 0,
-) -> GeoDataFrame:
-    """Detect which lines are parallel with each other within given parameters.
-
-    Args:
-    ----
-        input_gdf: GeoDataFrame with LineStrings.
-        parallel_distance: Maximum distance at which lines are considered to be
-            parallel.
-        allowed_direction_difference: If the absolute value of the difference of
-            direction (relative to north) between lines is under this value they
-            will still be considered to parallel.
-        segmentize_distance: If above zero, input lines will be segmentized
-            resulting in more precise detection.
-
-    Returns:
-    -------
-        GeoDataFrame containing detected parallel lines, with columns:
-            `parallel_group` denoting which other lines a line is parallel with.
-            `parallel_direction` direction of line relative to north.
-            `parallel_with` set of number ids of other lines a line is parallel with.
-            `parallel_id` number id of line.
-
-
-    """
-    gdf = input_gdf.copy()
-
-    column_direction = "parallel_direction"
-    column_group = "parallel_group"
-    column_parallel_with = "parallel_with"
-    column_id = "parallel_id"
-    column_parallel_check = "_parallel_check"
-
-    def _empty_gdf() -> GeoDataFrame:
-        # This ensures in case we get an empty result, the output consistently
-        # has these columns, with these dtypes.
-        gdf[column_direction] = Series(dtype="float64")
-        gdf[column_group] = Series(dtype="int64")
-        gdf[column_parallel_with] = Series(dtype="object")
-        gdf[column_id] = Series(dtype="int64")
-
-        return gdf
-
-    if input_gdf.empty:
-        return _empty_gdf()
-
-    if segmentize_distance > 0:
-        gdf.geometry = gdf.geometry.segmentize(segmentize_distance)
-
-    gdf.geometry = gdf.geometry.apply(explode_line)  # ty: ignore[no-matching-overload]
-    gdf = gdf.explode().reset_index(drop=True)
-
-    # Normalize so that comparing the direction of segments later on is consistent
-    gdf[column_direction] = Series(gdf.geometry.normalize().apply(segment_bearing))
-    gdf[column_parallel_check] = gdf.geometry.buffer(
-        parallel_distance, cap_style="flat"
-    ).buffer(0.01, cap_style="square")
-    gdf[column_parallel_with] = None
-    gdf[column_id] = gdf.index
-
-    for index, row in gdf.iterrows():
-        parallel_geom = row[column_parallel_check]
-        parallel_geom_direction = row[column_direction]
-        row_geom = row[str(gdf.geometry.name)]
-
-        # This locates lines which a) are not the line we're iterating over
-        # b) intersects the buffered area used to check for parallel lines and
-        # c) are within the given direction bounds.
-        crossing_lines = gdf.loc[
-            (gdf.geometry.intersects(parallel_geom))
-            & ~gdf.geometry.intersects(row_geom)
-            & (
-                ((gdf[column_direction] - parallel_geom_direction).abs())
-                < allowed_direction_difference
-            )
-        ]
-
-        if crossing_lines.empty:
-            continue
-
-        gdf.at[index, column_parallel_with] = set(crossing_lines.index)  # noqa: PD008
-
-    gdf = gdf.loc[gdf[column_parallel_with].notna()]
-
-    _group_parallel_lines(
-        gdf,
-        column_id,
-        column_parallel_with,
-        column_group,
-    )
-
-    gdf = gdf.drop(column_parallel_check, axis=1)
-
-    if gdf.empty:
-        return _empty_gdf()
-
-    return gdf
-
-
-def get_polygons_for_parallel_lines(
-    input_gdf: GeoDataFrame,
-    parallel_distance: float,
-    *,
-    allowed_direction_difference: float = 10,
-    segmentize_distance: float = 50,
-    polygonize_function: Literal["concave", "convex"] = "concave",
-) -> GeoDataFrame:
-    """Find areas with parallel lines.
-
-    Args:
-    ----
-        input_gdf: GeoDataFrame with (potential) parallel lines.
-        parallel_distance: Distance threshold to still consider lines parallel.
-        allowed_direction_difference: Acceptable difference in direction
-            (calculated in relation to North), in degrees.
-        segmentize_distance: Interval at which parallel lines are checked for,
-            the lower the number the more precise result, with the cost of
-            performance.
-        polygonize_function: Whether polygonization of parallel lines will be
-            done with the stricter concave hull or convex hull.
-
-    Returns:
-    -------
-        GeoDataFrame of polygons enclosing the parallel lines which were found.
-
-    """
-    parallels = flag_parallel_lines(
-        input_gdf,
-        parallel_distance,
-        allowed_direction_difference,
-        segmentize_distance=segmentize_distance,
-    )
-
-    if parallels.empty:
-        return GeoDataFrame({"parallel_direction": []}, geometry=[], crs=input_gdf.crs)
-
-    column_direction = "parallel_direction"
-    column_group = "parallel_group"
-    column_parallel_with = "parallel_with"
-    column_id = "parallel_id"
-
-    compare = parallels[[column_id, parallels.geometry.name]].copy()
-
-    def _polygonize_parallel(
-        parallel_with: set[int],
-        geom: LineString,
-    ) -> Polygon:
-        others = compare.loc[compare[column_id].isin(parallel_with)]
-
-        geoms = [geom, *list(others.geometry)]
-
-        return cast(
-            "Polygon",
-            concave_hull(MultiLineString(geoms))
-            if polygonize_function == "concave"
-            else convex_hull(MultiLineString(geoms)),
-        )
-
-    parallels.geometry = parallels[
-        [column_parallel_with, parallels.geometry.name]
-    ].apply(lambda columns: _polygonize_parallel(*columns), axis=1)  # ty: ignore[invalid-assignment]
-
-    # Dissolve by group and calculate mean direction for group. Other columns
-    # not included in the aggfunc parameter will be dropped.
-    parallels = parallels.dissolve(
-        by=[column_group],
-        aggfunc={column_direction: "mean"},  # noqa: SC200
-        as_index=False,
-    )
-
-    # There may be some intersections in the generated polygons. This is okay,
-    # if the orientation of the lines the polygon was created from is
-    # different, otherwise this is not desired, so round mean direction and
-    # dissolve again according to it.
-    parallels[column_direction] = parallels[column_direction].round(-1)
-
-    return (
-        parallels.dissolve(
-            by=[column_direction],
-            as_index=False,
-        )
-        .drop(column_group, axis=1)
-        .explode(index_parts=False)
-        .reset_index(drop=True)
-    )  # Explode to single rows.
 
 
 def calculate_coverage(
@@ -732,62 +476,82 @@ def polygonize_parallel_lines(
     if input_gdf.empty:
         return copy_gdf_as_empty(input_gdf)
 
-    gdf = input_gdf.copy()
-    polys_for_lines = gdf.union_all()
+    lines_union = input_gdf.union_all()
 
-    segments = gdf.geometry.apply(explode_line).explode()  # ty: ignore[no-matching-overload]
+    # This approach works by taking each line segment in the input dataset,
+    # clipping all input lines with a buffer around the segment, and creating
+    # a convex hull of the clipped lines which run within the allowed angle
+    # difference of the segment.
+    segments = get_segments(get_parts(input_gdf.geometry.to_numpy()))
+    segments = segments[length(segments) > 0]
+    segment_directions = line_length_weighted_directions(segments)
 
-    # This approach works by going through each line segment in the input
-    # dataset, searching for other line segments by a buffered polygon, and if
-    # they are close enough and within the allowed angle difference, a convex
-    # hull of the lines is created.
-    hulls = []
-    for geom in segments:
-        parallel_check = geom.buffer(
+    parallel_checks = (
+        in_parallel(segments)
+        .buffer(
             parallel_distance,
-            join_style="mitre",
+            resolution=8,
             cap_style="flat",
+            join_style="mitre",
         )
+        .resolve_numpy()
+    )
 
-        direction = segment_direction(geom)
-        intersection = polys_for_lines.intersection(parallel_check)
+    union_parts = get_parts(lines_union)
+    pair_segment_ids, pair_part_ids = STRtree(union_parts).query(
+        parallel_checks,
+        predicate="intersects",
+    )
+    intersections = (
+        in_parallel(union_parts[pair_part_ids])
+        .intersection(parallel_checks[pair_segment_ids])
+        .resolve_numpy()
+    )
 
-        if isinstance(intersection, GeometryCollection):
-            intersection = union_all(
-                [
-                    geom
-                    for geom in intersection.geoms
-                    if geom.geom_type in {"LineString", "MultiLineString"}
-                ],
-            )
+    # Intersections may introduce point geometries where a line only touches a buffer.
+    # Keep only lines.
+    parts, pair_ids = get_parts(intersections, return_index=True)
+    segment_ids = pair_segment_ids[pair_ids]
+    is_line = (get_type_id(parts) == GeometryType.LINESTRING) & (length(parts) > 0)
+    parts = parts[is_line]
+    segment_ids = segment_ids[is_line]
 
-        if not isinstance(intersection, MultiLineString | LineString):
-            raise NotImplementedError
-
-        intersection = MultiLineString(
-            [
-                line
-                for line in ensure_geoms(intersection)
-                if angle_difference(
-                    line_mean_direction(line),
-                    direction,
-                )
-                < maximum_angle_difference
-            ]
+    within_angle = (
+        circular_direction_difference(
+            line_length_weighted_directions(parts),
+            segment_directions[segment_ids],
         )
+        < maximum_angle_difference
+    )
+    parts = parts[within_angle]
+    segment_ids = segment_ids[within_angle]
 
-        if intersection.is_empty:
-            continue
+    if len(parts) == 0:
+        return copy_gdf_as_empty(input_gdf)
 
-        polygonized_lines = convex_hull(intersection)
+    # Construct parts into a multilinestring to build its convex hull.
+    _, group_ids = np.unique(segment_ids, return_inverse=True)
+    hulls = (
+        in_parallel(multilinestrings(parts, indices=group_ids))
+        .convex_hull()
+        .resolve_numpy()
+    )
 
-        if not isinstance(polygonized_lines, Polygon):
-            continue
+    # In case there are collinear lines (which produce a line), filter
+    # non-polygons out
+    hulls = hulls[get_type_id(hulls) == GeometryType.POLYGON]
 
-        hulls.append(polygonized_lines)
+    if len(hulls) == 0:
+        return copy_gdf_as_empty(input_gdf)
 
     # Now that each segment is processed, combine all the results
-    polygonized_lines = union_all(hulls)
+    hull_groups = _group_geoms_bulk(hulls, STRtree(hulls))
+    order = np.argsort(hull_groups, kind="stable")
+    _, group_starts = np.unique(hull_groups[order], return_index=True)
+
+    polygonized_lines = union_all(
+        union_all_by_group(hulls, np.split(order, group_starts[1:])),
+    )
 
     # Do some post-processing by removing some of the smaller holes
     polygonized_lines = remove_holes(
@@ -903,8 +667,6 @@ def add_parallel_line_information(
     )
     chain_count = len(chain_geoms)
 
-    chain_lengths = length(chain_geoms)
-
     weights = length(line_geoms)
     angles = np.radians(line_directions * 2)
 
@@ -924,10 +686,10 @@ def add_parallel_line_information(
 
     # We build buffers for each "chain" and this way for each chain find
     # other chains which are potentially parallel to it.
-    chain_buffers = buffer(
-        chain_geoms,
-        parallel_distance,
-        cap_style="flat",
+    chain_buffers = (
+        in_parallel(chain_geoms)
+        .buffer(parallel_distance, cap_style="flat")
+        .resolve_numpy()
     )
 
     # Find initial parallel candidates.
@@ -953,11 +715,11 @@ def add_parallel_line_information(
     # either line. We remove candidates which do not run parallel to the chain
     # for a large enough ratio of their length.
     overlap_lengths = length(
-        intersection(
-            chain_geoms[target_ids],
-            chain_buffers[source_ids],
-        )
+        in_parallel(chain_geoms[target_ids])
+        .intersection(chain_buffers[source_ids])
+        .resolve_numpy()
     )
+    chain_lengths = length(chain_geoms)
     min_lengths = np.minimum(
         chain_lengths[source_ids],
         chain_lengths[target_ids],

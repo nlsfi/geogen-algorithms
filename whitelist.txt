@@ -154,6 +154,7 @@ subdivs
 subsample
 substring
 substrings
+taubin
 testdata
 threadpool
 tol
