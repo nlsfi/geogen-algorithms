@@ -3,6 +3,7 @@
 #  This file is part of geogen-algorithms.
 #
 #  SPDX-License-Identifier: MIT
+import math
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast, overload
 from warnings import warn
 
 import numpy as np
+import pandas as pd
 from geopandas import GeoDataFrame, read_file
 from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
@@ -560,4 +562,80 @@ def get_test_gdfs(
         reference_data_before,
         result,
         control,
+    )
+
+
+def tile_test_data(
+    input_data: GeoDataFrame,
+    reference_data: dict[str, GeoDataFrame],
+    target_feature_count: int,
+) -> tuple[GeoDataFrame, dict[str, GeoDataFrame], int]:
+    """Copy test data into a grid until it hits approximately `target_feature_count`.
+
+    The point is to allow testing how an algorithm's performance scales with a
+    higher feature count.
+
+    Features are copied and moved to a different tile of the grid, with a
+    different index. The tiles are created so that they are 10% of the maximum
+    bounds length apart to make different tiles unlikely to affect each other.
+    A unique index based on the original and the tile a feature belongs to is
+    created.
+
+    Args:
+    ----
+        input_data: Algorithm input data.
+        reference_data: Algorithm reference data.
+        target_feature_count: Approximate number of input features to reach.
+
+    Returns:
+    -------
+        Tiled input data, tiled reference data and the number of tiles.
+
+    """
+    tile_count = max(1, round(target_feature_count / max(len(input_data), 1)))
+    if tile_count == 1:
+        return input_data, reference_data, 1
+
+    # Find total bounds accross input AND reference data
+    bounds = np.array(
+        [
+            gdf.total_bounds
+            for gdf in (input_data, *reference_data.values())
+            if not gdf.empty
+        ],
+    )
+    min_x, min_y = bounds[:, 0].min(), bounds[:, 1].min()
+    max_x, max_y = bounds[:, 2].max(), bounds[:, 3].max()
+
+    # Introduce a 10% gap between tiles
+    gap = 0.1 * max(max_x - min_x, max_y - min_y)
+    step_x, step_y = max_x - min_x + gap, max_y - min_y + gap
+
+    columns = math.ceil(math.sqrt(tile_count))
+    offsets = [
+        ((tile % columns) * step_x, (tile // columns) * step_y)
+        for tile in range(tile_count)
+    ]
+
+    tiled_layers = []
+    for gdf in (input_data, *reference_data.values()):
+        tiles = []
+
+        for tile, (x_offset, y_offset) in enumerate(offsets):
+            tiled = gdf.copy()
+            tiled.geometry = tiled.geometry.translate(x_offset, y_offset)
+
+            tiled.index = gdf.index.astype(str)
+            if tile > 0:
+                tiled.index += f"_tile{tile}"
+            tiles.append(tiled)
+
+        tiled_layers.append(GeoDataFrame(pd.concat(tiles), crs=gdf.crs))
+
+    tiled_input, *tiled_references = tiled_layers
+
+    return (
+        tiled_input,
+        dict(zip(reference_data.keys(), tiled_references, strict=True)),
+        tile_count,
     )

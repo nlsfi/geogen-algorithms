@@ -5,6 +5,7 @@
 #  SPDX-License-Identifier: MIT
 
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,8 +15,10 @@ from geopandas.testing import assert_geodataframe_equal
 from pytest_benchmark.fixture import BenchmarkFixture
 
 from geogenalg.application import BaseAlgorithm
-from geogenalg.testing import TestInputData
+from geogenalg.testing import TestInputData, tile_test_data
 from geogenalg.utility.dataframe_processing import read_gdf_from_file_and_set_index
+
+TILE_TO_FEATURES_ENV_VAR = "GEOGENALG_BENCH_TILE_TO_FEATURES"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,6 +43,16 @@ class AlgorithmBenchmark:
             msg = "No control data found."
             raise ValueError(msg)
 
+        tile_count = 1
+        if (target := os.environ.get(TILE_TO_FEATURES_ENV_VAR)) is not None:
+            alg_data, reference_data, tile_count = tile_test_data(
+                alg_data,
+                reference_data,
+                int(target),
+            )
+            if record_property is not None:
+                record_property("tiles", str(tile_count))
+
         result = fixture.pedantic(
             self.algorithm.execute,
             args=(alg_data, reference_data),
@@ -56,6 +69,12 @@ class AlgorithmBenchmark:
             if mean_duration_s > 0 and record_property is not None:
                 features_per_s = feature_count / mean_duration_s
                 record_property("features_per_sec", str(round(features_per_s, 2)))
+                record_property("feature_count", str(feature_count))
+                record_property("mean_duration_s", str(round(mean_duration_s, 3)))
+
+        # With tiling we can't really assert against the control so return early
+        if tile_count > 1:
+            return
 
         # Save result to temp file and read again as a GDF so that column
         # dtypes etc. match with the control

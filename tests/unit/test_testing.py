@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 from typing import ClassVar
 from warnings import catch_warnings
 
+import pandas as pd
 import pytest
 from geopandas import GeoDataFrame, read_file
 from geopandas.geoseries import GeoSeries
@@ -29,6 +30,7 @@ from geogenalg.testing import (
     assert_geoseries_coordinates_equal,
     get_alg_results_from_geopackage,
     get_test_gdfs,
+    tile_test_data,
 )
 from geogenalg.utility.dataframe_processing import combine_gdfs
 
@@ -755,3 +757,157 @@ def test_assert_geoseries_z_values_match(
             assert_geoseries_coordinates_equal(a, b, tolerance)
     else:
         assert_geoseries_coordinates_equal(a, b, tolerance)
+
+
+def _points_to_tile(coords: dict, value: list | None = None) -> GeoDataFrame:
+    return GeoDataFrame(
+        {"value": value if value is not None else range(len(coords))},
+        geometry=[Point(xy) for xy in coords.values()],
+        index=pd.Index(list(coords), name="feature_id"),
+        crs="EPSG:3067",
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_data",
+        "reference_data",
+        "target_feature_count",
+        "expected_input",
+        "expected_reference",
+        "expected_tile_count",
+    ),
+    [
+        pytest.param(
+            _points_to_tile({1: (0, 0), 2: (10, 0)}),
+            {"reference": _points_to_tile({9: (0, 20)})},
+            2,
+            _points_to_tile({1: (0, 0), 2: (10, 0)}),
+            {"reference": _points_to_tile({9: (0, 20)})},
+            1,
+            id="single_tile_unchanged",
+        ),
+        pytest.param(
+            _points_to_tile({1: (0, 0), 2: (10, 0)}),
+            {},
+            4,
+            _points_to_tile(
+                {
+                    "1": (0, 0),
+                    "2": (10, 0),
+                    "1_tile1": (11, 0),
+                    "2_tile1": (21, 0),
+                },
+                value=[0, 1, 0, 1],
+            ),
+            {},
+            2,
+            id="integer_index",
+        ),
+        pytest.param(
+            _points_to_tile({"a": (0, 0), "b": (10, 0)}),
+            {
+                "reference": _points_to_tile({"r": (0, 20)}),
+                "empty": _points_to_tile({}),
+            },
+            8,
+            _points_to_tile(
+                {
+                    "a": (0, 0),
+                    "b": (10, 0),
+                    "a_tile1": (12, 0),
+                    "b_tile1": (22, 0),
+                    "a_tile2": (0, 22),
+                    "b_tile2": (10, 22),
+                    "a_tile3": (12, 22),
+                    "b_tile3": (22, 22),
+                },
+                value=[0, 1] * 4,
+            ),
+            {
+                "reference": _points_to_tile(
+                    {
+                        "r": (0, 20),
+                        "r_tile1": (12, 20),
+                        "r_tile2": (0, 42),
+                        "r_tile3": (12, 42),
+                    },
+                    value=[0] * 4,
+                ),
+                "empty": _points_to_tile({}),
+            },
+            4,
+            id="string_index_with_reference",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"value": [0, 1]},
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(0, 5), (10, 5)]),
+                ],
+                index=pd.Index(["a", "b"], name="feature_id"),
+                crs="EPSG:3067",
+            ),
+            {},
+            4,
+            GeoDataFrame(
+                {"value": [0, 1, 0, 1]},
+                geometry=[
+                    LineString([(0, 0), (10, 0)]),
+                    LineString([(0, 5), (10, 5)]),
+                    LineString([(11, 0), (21, 0)]),
+                    LineString([(11, 5), (21, 5)]),
+                ],
+                index=pd.Index(["a", "b", "a_tile1", "b_tile1"], name="feature_id"),
+                crs="EPSG:3067",
+            ),
+            {},
+            2,
+            id="linestrings",
+        ),
+        pytest.param(
+            GeoDataFrame(
+                {"value": [0, 1]},
+                geometry=[box(0, 0, 10, 10), box(20, 0, 30, 20)],
+                index=pd.Index(["a", "b"], name="feature_id"),
+                crs="EPSG:3067",
+            ),
+            {},
+            4,
+            GeoDataFrame(
+                {"value": [0, 1, 0, 1]},
+                geometry=[
+                    box(0, 0, 10, 10),
+                    box(20, 0, 30, 20),
+                    box(33, 0, 43, 10),
+                    box(53, 0, 63, 20),
+                ],
+                index=pd.Index(["a", "b", "a_tile1", "b_tile1"], name="feature_id"),
+                crs="EPSG:3067",
+            ),
+            {},
+            2,
+            id="polygons",
+        ),
+    ],
+)
+def test_tile_test_data(
+    input_data: GeoDataFrame,
+    reference_data: dict[str, GeoDataFrame],
+    target_feature_count: int,
+    expected_input: GeoDataFrame,
+    expected_reference: dict[str, GeoDataFrame],
+    expected_tile_count: int,
+):
+    tiled_input, tiled_reference, tile_count = tile_test_data(
+        input_data,
+        reference_data,
+        target_feature_count,
+    )
+
+    assert tile_count == expected_tile_count
+    assert_geodataframe_equal(tiled_input, expected_input)
+    assert tiled_reference.keys() == expected_reference.keys()
+    for name, expected in expected_reference.items():
+        assert_geodataframe_equal(tiled_reference[name], expected)
