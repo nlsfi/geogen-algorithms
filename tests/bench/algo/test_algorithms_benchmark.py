@@ -435,3 +435,16 @@ def test_generalize_navigation_marks(
         input_data=navigation_marks_input,
         algorithm=navigation_marks_algorithm,
     ).run(benchmark, record_property)
+
+
+@pytest.mark.benchmark
+def test_generalize_road_network(
+    benchmark: BenchmarkFixture,
+    record_property: Callable,
+    road_network_input: TestInputData,
+    road_network_algorithm: BaseAlgorithm,
+) -> None:
+    AlgorithmBenchmark(
+        input_data=road_network_input,
+        algorithm=road_network_algorithm,
+    ).run(benchmark, record_property)

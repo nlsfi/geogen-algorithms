@@ -25,6 +25,7 @@ from geogenalg.application.generalize_polygons_to_points import (
 )
 from geogenalg.application.generalize_power_lines import GeneralizePowerLines
 from geogenalg.application.generalize_railroads import GeneralizeRailroads
+from geogenalg.application.generalize_road_network import GeneralizeRoadNetwork
 from geogenalg.application.generalize_roads import GeneralizeRoads
 from geogenalg.application.generalize_shared_paths import GeneralizeSharedPaths
 from geogenalg.application.generalize_slopelines import GeneralizeSlopeLines
@@ -616,4 +617,29 @@ def navigation_marks_algorithm() -> GeneralizeNavigationMarks:
         other_navigation_marks_reference_key="other_navigation_marks",
         boulder_in_water_reference_key="boulder_in_water",
         boulder_in_water_group_reference_key="boulder_in_water_group",
+    )
+
+
+@pytest.fixture
+def road_network_input(algorithm_testdata_path: Path) -> TestInputData:
+    gpkg = GeoPackagePath(algorithm_testdata_path / "road_network.gpkg")
+    return TestInputData(
+        input_uri=gpkg.to_input("road_network"),
+        control_uri=gpkg.to_input("control"),
+        unique_id_column="mtk_id",
+        reference_uris={
+            "roads": gpkg.to_input("roads"),
+        },
+    )
+
+
+@pytest.fixture
+def road_network_algorithm() -> GeneralizeRoadNetwork:
+    return GeneralizeRoadNetwork(
+        buffer_size=100.0,
+        length_threshold=50.0,
+        road_type_column="kohdeluokka",
+        road_classes=(12141, 12316, 12314, 12313),
+        keep_unhandled=False,
+        reference_key="roads",
     )
