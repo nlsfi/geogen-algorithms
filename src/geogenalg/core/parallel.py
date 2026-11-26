@@ -10,6 +10,7 @@ import atexit
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 from warnings import warn
 
@@ -22,6 +23,7 @@ from shapely import (
     BufferJoinStyle,
     buffer,
     clip_by_rect,
+    convex_hull,
     difference,
     intersection,
     symmetric_difference,
@@ -290,6 +292,10 @@ class ParallelGeometryProcess:
         """Run shapely symmetric difference in parallel."""
         return self._run(symmetric_difference, other, grid_size=grid_size)
 
+    def convex_hull(self) -> ParallelGeometryProcess:
+        """Run shapely convex_hull in parallel."""
+        return self._run(convex_hull)
+
     def within(
         self,
         other: BaseGeometry | np.ndarray | GeoSeries,
@@ -311,6 +317,31 @@ class ParallelGeometryProcess:
             ymin,
             xmax,
             ymax,
+        )
+
+    def centerline(
+        self,
+        *,
+        simplify_tolerance: float = 0.5,
+        prune_branches_shorter_than: float | Literal["auto"] = "auto",
+        segmentize_by: float | Literal["auto"] = "auto",
+        merge_vertices_closer_than: float = 0.0,
+    ) -> ParallelGeometryProcess:
+        """Run geogenalg.core.geometry.centerline in parallel."""
+        # Imported here because core.geometry itself imports from this module.
+        from geogenalg.core.geometry import centerline  # noqa: PLC0415
+
+        return self._run(
+            np.vectorize(
+                partial(
+                    centerline,
+                    simplify_tolerance=simplify_tolerance,
+                    prune_branches_shorter_than=prune_branches_shorter_than,
+                    segmentize_by=segmentize_by,
+                    merge_vertices_closer_than=merge_vertices_closer_than,
+                ),
+                otypes=[object],
+            ),
         )
 
     def resolve_numpy(self) -> np.ndarray:

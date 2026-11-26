@@ -20,11 +20,13 @@ from pandas import Index, Series
 from shapely import (
     box,
     buffer,
+    convex_hull,
     equals,
     length,
 )
-from shapely.geometry import Point
+from shapely.geometry import MultiPoint, Point
 
+from geogenalg.core.geometry import centerline
 from geogenalg.core.parallel import (
     _THREAD_MANAGER,
     GEOGENALG_WORKER_COUNT_ENV_VAR,
@@ -449,6 +451,20 @@ def test_in_parallel_chaining_non_cached_pool(sample_points: GeoSeries):
         assert_geoseries_equal(result, expected)
 
 
+def test_convex_hull():
+    geoms = GeoSeries(
+        [MultiPoint([(i, 0), (i + 1, 2), (i + 2, 0), (i + 1, 1)]) for i in range(10)],
+        crs="EPSG:3067",
+    )
+    set_num_workers(4)
+
+    result = in_parallel(geoms).convex_hull().resolve_geoseries()
+
+    assert result.crs == geoms.crs
+    assert result.index.equals(geoms.index)
+    assert equals(result.to_numpy(), convex_hull(geoms.to_numpy())).all()
+
+
 def test_within(sample_points: GeoSeries):
     boxes = np.array(
         [box(i - 1, i - 1, i + 1, i + 1) for i in range(len(sample_points))],
@@ -501,3 +517,39 @@ def test_union_all_by_group():
     assert equals(
         result, [box(0, 0, 1, 1), box(1, 0, 4, 1), box(4, 0, 6, 1), box(2, 0, 4, 1)]
     ).all()
+
+
+@pytest.mark.parametrize(
+    "workers",
+    [1, 3, 8],
+    ids=["single_worker", "fewer_workers_than_geoms", "more_workers_than_geoms"],
+)
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({}, id="default_arguments"),
+        pytest.param(
+            {
+                "simplify_tolerance": 0,
+                "prune_branches_shorter_than": 2,
+                "segmentize_by": 0.5,
+                "merge_vertices_closer_than": 0.1,
+            },
+            id="all_arguments",
+        ),
+    ],
+)
+def test_centerline(workers: int, kwargs: dict):
+    polygons = GeoSeries(
+        [box(0, i * 10, 20 + i * 5, i * 10 + 2) for i in range(5)],
+        index=Index([f"idx_{i}" for i in range(5)], name="index"),
+        crs="EPSG:3067",
+    )
+    set_num_workers(workers)
+
+    result = in_parallel(polygons).centerline(**kwargs).resolve_geoseries()
+
+    assert result.crs == polygons.crs
+    assert result.index.equals(polygons.index)
+    expected = [centerline(polygon, **kwargs) for polygon in polygons]
+    assert equals(result.to_numpy(), expected).all()

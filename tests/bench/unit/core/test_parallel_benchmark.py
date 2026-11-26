@@ -8,8 +8,9 @@ from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
 from pandas import Series
 from pandas.testing import assert_series_equal
-from shapely import area, box, buffer, intersection, intersects, simplify
+from shapely import area, box, buffer, equals, intersection, intersects, simplify
 
+from geogenalg.core.geometry import centerline
 from geogenalg.core.parallel import in_parallel, num_workers
 
 if TYPE_CHECKING:
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
 
     import numpy as np
     from pytest_benchmark.fixture import BenchmarkFixture
+
+    from geogenalg.testing import TestInputData
 
 
 @pytest.mark.benchmark
@@ -215,3 +218,56 @@ def test_process_with_multiple_steps(
 
     result = benchmark(run_process)
     assert len(result) == feature_count
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize("segmentize_by", [2, 10])
+@pytest.mark.parametrize(
+    "mode", ["no_pool", "threadmanager_pool", "non_cached_threadpool"]
+)
+def test_benchmark_centerline_watercourse_areas(
+    benchmark: BenchmarkFixture,
+    watercourse_areas_input: TestInputData,
+    segmentize_by: float,
+    mode: str,
+) -> None:
+    """Real watercourse area polygons."""
+    polygons, _, _ = watercourse_areas_input.read()
+    polygons = polygons.loc[polygons.geometry.geom_type == "Polygon"].geometry
+
+    if mode == "no_pool":
+
+        def run_process() -> Series | GeoSeries:
+            return GeoSeries(
+                [
+                    centerline(polygon, segmentize_by=segmentize_by)
+                    for polygon in polygons
+                ],
+                index=polygons.index,
+                crs=polygons.crs,
+            )
+
+    elif mode == "threadmanager_pool":
+
+        def run_process() -> Series | GeoSeries:
+            return (
+                in_parallel(polygons)
+                .centerline(segmentize_by=segmentize_by)
+                .resolve_geoseries()
+            )
+
+    else:  # non_cached_threadpool
+
+        def run_process() -> Series | GeoSeries:
+            with ThreadPoolExecutor(max_workers=num_workers()) as fresh_pool:
+                return (
+                    in_parallel(polygons, executor=fresh_pool)
+                    .centerline(segmentize_by=segmentize_by)
+                    .resolve_geoseries()
+                )
+
+    result = benchmark(run_process)
+    expected = [
+        centerline(polygon, segmentize_by=segmentize_by) for polygon in polygons
+    ]
+    assert equals(result.to_numpy(), expected).all()

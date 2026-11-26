@@ -5356,6 +5356,62 @@ def test_make_valid_merge_parts(
             ),
             id="short_branches_not_pruned",
         ),
+        pytest.param(
+            Polygon(
+                [
+                    (-26.712, -93.8412),
+                    (-20.8276, -73.1509),
+                    (-10.4069, -36.5108),
+                    (-0.0193, 0.0128),
+                    (-0.0077, 0.0471),
+                    (-0.0145, 0.0115),
+                    (-9.6745, -40.2005),
+                    (-17.7667, -73.8862),
+                    (-20.3031, -84.4444),
+                    (-29.0683, -120.9317),
+                    (-33.2324, -116.7676),
+                    (-26.712, -93.8412),
+                ]
+            ),
+            {
+                "segmentize_by": 5,
+                "prune_branches_shorter_than": 50,
+                "simplify_tolerance": 5,
+            },
+            MultiLineString(
+                [
+                    [(-0.6178, -2.2065), (-0.0122, 0.0295)],
+                    [(-28.8022, -118.5836), (-13.5233, -48.0007)],
+                ]
+            ),
+            id="close_vertices_create_fragment",
+        ),
+        pytest.param(
+            Polygon(
+                [
+                    (-26.712, -93.8412),
+                    (-20.8276, -73.1509),
+                    (-10.4069, -36.5108),
+                    (-0.0193, 0.0128),
+                    (-0.0077, 0.0471),
+                    (-0.0145, 0.0115),
+                    (-9.6745, -40.2005),
+                    (-17.7667, -73.8862),
+                    (-20.3031, -84.4444),
+                    (-29.0683, -120.9317),
+                    (-33.2324, -116.7676),
+                    (-26.712, -93.8412),
+                ]
+            ),
+            {
+                "segmentize_by": 5,
+                "prune_branches_shorter_than": 50,
+                "simplify_tolerance": 5,
+                "merge_vertices_closer_than": 0.1,
+            },
+            LineString([(-28.8022, -118.5836), (-13.5233, -48.0007)]),
+            id="merge_vertices_closer_than_removes_fragment",
+        ),
     ],
 )
 def test_centerline(
@@ -5366,39 +5422,6 @@ def test_centerline(
     result = centerline(polygon, **kwargs)
 
     assert result.equals_exact(expected, tolerance=0.001)
-
-
-def test_centerline_merge_vertices_closer_than_removes_fragment_at_spike_tip():
-    # Narrow spike whose tip is a cluster of three vertices a few centimetres
-    # apart. The Voronoi edge between the clustered vertices stays inside the
-    # spike, producing a short fragment disconnected from the main centerline.
-    polygon = Polygon(
-        [
-            (-26.712, -93.8412),
-            (-20.8276, -73.1509),
-            (-10.4069, -36.5108),
-            (-0.0193, 0.0128),
-            (-0.0077, 0.0471),
-            (-0.0145, 0.0115),
-            (-9.6745, -40.2005),
-            (-17.7667, -73.8862),
-            (-20.3031, -84.4444),
-            (-29.0683, -120.9317),
-            (-33.2324, -116.7676),
-            (-26.712, -93.8412),
-        ]
-    )
-    kwargs = {"segmentize_by": 5, "prune_branches_shorter_than": 50}
-
-    without_merge = centerline(polygon, **kwargs)
-    assert isinstance(without_merge, MultiLineString)
-    assert min(part.length for part in without_merge.geoms) < 3
-
-    with_merge = centerline(polygon, merge_vertices_closer_than=0.1, **kwargs)
-    assert isinstance(with_merge, LineString)
-    assert with_merge.length == pytest.approx(
-        max(part.length for part in without_merge.geoms), abs=0.01
-    )
 
 
 @pytest.mark.parametrize(
