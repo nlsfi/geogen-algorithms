@@ -890,7 +890,14 @@ def add_contiguous_lines_information(  # noqa: PLR0913
     """
     gdf = input_gdf.copy()
     if gdf.empty:
-        return gdf
+        return add_columns_to_gdf(
+            gdf,
+            {
+                length_column: "float",
+                dead_end_column: "bool",
+                disconnected_column: "bool",
+            },
+        )
 
     geoms = gdf.geometry.to_numpy()
     geom_count = len(geoms)
