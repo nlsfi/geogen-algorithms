@@ -13,6 +13,7 @@ from geopandas.geoseries import GeoSeries
 from geopandas.testing import assert_geodataframe_equal
 from geopandas.tools import overlay
 from networkx.classes.graph import Graph
+from pandas import Series
 from shapely import box
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
@@ -1475,7 +1476,14 @@ def test_process_lines_and_reconnect(
             GeoDataFrame(geometry=[]),
             100.0,
             "type",
-            GeoDataFrame({"type": []}),
+            GeoDataFrame(
+                {
+                    "type": [],
+                    "contiguous_length": Series(dtype="float"),
+                    "contiguous_dead_end": Series(dtype="bool"),
+                    "contiguous_disconnected": Series(dtype="bool"),
+                }
+            ),
         ),
         (
             GeoDataFrame({"type": []}),  # empty_input_non_empty_reference
@@ -1486,7 +1494,14 @@ def test_process_lines_and_reconnect(
             ),
             100.0,
             "type",
-            GeoDataFrame({"type": []}),
+            GeoDataFrame(
+                {
+                    "type": [],
+                    "contiguous_length": Series(dtype="float"),
+                    "contiguous_dead_end": Series(dtype="bool"),
+                    "contiguous_disconnected": Series(dtype="bool"),
+                }
+            ),
         ),
     ],
     ids=[
