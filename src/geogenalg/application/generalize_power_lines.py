@@ -180,17 +180,21 @@ class GeneralizePowerLines(BaseAlgorithm):
                 crs=fences.crs,
             ),
         )
-        gdf = gdf.loc[
-            ~(
-                (gdf["contiguous_length"] <= self.length_threshold)
-                & (gdf["contiguous_dead_end"] | gdf["contiguous_disconnected"])
-            )
-        ].drop(
-            columns=[
-                "contiguous_length",
-                "contiguous_dead_end",
-                "contiguous_disconnected",
-            ]
+        gdf = GeoDataFrame(
+            gdf.loc[
+                ~(
+                    (gdf["contiguous_length"] <= self.length_threshold)
+                    & (gdf["contiguous_dead_end"] | gdf["contiguous_disconnected"])
+                )
+            ].drop(
+                columns=[
+                    "contiguous_length",
+                    "contiguous_dead_end",
+                    "contiguous_disconnected",
+                ]
+            ),
+            geometry=gdf.geometry.name,
+            crs=gdf.crs,
         )
         gdf = connect_lines_to_polygon_centroids(gdf, substations)
 
