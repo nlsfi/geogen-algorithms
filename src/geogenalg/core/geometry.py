@@ -92,7 +92,7 @@ from geogenalg.core.exceptions import (
     InvalidGeometryError,
 )
 from geogenalg.core.graph import filter_short_chains, label_chains
-from geogenalg.core.parallel import union_all_by_row
+from geogenalg.core.parallel import query_tree, union_all_by_row
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -3025,14 +3025,14 @@ def build_collinear_chains(
     line_directions: np.ndarray,
     allowed_direction_difference: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Group touching, approximately collinear lines into chains.
+    """Group intersecting, approximately collinear lines into chains.
 
     Args:
     ----
     line_geoms: NumPy array of LineString geometries.
     line_directions: Orientation of each line in degrees.
     allowed_direction_difference: Maximum angular difference in between
-        touching lines for them to be connected. These are expected to be in
+        intersecting lines for them to be connected. These are expected to be in
         degrees and between 0-180.
 
     Returns:
@@ -3042,12 +3042,13 @@ def build_collinear_chains(
         Merged geometries may be LineStrings or MultiLineStrings.
 
     """
-    source_ids, target_ids = STRtree(line_geoms).query(
+    source_ids, target_ids = query_tree(
         line_geoms,
-        predicate="touches",
+        line_geoms,
+        predicate="intersects",
     )
 
-    within_direction_difference = (
+    within_direction_difference = (source_ids != target_ids) & (
         circular_direction_difference(
             line_directions[source_ids],
             line_directions[target_ids],

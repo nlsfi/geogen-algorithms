@@ -39,7 +39,7 @@ from geogenalg.core.geometry import (
     remove_holes,
     union_by_predicate,
 )
-from geogenalg.core.parallel import in_parallel, union_all_by_group
+from geogenalg.core.parallel import in_parallel, query_tree, union_all_by_group
 from geogenalg.utility.dataframe_processing import add_columns_to_gdf, copy_gdf_as_empty
 from geogenalg.utility.validation import check_gdf_geometry_type
 
@@ -693,7 +693,8 @@ def add_parallel_line_information(
     )
 
     # Find initial parallel candidates.
-    source_ids, target_ids = STRtree(chain_geoms).query(
+    source_ids, target_ids = query_tree(
+        chain_geoms,
         chain_buffers,
         predicate="intersects",
     )

@@ -21,6 +21,7 @@ from pandas import Index, RangeIndex, Series
 from shapely import (
     BufferCapStyle,
     BufferJoinStyle,
+    STRtree,
     buffer,
     clip_by_rect,
     convex_hull,
@@ -38,6 +39,8 @@ if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
 
 GEOGENALG_WORKER_COUNT_ENV_VAR = "GEOGENALG_NUM_WORKERS"
+
+_MIN_GEOMS_PER_QUERY_WORKER = 100
 
 
 class _ThreadManager:
@@ -386,6 +389,58 @@ def union_all_by_group(
         return unions
 
     return _process_geometry_array(group_array, union_groups, executor=executor)
+
+
+def query_tree(
+    tree: STRtree | GeoSeries | np.ndarray,
+    geoms: GeoSeries | np.ndarray,
+    predicate: Literal[
+        "intersects",
+        "within",
+        "contains",
+        "overlaps",
+        "crosses",
+        "touches",
+        "covers",
+        "covered_by",
+        "contains_properly",
+        "dwithin",
+    ]
+    | None = None,
+    distance: float | np.ndarray | None = None,
+    executor: ThreadPoolExecutor | None = None,
+) -> np.ndarray:
+    """Run STRtree query in parallel."""
+    if not isinstance(tree, STRtree):
+        tree = STRtree(tree)
+
+    if isinstance(geoms, GeoSeries):
+        geoms = geoms.to_numpy()
+
+    geom_count = len(geoms)
+
+    def worker(_slice: slice) -> np.ndarray:
+        query_ids, tree_ids = tree.query(  # ty: ignore[no-matching-overload]
+            geoms[_slice],
+            predicate=predicate,
+            distance=_process_arg(distance, _slice, geom_count),
+        )
+
+        return np.stack([query_ids + _slice.start, tree_ids])
+
+    workers = min(num_workers(), geom_count // _MIN_GEOMS_PER_QUERY_WORKER)
+    if workers <= 1:
+        return tree.query(  # ty: ignore[no-matching-overload]
+            geoms,
+            predicate=predicate,
+            distance=distance,
+        )
+
+    pool = executor or get_threadpool_executor()
+    return np.concatenate(
+        list(pool.map(worker, _get_chunk_slices(geom_count, workers))),
+        axis=1,
+    )
 
 
 def in_parallel(
