@@ -3451,7 +3451,7 @@ def _centerline_voronoi_ridges(points: np.ndarray) -> tuple[np.ndarray, np.ndarr
     triangles = Delaunay(points)
 
     # Extract triangle vertices
-    a, b, c = (triangles.points[triangles.simplices[:, i]] for i in range(3))
+    a, b, c = triangles.points[triangles.simplices].transpose(1, 0, 2)
 
     # Use positions relative to a to simplify the math
     ab_x, ab_y = (b - a).T
