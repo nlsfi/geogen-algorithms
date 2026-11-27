@@ -292,6 +292,7 @@ class GeneralizeBuildings(BaseAlgorithm):
             result_gdf,
             SIMPLIFY_EDGE_THRESHOLD,
         )
+        result_gdf = self._validate_polygon_geometries(result_gdf)
         simplified_gdf = result_gdf.copy()
 
         # Buffer the narrow building parts
