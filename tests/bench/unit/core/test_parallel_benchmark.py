@@ -9,7 +9,16 @@ from geopandas import GeoDataFrame, GeoSeries
 from geopandas.testing import assert_geoseries_equal
 from pandas import Series
 from pandas.testing import assert_series_equal
-from shapely import STRtree, area, box, buffer, equals, intersection, intersects, simplify
+from shapely import (
+    STRtree,
+    area,
+    box,
+    buffer,
+    equals,
+    intersection,
+    intersects,
+    simplify,
+)
 
 from geogenalg.core.geometry import centerline
 from geogenalg.core.parallel import in_parallel, num_workers, query_tree
